@@ -1,0 +1,26 @@
+{
+  "name": "polymarket-resolution-monitor-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "tsx src/index.ts",
+    "register-commands": "tsx src/registerCommands.ts",
+    "test": "vitest run --pool=threads"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "cheerio": "^1.0.0",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
