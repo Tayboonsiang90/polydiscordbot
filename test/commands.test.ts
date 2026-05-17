@@ -10,6 +10,7 @@ import { buildAlertMessagePayload } from "../src/poller.js";
 import {
   buildCheckEmbed,
   buildEventPostMessagePayload,
+  buildGroupedRoleSelectorEmbed,
   buildIntegrationSummaryEmbeds,
   buildLastEmbed,
   buildMarketEndManualUpdatedEmbed,
@@ -478,6 +479,41 @@ describe("adapter commands", () => {
     expect(result.currentValue).toBe("181301");
     expect(payload.content).toBe("<@&role>");
     expect(payload.allowedMentions).toEqual({ roles: ["role"] });
+  });
+
+  it("builds a grouped alert role selector embed", () => {
+    const embed = buildGroupedRoleSelectorEmbed(
+      [
+        {
+          displayName: "Bonbast USD/IRR",
+          commandName: "bonbast",
+          roleId: "role-1",
+          roleName: "Bonbast Alerts",
+          emoji: "💱"
+        },
+        {
+          displayName: "Strategy Bitcoin Purchases",
+          commandName: "strategybtc",
+          roleId: "role-2",
+          roleName: "Strategy BTC Alerts",
+          emoji: "🪙"
+        }
+      ],
+      0,
+      1
+    ).toJSON();
+
+    expect(embed.title).toBe("Market Alert Roles");
+    expect(embed.description).toBe("React to receive alerts. Remove your reaction to opt out.");
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "💱 Bonbast USD/IRR", value: "Role: <@&role-1>\nCommand: `/bonbast`" }),
+        expect.objectContaining({
+          name: "🪙 Strategy Bitcoin Purchases",
+          value: "Role: <@&role-2>\nCommand: `/strategybtc`"
+        })
+      ])
+    );
   });
 
   it("builds event alerts with a prominent strike and Truth Social link button", () => {

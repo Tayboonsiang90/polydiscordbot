@@ -309,6 +309,34 @@ export function buildRoleSelectorEmbed(integration: Integration, roleName: strin
     .setFooter({ text: `Updated at ${nowSingaporeDateTime()}` });
 }
 
+export type GroupedRoleSelectorEntry = {
+  displayName: string;
+  commandName: string;
+  roleId: string;
+  roleName: string;
+  emoji: string;
+};
+
+export function buildGroupedRoleSelectorEmbed(
+  entries: GroupedRoleSelectorEntry[],
+  groupIndex: number,
+  groupCount: number
+): EmbedBuilder {
+  const title = groupCount > 1 ? `Market Alert Roles ${groupIndex + 1}/${groupCount}` : "Market Alert Roles";
+  return new EmbedBuilder()
+    .setColor(successColor)
+    .setTitle(title)
+    .setDescription("React to receive alerts. Remove your reaction to opt out.")
+    .addFields(
+      entries.map((entry) => ({
+        name: `${entry.emoji} ${entry.displayName}`,
+        value: `Role: <@&${entry.roleId}>\nCommand: \`/${entry.commandName}\``,
+        inline: false
+      }))
+    )
+    .setFooter({ text: `Updated at ${nowSingaporeDateTime()}` });
+}
+
 export function formatPolymarketLink(integration: Integration): string {
   return formatPolymarketValue(integration);
 }

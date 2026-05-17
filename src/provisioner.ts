@@ -1,13 +1,20 @@
-import { ChannelType, type Client, type Guild, type Role, type TextChannel } from "discord.js";
+import { ChannelType, type Client, type Guild, type Message, type Role, type TextChannel } from "discord.js";
 import type { BotConfig } from "./config.js";
 import type { BotDatabase } from "./database.js";
-import { buildRoleSelectorEmbed, buildSetupEmbed } from "./embeds.js";
+import { buildGroupedRoleSelectorEmbed, buildSetupEmbed, type GroupedRoleSelectorEntry } from "./embeds.js";
 import { listAdapters } from "./integrations/registry.js";
 import type { Integration, WebsiteAdapter } from "./integrations/types.js";
 
 const roleChannelName = "market-alert-roles";
 const networkRetryDelaysMs = [1_000, 3_000, 10_000];
-const fallbackAlertRoleEmoji = "\uD83D\uDD14";
+const maxReactionsPerRoleMessage = 20;
+const fallbackAlertRoleEmojis = ["\uD83D\uDD14", "\uD83D\uDCE3", "\u2705", "\u2B50", "\uD83D\uDCCC", "\uD83D\uDCAC"];
+
+type AlertRoleEntry = GroupedRoleSelectorEntry & {
+  integration: Integration;
+  adapter: WebsiteAdapter;
+  role: Role;
+};
 
 export class IntegrationProvisioner {
   private refreshTimer: NodeJS.Timeout | null = null;
@@ -43,6 +50,8 @@ export class IntegrationProvisioner {
         console.error(`Provisioning failed for ${adapter.id}: ${formatProvisioningError(error)}`);
       }
     }
+
+    await retryTransientDiscordNetworkError(() => this.provisionAlertRoleSelectors(guild));
   }
 
   private async provisionAdapter(guild: Guild, adapter: WebsiteAdapter): Promise<void> {
@@ -61,10 +70,10 @@ export class IntegrationProvisioner {
 
       if (existingIntegration.channelId !== channel.id) {
         const updatedIntegration = this.database.updateIntegrationChannel(existingIntegration.id, channel.id);
-        await this.provisionAlertRole(guild, adapter, updatedIntegration);
+        await findOrCreateRole(guild, updatedIntegration.alertRoleId, adapter.alertRoleName);
         return;
       }
-      await this.provisionAlertRole(guild, adapter, existingIntegration);
+      await findOrCreateRole(guild, existingIntegration.alertRoleId, adapter.alertRoleName);
       return;
     }
 
@@ -80,21 +89,55 @@ export class IntegrationProvisioner {
     });
 
     await channel.send({ embeds: [buildSetupEmbed(integration, adapter.commandName)] });
-    await this.provisionAlertRole(guild, adapter, integration);
+    await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
   }
 
-  private async provisionAlertRole(guild: Guild, adapter: WebsiteAdapter, integration: Integration): Promise<void> {
-    const role = await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
+  private async provisionAlertRoleSelectors(guild: Guild): Promise<void> {
     const roleChannel = await findOrCreateRoleChannel(guild);
-    const roleMessage = await findOrCreateRoleMessage(roleChannel, integration.roleMessageId, integration, adapter, role);
-    const roleEmoji = await reactWithFallbackEmoji(roleMessage, integration, adapter, role);
+    const entries = await this.buildAlertRoleEntries(guild);
+    const groups = groupAlertRoleEntries(entries);
+    const activeMessageIds = new Set<string>();
 
-    this.database.setAlertRoleMetadata(integration.id, {
-      alertRoleId: role.id,
-      roleMessageId: roleMessage.id,
-      roleChannelId: roleChannel.id,
-      roleEmoji
-    });
+    for (let index = 0; index < groups.length; index += 1) {
+      const group = groups[index];
+      const roleMessage = await findOrCreateGroupedRoleMessage(roleChannel, group);
+      const reactedEntries = await syncGroupedRoleMessage(roleMessage, group, index, groups.length);
+      activeMessageIds.add(roleMessage.id);
+
+      for (const entry of reactedEntries) {
+        this.database.setAlertRoleMetadata(entry.integration.id, {
+          alertRoleId: entry.role.id,
+          roleMessageId: roleMessage.id,
+          roleChannelId: roleChannel.id,
+          roleEmoji: entry.emoji
+        });
+      }
+    }
+
+    await cleanupStaleRoleMessages(roleChannel, this.client.user?.id ?? null, activeMessageIds);
+  }
+
+  private async buildAlertRoleEntries(guild: Guild): Promise<AlertRoleEntry[]> {
+    const entries: AlertRoleEntry[] = [];
+    for (const adapter of listAdapters()) {
+      const integration = this.database.getIntegrationByAdapter(guild.id, adapter.id);
+      if (!integration) {
+        continue;
+      }
+
+      const role = await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
+      entries.push({
+        integration,
+        adapter,
+        role,
+        displayName: adapter.displayName,
+        commandName: adapter.commandName,
+        roleId: role.id,
+        roleName: role.name,
+        emoji: adapter.alertRoleEmoji
+      });
+    }
+    return entries;
   }
 }
 
@@ -155,43 +198,105 @@ async function findOrCreateRoleChannel(guild: Guild): Promise<TextChannel> {
   });
 }
 
-async function findOrCreateRoleMessage(
-  channel: TextChannel,
-  messageId: string | null,
-  integration: Integration,
-  adapter: WebsiteAdapter,
-  role: Role
-) {
-  const existing = messageId ? await channel.messages.fetch(messageId).catch(() => null) : null;
-  if (existing) {
-    await existing.edit({ embeds: [buildRoleSelectorEmbed(integration, role.name, adapter.alertRoleEmoji)] });
-    return existing;
+async function findOrCreateGroupedRoleMessage(channel: TextChannel, entries: AlertRoleEntry[]): Promise<Message> {
+  const existingMessageIds = [...new Set(entries.map((entry) => entry.integration.roleMessageId).filter(Boolean))] as string[];
+  for (const messageId of existingMessageIds) {
+    const existing = await channel.messages.fetch(messageId).catch(() => null);
+    if (existing && isGroupedRoleMessage(existing)) {
+      return existing;
+    }
   }
 
-  return channel.send({ embeds: [buildRoleSelectorEmbed(integration, role.name, adapter.alertRoleEmoji)] });
+  return channel.send({ embeds: [buildGroupedRoleSelectorEmbed(entries, 0, 1)] });
+}
+
+async function syncGroupedRoleMessage(
+  roleMessage: Message,
+  entries: AlertRoleEntry[],
+  groupIndex: number,
+  groupCount: number
+): Promise<AlertRoleEntry[]> {
+  const reactedEntries = entries.map((entry) => ({ ...entry }));
+  await roleMessage.reactions.removeAll().catch(() => undefined);
+
+  const usedEmojis = new Set<string>();
+  for (const entry of reactedEntries) {
+    entry.emoji = await reactWithFallbackEmoji(roleMessage, entry, usedEmojis);
+    usedEmojis.add(entry.emoji);
+  }
+
+  await roleMessage.edit({ embeds: [buildGroupedRoleSelectorEmbed(reactedEntries, groupIndex, groupCount)] });
+  return reactedEntries;
 }
 
 async function reactWithFallbackEmoji(
-  roleMessage: Awaited<ReturnType<typeof findOrCreateRoleMessage>>,
-  integration: Integration,
-  adapter: WebsiteAdapter,
-  role: Role
+  roleMessage: Message,
+  entry: AlertRoleEntry,
+  usedEmojis: Set<string>
 ): Promise<string> {
-  try {
-    await roleMessage.react(adapter.alertRoleEmoji);
-    return adapter.alertRoleEmoji;
-  } catch (error) {
-    if (!isUnknownEmojiError(error)) {
-      throw error;
+  const candidates = [entry.adapter.alertRoleEmoji, ...fallbackAlertRoleEmojis].filter((emoji) => !usedEmojis.has(emoji));
+  for (const emoji of candidates) {
+    try {
+      await roleMessage.react(emoji);
+      if (emoji !== entry.adapter.alertRoleEmoji) {
+        console.error(`Invalid alertRoleEmoji for ${entry.adapter.id}: ${entry.adapter.alertRoleEmoji}. Falling back to ${emoji}.`);
+      }
+      return emoji;
+    } catch (error) {
+      if (!isUnknownEmojiError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(`No usable alert role emoji found for ${entry.adapter.id}`);
+}
+
+function groupAlertRoleEntries(entries: AlertRoleEntry[]): AlertRoleEntry[][] {
+  const groups: AlertRoleEntry[][] = [];
+  for (const entry of entries) {
+    const group = groups.find(
+      (candidate) =>
+        candidate.length < maxReactionsPerRoleMessage && !candidate.some((existing) => existing.emoji === entry.emoji)
+    );
+    if (group) {
+      group.push(entry);
+      continue;
     }
 
-    console.error(
-      `Invalid alertRoleEmoji for ${adapter.id}: ${adapter.alertRoleEmoji}. Falling back to ${fallbackAlertRoleEmoji}.`
-    );
-    await roleMessage.edit({ embeds: [buildRoleSelectorEmbed(integration, role.name, fallbackAlertRoleEmoji)] });
-    await roleMessage.react(fallbackAlertRoleEmoji);
-    return fallbackAlertRoleEmoji;
+    groups.push([entry]);
   }
+
+  return groups;
+}
+
+async function cleanupStaleRoleMessages(channel: TextChannel, botUserId: string | null, activeMessageIds: Set<string>): Promise<void> {
+  if (!botUserId) {
+    return;
+  }
+
+  const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  if (!messages) {
+    return;
+  }
+
+  for (const message of messages.values()) {
+    if (message.author.id !== botUserId || activeMessageIds.has(message.id)) {
+      continue;
+    }
+
+    if (isLegacyRoleMessage(message) || isGroupedRoleMessage(message)) {
+      await message.delete().catch(() => undefined);
+    }
+  }
+}
+
+function isLegacyRoleMessage(message: Message): boolean {
+  return message.embeds.some((embed) => embed.title?.endsWith(" - Alert role"));
+}
+
+function isGroupedRoleMessage(message: Message): boolean {
+  return message.embeds.some((embed) => embed.title?.startsWith("Market Alert Roles"));
 }
 
 function isUnknownEmojiError(error: unknown): boolean {
