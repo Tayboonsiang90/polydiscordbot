@@ -440,25 +440,30 @@ export class PollScheduler {
 
   private async runDueMarketEndReminders(now: Date = new Date()): Promise<void> {
     for (const integration of this.database.listActiveIntegrations()) {
-      const activeIntegration = activateQueuedPolymarket(this.database, integration, now);
-      if (!activeIntegration.polymarketUrl) {
-        continue;
-      }
-
-      const marketEnd = await getStoredOrFetchPolymarketEndDate(this.database, activeIntegration, now);
-      if (marketEnd.missingWarningDue) {
-        await this.sendMarketEndMissingWarning(activeIntegration.channelId, activeIntegration);
-        this.database.recordMarketEndMissingWarning(activeIntegration.id, activeIntegration.polymarketUrl, now);
-        continue;
-      }
-
-      for (const reminder of await getDueMarketEndReminders(this.database, activeIntegration, now)) {
-        if (this.database.hasMarketEndReminder(activeIntegration.id, activeIntegration.polymarketUrl, reminder.key)) {
+      let activeIntegration = integration;
+      try {
+        activeIntegration = activateQueuedPolymarket(this.database, integration, now);
+        if (!activeIntegration.polymarketUrl) {
           continue;
         }
 
-        await this.sendMarketEndReminder(activeIntegration.channelId, activeIntegration, reminder);
-        this.database.recordMarketEndReminder(activeIntegration.id, activeIntegration.polymarketUrl, reminder.key, now);
+        const marketEnd = await getStoredOrFetchPolymarketEndDate(this.database, activeIntegration, now);
+        if (marketEnd.missingWarningDue) {
+          await this.sendMarketEndMissingWarning(activeIntegration.channelId, activeIntegration);
+          this.database.recordMarketEndMissingWarning(activeIntegration.id, activeIntegration.polymarketUrl, now);
+          continue;
+        }
+
+        for (const reminder of await getDueMarketEndReminders(this.database, activeIntegration, now)) {
+          if (this.database.hasMarketEndReminder(activeIntegration.id, activeIntegration.polymarketUrl, reminder.key)) {
+            continue;
+          }
+
+          await this.sendMarketEndReminder(activeIntegration.channelId, activeIntegration, reminder);
+          this.database.recordMarketEndReminder(activeIntegration.id, activeIntegration.polymarketUrl, reminder.key, now);
+        }
+      } catch (error) {
+        await this.sendErrorIfDue(activeIntegration.channelId, activeIntegration, error).catch(logSchedulerError);
       }
     }
   }

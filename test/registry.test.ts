@@ -198,7 +198,7 @@ describe("adapter registry", () => {
     expect(ngPrice.alertRoleName).toBe("NG Price Alerts");
     expect(ngPrice.alertRoleEmoji).toBe("\u26FD");
     expect(ngPrice.getPollIntervalMinutes?.({} as never)).toBe(1);
-    expect(ngPrice.getErrorNoticeWindowMinutes?.({} as never)).toBe(60);
+    expect(ngPrice.getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(wti.id).toBe("pyth-wti-strikes");
     expect(wti.defaultChannelName).toBe("wti");
     expect(wti.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-price-will-wti-hit-in-may-2026");
@@ -237,7 +237,7 @@ describe("adapter registry", () => {
       "https://polymarket.com/event/will-microstrategy-announce-a-bitcoin-purchase-may-12-18"
     );
     expect(strategyBtc.alertRoleName).toBe("Strategy BTC Alerts");
-    expect(strategyBtc.alertRoleEmoji).toBe("\u20BF");
+    expect(strategyBtc.alertRoleEmoji).toBe("\uD83E\uDE99");
     expect(tesla.id).toBe("tesla-deliveries");
     expect(tesla.defaultChannelName).toBe("tesla");
     expect(tesla.defaultPolymarketUrl).toBe("https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026");

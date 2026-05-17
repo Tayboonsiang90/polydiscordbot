@@ -7,6 +7,7 @@ import type { Integration, WebsiteAdapter } from "./integrations/types.js";
 
 const roleChannelName = "market-alert-roles";
 const networkRetryDelaysMs = [1_000, 3_000, 10_000];
+const fallbackAlertRoleEmoji = "\uD83D\uDD14";
 
 export class IntegrationProvisioner {
   private refreshTimer: NodeJS.Timeout | null = null;
@@ -86,13 +87,13 @@ export class IntegrationProvisioner {
     const role = await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
     const roleChannel = await findOrCreateRoleChannel(guild);
     const roleMessage = await findOrCreateRoleMessage(roleChannel, integration.roleMessageId, integration, adapter, role);
+    const roleEmoji = await reactWithFallbackEmoji(roleMessage, integration, adapter, role);
 
-    await roleMessage.react(adapter.alertRoleEmoji);
     this.database.setAlertRoleMetadata(integration.id, {
       alertRoleId: role.id,
       roleMessageId: roleMessage.id,
       roleChannelId: roleChannel.id,
-      roleEmoji: adapter.alertRoleEmoji
+      roleEmoji
     });
   }
 }
@@ -168,6 +169,33 @@ async function findOrCreateRoleMessage(
   }
 
   return channel.send({ embeds: [buildRoleSelectorEmbed(integration, role.name, adapter.alertRoleEmoji)] });
+}
+
+async function reactWithFallbackEmoji(
+  roleMessage: Awaited<ReturnType<typeof findOrCreateRoleMessage>>,
+  integration: Integration,
+  adapter: WebsiteAdapter,
+  role: Role
+): Promise<string> {
+  try {
+    await roleMessage.react(adapter.alertRoleEmoji);
+    return adapter.alertRoleEmoji;
+  } catch (error) {
+    if (!isUnknownEmojiError(error)) {
+      throw error;
+    }
+
+    console.error(
+      `Invalid alertRoleEmoji for ${adapter.id}: ${adapter.alertRoleEmoji}. Falling back to ${fallbackAlertRoleEmoji}.`
+    );
+    await roleMessage.edit({ embeds: [buildRoleSelectorEmbed(integration, role.name, fallbackAlertRoleEmoji)] });
+    await roleMessage.react(fallbackAlertRoleEmoji);
+    return fallbackAlertRoleEmoji;
+  }
+}
+
+function isUnknownEmojiError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === 10014);
 }
 
 function logProvisionerError(error: unknown): void {

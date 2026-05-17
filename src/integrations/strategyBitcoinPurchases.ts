@@ -102,7 +102,7 @@ export const strategyBitcoinPurchasesAdapter: WebsiteAdapter = {
   defaultPolymarketUrl,
   defaultChannelName: "strategybtc",
   alertRoleName: "Strategy BTC Alerts",
-  alertRoleEmoji: "\u20BF",
+  alertRoleEmoji: "\uD83E\uDE99",
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const response = await fetchWithTimeout(sourceUrl, {
       headers: {
