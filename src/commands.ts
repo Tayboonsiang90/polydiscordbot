@@ -28,6 +28,8 @@ import {
   type CheckResult
 } from "./poller.js";
 
+const roleChannelName = "market-alert-roles";
+
 export function buildAdapterCommands() {
   return listAdapters().map((adapter) => {
     const command = new SlashCommandBuilder()
@@ -126,6 +128,7 @@ export function buildBotCommands() {
       .setName("bot")
       .setDescription("Bot-level utility commands")
       .addSubcommand((subcommand) => subcommand.setName("summarize").setDescription("Summarize all integrations"))
+      .addSubcommand((subcommand) => subcommand.setName("clearroles").setDescription("Clear the market alert role selector channel"))
   ];
 }
 
@@ -144,19 +147,47 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
   }
 
   const subcommand = interaction.options.getSubcommand();
-  if (subcommand !== "summarize") {
-    await interaction.reply({ content: "Unknown bot command.", flags: MessageFlags.Ephemeral });
+  if (subcommand === "summarize") {
+    await interaction.deferReply();
+    const integrations = database.listIntegrations().filter((integration) => integration.guildId === interaction.guild!.id);
+    const embeds = buildIntegrationSummaryEmbeds(await buildIntegrationSummaryRows(database, integrations));
+    const [firstEmbed, ...remainingEmbeds] = embeds;
+    await interaction.editReply({ embeds: [firstEmbed] });
+    for (const embed of remainingEmbeds) {
+      await interaction.followUp({ embeds: [embed] });
+    }
     return;
   }
 
-  await interaction.deferReply();
-  const integrations = database.listIntegrations().filter((integration) => integration.guildId === interaction.guild!.id);
-  const embeds = buildIntegrationSummaryEmbeds(await buildIntegrationSummaryRows(database, integrations));
-  const [firstEmbed, ...remainingEmbeds] = embeds;
-  await interaction.editReply({ embeds: [firstEmbed] });
-  for (const embed of remainingEmbeds) {
-    await interaction.followUp({ embeds: [embed] });
+  if (subcommand === "clearroles") {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+      await interaction.reply({ content: "You need Manage Messages permission to clear alert role messages.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const roleChannel = interaction.guild.channels.cache.find(
+      (channel) => channel.type === ChannelType.GuildText && channel.name === roleChannelName
+    ) as TextChannel | undefined;
+    if (!roleChannel) {
+      await interaction.reply({ content: `Could not find #${roleChannelName}.`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const botPermissions = roleChannel.permissionsFor(interaction.client.user);
+    if (!botPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+      await interaction.reply({ content: `I need Manage Messages permission in #${roleChannelName}.`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const deletedCount = await clearTextChannel(roleChannel);
+    await interaction.editReply(
+      `Cleared ${deletedCount} message(s) from #${roleChannelName}. The bot will recreate the grouped alert-role selector shortly.`
+    );
+    return;
   }
+
+  await interaction.reply({ content: "Unknown bot command.", flags: MessageFlags.Ephemeral });
 }
 
 export async function handleAdapterCommand(

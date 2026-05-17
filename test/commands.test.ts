@@ -47,7 +47,10 @@ describe("adapter commands", () => {
   it("registers bot summarize as a global bot command", () => {
     expect(buildBotCommands()[0].toJSON()).toMatchObject({
       name: "bot",
-      options: [expect.objectContaining({ name: "summarize" })]
+      options: expect.arrayContaining([
+        expect.objectContaining({ name: "summarize" }),
+        expect.objectContaining({ name: "clearroles" })
+      ])
     });
   });
 
