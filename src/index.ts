@@ -6,6 +6,7 @@ import { PollScheduler } from "./poller.js";
 import { IntegrationProvisioner } from "./provisioner.js";
 import { handleReactionRoleChange } from "./reactionRoles.js";
 
+const heartbeatIntervalMs = 10 * 60 * 1000;
 const config = loadConfig();
 const database = new BotDatabase(config.databasePath);
 const client = new Client({
@@ -18,6 +19,7 @@ const client = new Client({
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User]
 });
 let provisioner: IntegrationProvisioner | null = null;
+let heartbeatTimer: NodeJS.Timeout | null = null;
 
 client.once(Events.ClientReady, (readyClient) => {
   try {
@@ -25,6 +27,10 @@ client.once(Events.ClientReady, (readyClient) => {
     provisioner = new IntegrationProvisioner(client, database, config);
     provisioner.start();
     new PollScheduler(client, database).start();
+    heartbeatTimer = setInterval(() => {
+      console.log(`Heartbeat: ${readyClient.user.tag} alive at ${new Date().toISOString()}`);
+    }, heartbeatIntervalMs);
+    heartbeatTimer.unref();
   } catch (error) {
     console.error("Bot startup failed:", error);
   }
@@ -85,6 +91,9 @@ process.setUncaughtExceptionCaptureCallback((error) => {
 
 process.on("SIGINT", () => {
   provisioner?.stop();
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+  }
   database.close();
   client.destroy();
   process.exit(0);
