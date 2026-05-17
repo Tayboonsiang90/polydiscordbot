@@ -463,7 +463,7 @@ export class PollScheduler {
           this.database.recordMarketEndReminder(activeIntegration.id, activeIntegration.polymarketUrl, reminder.key, now);
         }
       } catch (error) {
-        await this.sendErrorIfDue(activeIntegration.channelId, activeIntegration, error).catch(logSchedulerError);
+        logMarketEndLookupError(activeIntegration, error);
       }
     }
   }
@@ -524,6 +524,10 @@ export function getPollIntervalReason(integration: Integration, now: Date = new 
 
 function logSchedulerError(error: unknown): void {
   console.error("Poll scheduler error:", error);
+}
+
+function logMarketEndLookupError(integration: Integration, error: unknown): void {
+  console.error(`Market-end lookup failed for ${integration.adapterId}: ${formatErrorMessage(error)}`);
 }
 
 function formatErrorMessage(error: unknown): string {
