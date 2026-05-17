@@ -31,6 +31,25 @@ describe("BEA current releases adapter", () => {
     expect(value).toContain("URL: https://www.bea.gov/news/2026/us-international-trade-goods-and-services-march-2026");
   });
 
+  it("handles BEA Drupal index.php news links", () => {
+    const html = `
+      <table>
+        <tbody>
+          <tr class="release-row">
+            <td><a href="/index.php/news/2026/gdp-advance-estimate-1st-quarter-2026">GDP (Advance Estimate), 1st Quarter 2026</a></td>
+            <td><time datetime="2026-04-30T08:30:00-04:00">April 30, 2026</time></td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
+    expect(extractLatestBeaCurrentRelease(html)).toEqual({
+      title: "GDP (Advance Estimate), 1st Quarter 2026",
+      url: "https://www.bea.gov/news/2026/gdp-advance-estimate-1st-quarter-2026",
+      releaseDate: "April 30, 2026"
+    });
+  });
+
   it("throws when no current release row is present", () => {
     expect(() => extractLatestBeaCurrentRelease("<html></html>")).toThrow("Could not find the latest BEA current release row");
   });

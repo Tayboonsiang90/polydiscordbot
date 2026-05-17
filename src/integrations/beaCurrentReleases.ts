@@ -18,7 +18,7 @@ export function extractLatestBeaCurrentReleaseValue(html: string): string {
 export function extractLatestBeaCurrentRelease(html: string): BeaCurrentRelease {
   const $ = cheerio.load(html);
   const row = $("tr.release-row").first();
-  const link = row.find('a[href^="/news/20"]').first();
+  const link = row.find('a[href*="/news/20"]').first();
   const title = normalizeText(link.text());
   const href = link.attr("href");
   const releaseDate = normalizeText(row.find("time").first().text());
@@ -29,7 +29,7 @@ export function extractLatestBeaCurrentRelease(html: string): BeaCurrentRelease 
 
   return {
     title,
-    url: new URL(href, sourceUrl).toString(),
+    url: new URL(normalizeBeaNewsHref(href), sourceUrl).toString(),
     releaseDate
   };
 }
@@ -67,4 +67,8 @@ export const beaCurrentReleasesAdapter: WebsiteAdapter = {
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeBeaNewsHref(href: string): string {
+  return href.replace(/^\/index\.php\/news\//, "/news/");
 }
