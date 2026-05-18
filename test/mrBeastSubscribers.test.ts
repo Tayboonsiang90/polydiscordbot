@@ -4,7 +4,8 @@ import {
   extractMrBeastSubscriberTargetsFromGamma,
   extractMrBeastSubscribers,
   parseMrBeastStoredSubscribers,
-  parseMrBeastSubscriberMarketDeadline
+  parseMrBeastSubscriberMarketDeadline,
+  mrBeastSubscribersAdapter
 } from "../src/integrations/mrBeastSubscribers.js";
 
 describe("MrBeast YouTube subscribers adapter", () => {
@@ -72,5 +73,26 @@ describe("MrBeast YouTube subscribers adapter", () => {
     expect(value).toContain("Target | Stat | Needed");
     expect(value).toContain("491M");
     expect(value).toContain("2026-05-21");
+  });
+
+  it("alerts only when the actual subscriber counter changes", () => {
+    const previous = [
+      "Metric: MrBeast YouTube channel subscribers",
+      "Subscribers: 487,000,000",
+      "Target | Stat | Needed  | Projected  | Req/day"
+    ].join("\n");
+    const currentProjectionOnly = [
+      "Metric: MrBeast YouTube channel subscribers",
+      "Subscribers: 487,000,000",
+      "Target | Stat | Needed  | Projected  | Req/day"
+    ].join("\n");
+    const currentSubscribersChanged = [
+      "Metric: MrBeast YouTube channel subscribers",
+      "Subscribers: 488,000,000",
+      "Target | Stat | Needed  | Projected  | Req/day"
+    ].join("\n");
+
+    expect(mrBeastSubscribersAdapter.shouldAlertOnChange?.(previous, currentProjectionOnly)).toBe(false);
+    expect(mrBeastSubscribersAdapter.shouldAlertOnChange?.(previous, currentSubscribersChanged)).toBe(true);
   });
 });

@@ -4,7 +4,8 @@ import {
   extractMrBeastTargetsFromGamma,
   extractMrBeastTotalViews,
   parseMrBeastMarketDeadline,
-  parseMrBeastStoredViews
+  parseMrBeastStoredViews,
+  mrBeastViewsAdapter
 } from "../src/integrations/mrBeastViews.js";
 
 describe("MrBeast YouTube views adapter", () => {
@@ -71,5 +72,26 @@ describe("MrBeast YouTube views adapter", () => {
     expect(value).toContain("Dailyized rate: +500,000,000/day");
     expect(value).toContain("Next open target: 124B, projected 2026-05-19 ET");
     expect(value).toContain("Market targets: 123B hit | 124B open");
+  });
+
+  it("alerts only when the actual view counter changes", () => {
+    const previous = [
+      "Metric: MrBeast YouTube channel total views",
+      "Total views: 123,020,785,579",
+      "Views needed by deadline: 22,523,772/day"
+    ].join("\n");
+    const currentProjectionOnly = [
+      "Metric: MrBeast YouTube channel total views",
+      "Total views: 123,020,785,579",
+      "Views needed by deadline: 22,524,131/day"
+    ].join("\n");
+    const currentViewsChanged = [
+      "Metric: MrBeast YouTube channel total views",
+      "Total views: 123,020,785,580",
+      "Views needed by deadline: 22,524,131/day"
+    ].join("\n");
+
+    expect(mrBeastViewsAdapter.shouldAlertOnChange?.(previous, currentProjectionOnly)).toBe(false);
+    expect(mrBeastViewsAdapter.shouldAlertOnChange?.(previous, currentViewsChanged)).toBe(true);
   });
 });

@@ -119,6 +119,11 @@ export const mrBeastViewsAdapter: WebsiteAdapter = {
   defaultChannelName: "mrbeastviews",
   alertRoleName: "MrBeast Views Alerts",
   alertRoleEmoji: "\uD83D\uDC40",
+  shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+    const previousViews = parseMrBeastStoredViews(previousValue);
+    const currentViews = parseMrBeastStoredViews(currentValue);
+    return previousViews !== null && currentViews !== null ? previousViews !== currentViews : previousValue !== currentValue;
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const [channelResponse, targets] = await Promise.all([
       fetchWithTimeout(sourceUrl, {

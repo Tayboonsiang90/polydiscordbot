@@ -121,6 +121,13 @@ export const mrBeastSubscribersAdapter: WebsiteAdapter = {
   defaultChannelName: "mrbeastsubs",
   alertRoleName: "MrBeast Subs Alerts",
   alertRoleEmoji: "\uD83D\uDC65",
+  shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+    const previousSubscribers = parseMrBeastStoredSubscribers(previousValue);
+    const currentSubscribers = parseMrBeastStoredSubscribers(currentValue);
+    return previousSubscribers !== null && currentSubscribers !== null
+      ? previousSubscribers !== currentSubscribers
+      : previousValue !== currentValue;
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const [channelResponse, targets] = await Promise.all([
       fetchWithTimeout(sourceUrl, {
