@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, Partials } from "discord.js";
+import { Client, Events, GatewayIntentBits, MessageFlags, Partials, type ChatInputCommandInteraction } from "discord.js";
 import { loadConfig } from "./config.js";
 import { handleAdapterCommand, handleBotCommand, isAdapterCommand, isBotCommand } from "./commands.js";
 import { BotDatabase } from "./database.js";
@@ -48,12 +48,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleAdapterCommand(interaction, database);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(`Command failed: ${message}`);
-    } else {
-      await interaction.reply({ content: `Command failed: ${message}`, ephemeral: true });
-    }
+    await sendCommandFailure(interaction, error);
   }
 });
 
@@ -105,4 +100,26 @@ try {
   console.error("Discord login failed:", error);
   database.close();
   process.exit(1);
+}
+
+async function sendCommandFailure(interaction: ChatInputCommandInteraction, error: unknown): Promise<void> {
+  const message = error instanceof Error ? error.message : String(error);
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(`Command failed: ${message}`);
+    } else {
+      await interaction.reply({ content: `Command failed: ${message}`, flags: MessageFlags.Ephemeral });
+    }
+  } catch (replyError) {
+    if (isUnknownInteractionError(replyError)) {
+      console.warn(`Command failed after Discord interaction expired: ${message}`);
+      return;
+    }
+
+    console.error("Failed to send command failure response:", replyError);
+  }
+}
+
+function isUnknownInteractionError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === 10062);
 }
