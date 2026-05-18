@@ -5,6 +5,8 @@ const sourceUrl = "https://www.weather.gov.hk/en/cis/dailyExtract.htm";
 const dataBaseUrl = "https://www.weather.gov.hk/cis/dailyExtract";
 const defaultYear = 2026;
 const defaultMonth = 5;
+const hkoFetchTimeoutMs = 30_000;
+const hkoFetchAttempts = 3;
 
 type HkPrecipSettings = {
   year: number;
@@ -67,11 +69,7 @@ export const hkPrecipAdapter: WebsiteAdapter = {
   supportsPeriod: true,
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getHkPrecipSettings(integration);
-    const response = await fetchWithTimeout(buildHkoDailyExtractUrl(settings), {
-      headers: {
-        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-      }
-    });
+    const response = await fetchHkoDailyExtractWithRetry(buildHkoDailyExtractUrl(settings));
 
     if (!response.ok) {
       throw new Error(`HKO returned HTTP ${response.status}`);
@@ -94,6 +92,34 @@ export function isValidHkPrecipPeriod(year: number, month: number): boolean {
 
 function buildHkoDailyExtractUrl(settings: HkPrecipSettings): string {
   return `${dataBaseUrl}/dailyExtract_${settings.year}${padMonth(settings.month)}.xml`;
+}
+
+async function fetchHkoDailyExtractWithRetry(url: string): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= hkoFetchAttempts; attempt += 1) {
+    try {
+      return await fetchWithTimeout(
+        url,
+        {
+          headers: {
+            "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+          }
+        },
+        hkoFetchTimeoutMs
+      );
+    } catch (error) {
+      lastError = error;
+      if (attempt < hkoFetchAttempts) {
+        await delay(attempt * 2_000);
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeRainfallValue(value: string): string {
