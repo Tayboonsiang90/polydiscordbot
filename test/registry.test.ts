@@ -23,6 +23,7 @@ describe("adapter registry", () => {
     const hkPrecip = getAdapterByCommandName("hkprecip");
     const kaitoMindshare = getAdapterByCommandName("kaitomindshare");
     const kma = getAdapterByCommandName("koreaprecip");
+    const mrBeast = getAdapterByCommandName("mrbeast");
     const nbs = getAdapterByCommandName("nbs");
     const noaaNyc = getAdapterByCommandName("nycprecip");
     const noaaSeattle = getAdapterByCommandName("seattleprecip");
@@ -156,6 +157,11 @@ describe("adapter registry", () => {
     expect(kma.alertRoleName).toBe("KMA Seoul Precip Alerts");
     expect(kma.alertRoleEmoji).toBe("\u2614");
     expect(kma.supportsPeriod).toBe(true);
+    expect(mrBeast.id).toBe("mrbeast-views");
+    expect(mrBeast.defaultChannelName).toBe("mrbeast");
+    expect(mrBeast.defaultPolymarketUrl).toBe("https://polymarket.com/event/will-mrbeast-hit-billion-views-by-june-30");
+    expect(mrBeast.alertRoleName).toBe("MrBeast Views Alerts");
+    expect(mrBeast.alertRoleEmoji).toBe("\uD83D\uDC40");
     expect(nbs.id).toBe("nbs-press-release");
     expect(nbs.defaultChannelName).toBe("nbs-press");
     expect(nbs.defaultPolymarketUrl).toBe("https://polymarket.com/event/china-gdp-growth-yy-in-q2-2026");

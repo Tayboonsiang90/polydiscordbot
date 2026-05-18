@@ -256,6 +256,16 @@ describe("adapter commands", () => {
       options: expect.arrayContaining([expect.objectContaining({ name: "period" })])
     });
 
+    const mrBeastCommand = buildAdapterCommands().find((command) => command.name === "mrbeast");
+    expect(mrBeastCommand?.toJSON()).toMatchObject({
+      name: "mrbeast",
+      options: expect.arrayContaining([
+        expect.objectContaining({ name: "check" }),
+        expect.objectContaining({ name: "test" }),
+        expect.objectContaining({ name: "polymarket" })
+      ])
+    });
+
     const hkPrecipCommand = buildAdapterCommands().find((command) => command.name === "hkprecip");
     expect(hkPrecipCommand?.toJSON()).toMatchObject({
       name: "hkprecip",

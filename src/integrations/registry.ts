@@ -18,6 +18,7 @@ import { freeAppStoreAdapter } from "./freeAppStore.js";
 import { hkPrecipAdapter } from "./hkPrecip.js";
 import { kaitoMindshareAdapter } from "./kaitoMindshare.js";
 import { kmaSeoulPrecipAdapter } from "./kmaSeoulPrecip.js";
+import { mrBeastViewsAdapter } from "./mrBeastViews.js";
 import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
 import { noaaNycPrecipAdapter } from "./noaaNycPrecip.js";
 import { noaaSeattlePrecipAdapter } from "./noaaSeattlePrecip.js";
@@ -60,6 +61,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [hkPrecipAdapter.id, hkPrecipAdapter],
   [kaitoMindshareAdapter.id, kaitoMindshareAdapter],
   [kmaSeoulPrecipAdapter.id, kmaSeoulPrecipAdapter],
+  [mrBeastViewsAdapter.id, mrBeastViewsAdapter],
   [nbsPressReleaseAdapter.id, nbsPressReleaseAdapter],
   [noaaNycPrecipAdapter.id, noaaNycPrecipAdapter],
   [noaaSeattlePrecipAdapter.id, noaaSeattlePrecipAdapter],
