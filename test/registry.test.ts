@@ -12,6 +12,7 @@ describe("adapter registry", () => {
     const blsCpi = getAdapterByCommandName("blscpi");
     const bonbast = getAdapterByCommandName("bonbast");
     const fertility = getAdapterByCommandName("fertility");
+    const measles = getAdapterByCommandName("measles");
     const cloudflare = getAdapterByCommandName("cloudflare");
     const discord = getAdapterByCommandName("discord");
     const eia = getAdapterByCommandName("eia");
@@ -88,6 +89,11 @@ describe("adapter registry", () => {
     expect(fertility.defaultPolymarketUrl).toBe("https://polymarket.com/event/us-fertility-rate-up-in-q1-2026");
     expect(fertility.alertRoleName).toBe("CDC Fertility Alerts");
     expect(fertility.alertRoleEmoji).toBe("\uD83D\uDC76");
+    expect(measles.id).toBe("cdc-measles");
+    expect(measles.defaultChannelName).toBe("measles");
+    expect(measles.defaultPolymarketUrl).toBe("https://polymarket.com/event/measles-cases-in-us-by-may-31");
+    expect(measles.alertRoleName).toBe("CDC Measles Alerts");
+    expect(measles.alertRoleEmoji).toBe("\uD83E\uDDA0");
     expect(cloudflare.id).toBe("cloudflare-critical-incidents");
     expect(cloudflare.defaultChannelName).toBe("cloudflare-critical");
     expect(cloudflare.defaultPolymarketUrl).toBe("https://polymarket.com/event/another-critical-cloudflare-incident-by-995");

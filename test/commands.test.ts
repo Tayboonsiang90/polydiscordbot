@@ -158,6 +158,16 @@ describe("adapter commands", () => {
       ])
     });
 
+    const measlesCommand = buildAdapterCommands().find((command) => command.name === "measles");
+    expect(measlesCommand?.toJSON()).toMatchObject({
+      name: "measles",
+      options: expect.arrayContaining([
+        expect.objectContaining({ name: "check" }),
+        expect.objectContaining({ name: "test" }),
+        expect.objectContaining({ name: "polymarket" })
+      ])
+    });
+
     const discordCommand = buildAdapterCommands().find((command) => command.name === "discord");
     expect(discordCommand?.toJSON()).toMatchObject({
       name: "discord",

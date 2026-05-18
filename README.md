@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Kaito Polymarket Mindshare, NBS Press Releases, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Kaito Polymarket Mindshare, NBS Press Releases, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -25,6 +25,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `bea-current-releases` | `/bea` | `#bea-releases` | `BEA Release Alerts` | `ðŸ“°` | Monitors BEA Current Releases hourly and alerts when the latest article changes. |
 | `bls-cpi-releases` | `/blscpi` | `#blscpi-releases` | `BLS CPI Release Alerts` | `ðŸ“ˆ` | Monitors BLS CPI archived news releases hourly and alerts when the latest article changes. |
 | `cdc-fertility-rate` | `/fertility` | `#fertility` | `CDC Fertility Alerts` | `👶` | Monitors CDC natality dashboard 2026 Q1 general fertility rate publication. |
+| `cdc-measles` | `/measles` | `#measles` | `CDC Measles Alerts` | `🦠` | Monitors CDC's 2026 confirmed U.S. measles total cases counter. |
 | `cloudflare-critical-incidents` | `/cloudflare` | `#cloudflare-critical` | `Cloudflare Critical Alerts` | `🔴` | Monitors Cloudflare's official incidents API for Critical/red incidents. |
 | `discord-critical-incidents` | `/discord` | `#discord-critical` | `Discord Critical Alerts` | `🔴` | Monitors Discord's official incidents API for Critical/red incidents in the May 31 market window. |
 | `eia-crude-spr` | `/eia` | `#eia-crude-spr` | `EIA Crude SPR Alerts` | `⛽` | Monitors EIA weekly U.S. Ending Stocks of Crude Oil in the Strategic Petroleum Reserve. |
@@ -101,7 +102,7 @@ The bot invite needs `Manage Channels`, `Send Messages`, `View Channels`, `Manag
 
 The bot creates a channel for each registered adapter when it starts, then checks every minute for missing channels.
 
-For Bonbast, use these commands inside `#bonbast-usd-irr`; for AAA gas, Free App Store, and precipitation integrations, use the same subcommands under `/aaa`, `/allin`, `/arenaai`, `/aws`, `/basedrevenue`, `/bea`, `/blscpi`, `/beef`, `/cloudflare`, `/discord`, `/eia`, `/earthquake`, `/eggs`, `/fdic`, `/fertility`, `/freeappstore`, `/fulllid`, `/kaitomindshare`, `/nbs`, `/ngprice`, `/nytfront`, `/ornnb200`, `/ornnh200`, `/paidappstore`, `/spotifyusa`, `/spotifyglobal`, `/strategybtc`, `/tesla`, `/trumptruth`, `/tsa`, `/wti`, `/xagusd`, `/xauusd`, `/hkprecip`, `/koreaprecip`, `/nycprecip`, or `/seattleprecip` inside their own channels:
+For Bonbast, use these commands inside `#bonbast-usd-irr`; for AAA gas, Free App Store, and precipitation integrations, use the same subcommands under `/aaa`, `/allin`, `/arenaai`, `/aws`, `/basedrevenue`, `/bea`, `/blscpi`, `/beef`, `/cloudflare`, `/discord`, `/eia`, `/earthquake`, `/eggs`, `/fdic`, `/fertility`, `/freeappstore`, `/fulllid`, `/kaitomindshare`, `/measles`, `/nbs`, `/ngprice`, `/nytfront`, `/ornnb200`, `/ornnh200`, `/paidappstore`, `/spotifyusa`, `/spotifyglobal`, `/strategybtc`, `/tesla`, `/trumptruth`, `/tsa`, `/wti`, `/xagusd`, `/xauusd`, `/hkprecip`, `/koreaprecip`, `/nycprecip`, or `/seattleprecip` inside their own channels:
 
 - `/bonbast status`
 - `/bonbast check`
