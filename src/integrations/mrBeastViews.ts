@@ -112,11 +112,11 @@ export function buildMrBeastViewValue(input: MrBeastViewProjection, observedAt =
 
 export const mrBeastViewsAdapter: WebsiteAdapter = {
   id: "mrbeast-views",
-  commandName: "mrbeast",
+  commandName: "mrbeastviews",
   displayName: "MrBeast YouTube Views",
   sourceUrl,
   defaultPolymarketUrl,
-  defaultChannelName: "mrbeast",
+  defaultChannelName: "mrbeastviews",
   alertRoleName: "MrBeast Views Alerts",
   alertRoleEmoji: "\uD83D\uDC40",
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {

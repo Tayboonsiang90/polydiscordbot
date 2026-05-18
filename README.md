@@ -53,7 +53,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `kaito-polymarket-mindshare` | `/kaitomindshare` | `#kaitomindshare` | `Kaito Mindshare Alerts` | `🧠` | Monitors finalized Kaito Info Markets Historical Data rows for Polymarket mindshare. |
 | `kma-seoul-precip` | `/koreaprecip` | `#koreaprecip` | `KMA Seoul Precip Alerts` | `â˜”` | Monitors KMA Seoul monthly precipitation for Polymarket resolution checks. |
 | `mrbeast-subscribers` | `/mrbeastsubs` | `#mrbeastsubs` | `MrBeast Subs Alerts` | `👥` | Tracks MrBeast YouTube channel subscribers, dailyized rate, and Polymarket target projections. |
-| `mrbeast-views` | `/mrbeast` | `#mrbeast` | `MrBeast Views Alerts` | `👀` | Tracks MrBeast YouTube channel total views, dailyized rate, and Polymarket target projections. |
+| `mrbeast-views` | `/mrbeastviews` | `#mrbeastviews` | `MrBeast Views Alerts` | `👀` | Tracks MrBeast YouTube channel total views, dailyized rate, and Polymarket target projections. |
 | `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `â˜”` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
 | `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `â˜”` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
 | `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `ðŸ“°` | Monitors the daily New York print front page on PressReader and OCRs page one for active Polymarket strike terms. |
@@ -104,7 +104,7 @@ The bot invite needs `Manage Channels`, `Send Messages`, `View Channels`, `Manag
 
 The bot creates a channel for each registered adapter when it starts, then checks every minute for missing channels.
 
-For Bonbast, use these commands inside `#bonbast-usd-irr`; for AAA gas, Free App Store, and precipitation integrations, use the same subcommands under `/aaa`, `/allin`, `/arenaai`, `/aws`, `/basedrevenue`, `/bea`, `/blscpi`, `/beef`, `/cloudflare`, `/discord`, `/eia`, `/earthquake`, `/eggs`, `/fdic`, `/fertility`, `/freeappstore`, `/fulllid`, `/kaitomindshare`, `/measles`, `/mrbeast`, `/mrbeastsubs`, `/nbs`, `/ngprice`, `/nytfront`, `/ornnb200`, `/ornnh200`, `/paidappstore`, `/spotifyusa`, `/spotifyglobal`, `/strategybtc`, `/tesla`, `/trumptruth`, `/tsa`, `/wti`, `/xagusd`, `/xauusd`, `/hkprecip`, `/koreaprecip`, `/nycprecip`, or `/seattleprecip` inside their own channels:
+For Bonbast, use these commands inside `#bonbast-usd-irr`; for AAA gas, Free App Store, and precipitation integrations, use the same subcommands under `/aaa`, `/allin`, `/arenaai`, `/aws`, `/basedrevenue`, `/bea`, `/blscpi`, `/beef`, `/cloudflare`, `/discord`, `/eia`, `/earthquake`, `/eggs`, `/fdic`, `/fertility`, `/freeappstore`, `/fulllid`, `/kaitomindshare`, `/measles`, `/mrbeastsubs`, `/mrbeastviews`, `/nbs`, `/ngprice`, `/nytfront`, `/ornnb200`, `/ornnh200`, `/paidappstore`, `/spotifyusa`, `/spotifyglobal`, `/strategybtc`, `/tesla`, `/trumptruth`, `/tsa`, `/wti`, `/xagusd`, `/xauusd`, `/hkprecip`, `/koreaprecip`, `/nycprecip`, or `/seattleprecip` inside their own channels:
 
 - `/bonbast status`
 - `/bonbast check`

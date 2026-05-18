@@ -256,9 +256,9 @@ describe("adapter commands", () => {
       options: expect.arrayContaining([expect.objectContaining({ name: "period" })])
     });
 
-    const mrBeastCommand = buildAdapterCommands().find((command) => command.name === "mrbeast");
+    const mrBeastCommand = buildAdapterCommands().find((command) => command.name === "mrbeastviews");
     expect(mrBeastCommand?.toJSON()).toMatchObject({
-      name: "mrbeast",
+      name: "mrbeastviews",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "check" }),
         expect.objectContaining({ name: "test" }),
