@@ -217,7 +217,6 @@ async function syncGroupedRoleMessage(
   groupCount: number
 ): Promise<AlertRoleEntry[]> {
   const reactedEntries = entries.map((entry) => ({ ...entry }));
-  await roleMessage.reactions.removeAll().catch(() => undefined);
 
   const usedEmojis = new Set<string>();
   for (const entry of reactedEntries) {
@@ -236,6 +235,10 @@ async function reactWithFallbackEmoji(
 ): Promise<string> {
   const candidates = [entry.adapter.alertRoleEmoji, ...fallbackAlertRoleEmojis].filter((emoji) => !usedEmojis.has(emoji));
   for (const emoji of candidates) {
+    if (hasReactionEmoji(roleMessage, emoji)) {
+      return emoji;
+    }
+
     try {
       await roleMessage.react(emoji);
       if (emoji !== entry.adapter.alertRoleEmoji) {
@@ -250,6 +253,10 @@ async function reactWithFallbackEmoji(
   }
 
   throw new Error(`No usable alert role emoji found for ${entry.adapter.id}`);
+}
+
+function hasReactionEmoji(roleMessage: Message, emoji: string): boolean {
+  return roleMessage.reactions.cache.some((reaction) => (reaction.emoji.name ?? reaction.emoji.toString()) === emoji);
 }
 
 function groupAlertRoleEntries(entries: AlertRoleEntry[]): AlertRoleEntry[][] {
