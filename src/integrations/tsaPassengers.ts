@@ -1,10 +1,23 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
+import { getPolymarketSlug } from "../marketEnd.js";
+import {
+  parsePolymarketDateRangeWindow,
+  resolveIntegrationPolymarketQueue,
+  upsertPolymarketQueueUrl,
+  type PolymarketQueueMarket
+} from "../polymarketQueue.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.tsa.gov/travel/passenger-volumes";
 const defaultPolymarketUrl = "https://polymarket.com/event/number-of-tsa-passengers-may-4-may-10";
 const easternTimeZone = "America/New_York";
+const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
+const tsaMarketSearchQuery = "number of tsa passengers";
+const tsaMarketSearchTag = "tsa";
+const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
+const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
+const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 
 export type TsaPassengerVolume = {
   date: string;
@@ -14,6 +27,23 @@ export type TsaPassengerVolume = {
 export type TsaDateRange = {
   startDate: string;
   endDate: string;
+};
+
+type TsaDiscoverySettings = {
+  polymarketMarkets?: PolymarketQueueMarket[];
+  lastTsaDiscoveryAt?: string;
+};
+
+type GammaSearchResponse = {
+  events?: GammaSearchEvent[];
+};
+
+type GammaSearchEvent = {
+  slug?: string;
+  title?: string;
+  active?: boolean;
+  closed?: boolean;
+  tags?: Array<{ slug?: string | null }>;
 };
 
 const monthNumbers: Record<string, number> = {
@@ -130,6 +160,9 @@ export const tsaPassengersAdapter: WebsiteAdapter = {
   defaultChannelName: "tsa",
   alertRoleName: "TSA Passenger Alerts",
   alertRoleEmoji: "\u2708\uFE0F",
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshTsaPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const response = await fetchWithTimeout(sourceUrl, {
       headers: {
@@ -150,6 +183,186 @@ export const tsaPassengersAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export async function refreshTsaPolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  let resolved = resolveIntegrationPolymarketQueue(integration, now);
+  let settings = parseTsaDiscoverySettings(resolved.settingsJson);
+  if (!shouldDiscoverTsaMarkets(settings, now)) {
+    return resolved;
+  }
+
+  settings = { ...settings, lastTsaDiscoveryAt: now.toISOString() };
+  resolved = {
+    settingsJson: JSON.stringify(settings),
+    activeUrl: resolved.activeUrl
+  };
+
+  try {
+    const candidates = await fetchTsaMarketSearchCandidates(now);
+    const existingSlugs = new Set((settings.polymarketMarkets ?? []).map((market) => market.slug));
+    for (const candidate of candidates) {
+      if (existingSlugs.has(candidate.slug)) {
+        continue;
+      }
+
+      resolved = upsertPolymarketQueueUrl(
+        {
+          ...integration,
+          settingsJson: resolved.settingsJson,
+          polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
+        },
+        candidate.url,
+        now
+      );
+      existingSlugs.add(candidate.slug);
+    }
+
+    return resolved;
+  } catch {
+    return resolved;
+  }
+}
+
+function shouldDiscoverTsaMarkets(settings: TsaDiscoverySettings, now: Date): boolean {
+  const markets = normalizeTsaQueueMarkets(settings.polymarketMarkets);
+  if (hasQueuedFutureMarket(markets, now)) {
+    return false;
+  }
+
+  const activeMarket = getActiveMarket(markets, now);
+  const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
+  if (!isDiscoveryIntervalDue(settings.lastTsaDiscoveryAt, now, intervalMs)) {
+    return false;
+  }
+
+  if (!activeMarket) {
+    return true;
+  }
+
+  return Date.parse(activeMarket.endAt ?? "") - now.getTime() <= marketDiscoveryLookaheadMs;
+}
+
+function hasQueuedFutureMarket(markets: PolymarketQueueMarket[], now: Date): boolean {
+  const nowMs = now.getTime();
+  return markets.some((market) => Boolean(market.startAt) && Date.parse(market.startAt!) > nowMs);
+}
+
+function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): PolymarketQueueMarket | null {
+  const nowMs = now.getTime();
+  return (
+    markets.find((market) => {
+      if (!market.startAt || !market.endAt) {
+        return false;
+      }
+
+      return nowMs >= Date.parse(market.startAt) && nowMs <= Date.parse(market.endAt);
+    }) ?? null
+  );
+}
+
+function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, intervalMs: number): boolean {
+  if (!lastDiscoveryAt) {
+    return true;
+  }
+
+  const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
+  return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
+}
+
+async function fetchTsaMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const searchUrl = new URL(gammaSearchUrl);
+  searchUrl.searchParams.set("q", tsaMarketSearchQuery);
+  searchUrl.searchParams.set("events_status", "active");
+  searchUrl.searchParams.set("limit_per_type", "10");
+  searchUrl.searchParams.append("events_tag", tsaMarketSearchTag);
+
+  const response = await fetchWithTimeout(searchUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GammaSearchResponse;
+  return (payload.events ?? [])
+    .map((event) => normalizeTsaSearchEvent(event, now))
+    .filter((candidate) => candidate !== null);
+}
+
+function normalizeTsaSearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
+  if (event.active === false || event.closed === true || !isNonEmptyString(event.slug) || !isNonEmptyString(event.title)) {
+    return null;
+  }
+
+  if (!event.slug.startsWith("number-of-tsa-passengers-") || !event.title.toLowerCase().startsWith("number of tsa passengers")) {
+    return null;
+  }
+
+  const tagSlugs = new Set((event.tags ?? []).map((tag) => tag.slug).filter(isNonEmptyString));
+  if (!tagSlugs.has(tsaMarketSearchTag)) {
+    return null;
+  }
+
+  const url = `https://polymarket.com/event/${event.slug}`;
+  return parsePolymarketDateRangeWindow(url, now) ? { slug: event.slug, url } : null;
+}
+
+function parseTsaDiscoverySettings(settingsJson: string | null): TsaDiscoverySettings {
+  if (!settingsJson) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(settingsJson) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    const settings = parsed as TsaDiscoverySettings;
+    return {
+      ...settings,
+      polymarketMarkets: normalizeTsaQueueMarkets(settings.polymarketMarkets),
+      lastTsaDiscoveryAt: typeof settings.lastTsaDiscoveryAt === "string" ? settings.lastTsaDiscoveryAt : undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
+function normalizeTsaQueueMarkets(value: unknown): PolymarketQueueMarket[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((market) => {
+    if (!market || typeof market !== "object") {
+      return [];
+    }
+
+    const candidate = market as Partial<PolymarketQueueMarket>;
+    if (!isNonEmptyString(candidate.url)) {
+      return [];
+    }
+
+    const slug = isNonEmptyString(candidate.slug) ? candidate.slug : getPolymarketSlug(candidate.url);
+    if (!slug) {
+      return [];
+    }
+
+    return [
+      {
+        url: candidate.url,
+        slug,
+        startAt: typeof candidate.startAt === "string" ? candidate.startAt : null,
+        endAt: typeof candidate.endAt === "string" ? candidate.endAt : null,
+        addedAt: typeof candidate.addedAt === "string" ? candidate.addedAt : new Date(0).toISOString()
+      }
+    ];
+  });
+}
 
 function buildDateRange(year: number, startMonth: number, startDay: number, endMonth: number, endDay: number): TsaDateRange {
   return {
@@ -221,4 +434,8 @@ function formatInteger(value: number): string {
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
 }

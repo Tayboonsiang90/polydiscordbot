@@ -110,6 +110,14 @@ export function getErrorNoticeDecision(
 export async function checkIntegration(database: BotDatabase, integration: Integration): Promise<CheckResult> {
   integration = activateQueuedPolymarket(database, integration);
   const adapter = getAdapter(integration.adapterId);
+  if (adapter.refreshSettings) {
+    const refreshedSettingsJson = await adapter.refreshSettings(integration);
+    if (refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson) {
+      integration = database.setSettingsJson(integration.id, refreshedSettingsJson);
+      integration = activateQueuedPolymarket(database, integration);
+    }
+  }
+
   const adapterValue = await adapter.fetchCurrentValue(integration);
   const previousValue = integration.lastValue;
   const previousCheckedAt = integration.lastCheckedAt;
