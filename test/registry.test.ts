@@ -23,6 +23,7 @@ describe("adapter registry", () => {
     const hkPrecip = getAdapterByCommandName("hkprecip");
     const kaitoMindshare = getAdapterByCommandName("kaitomindshare");
     const kma = getAdapterByCommandName("koreaprecip");
+    const mrBeastSubs = getAdapterByCommandName("mrbeastsubs");
     const mrBeast = getAdapterByCommandName("mrbeast");
     const nbs = getAdapterByCommandName("nbs");
     const noaaNyc = getAdapterByCommandName("nycprecip");
@@ -157,6 +158,11 @@ describe("adapter registry", () => {
     expect(kma.alertRoleName).toBe("KMA Seoul Precip Alerts");
     expect(kma.alertRoleEmoji).toBe("\u2614");
     expect(kma.supportsPeriod).toBe(true);
+    expect(mrBeastSubs.id).toBe("mrbeast-subscribers");
+    expect(mrBeastSubs.defaultChannelName).toBe("mrbeastsubs");
+    expect(mrBeastSubs.defaultPolymarketUrl).toBe("https://polymarket.com/event/will-mrbeast-hit-million-subscribers-by-june-30");
+    expect(mrBeastSubs.alertRoleName).toBe("MrBeast Subs Alerts");
+    expect(mrBeastSubs.alertRoleEmoji).toBe("\uD83D\uDC65");
     expect(mrBeast.id).toBe("mrbeast-views");
     expect(mrBeast.defaultChannelName).toBe("mrbeast");
     expect(mrBeast.defaultPolymarketUrl).toBe("https://polymarket.com/event/will-mrbeast-hit-billion-views-by-june-30");

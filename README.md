@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Kaito Polymarket Mindshare, MrBeast YouTube Views, NBS Press Releases, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Kaito Polymarket Mindshare, MrBeast YouTube Subscribers, MrBeast YouTube Views, NBS Press Releases, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -52,6 +52,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `hk-precip` | `/hkprecip` | `#hkprecip` | `HKO Hong Kong Precip Alerts` | `â˜”` | Monitors HKO Hong Kong monthly total rainfall from Daily Extract for Polymarket resolution checks. |
 | `kaito-polymarket-mindshare` | `/kaitomindshare` | `#kaitomindshare` | `Kaito Mindshare Alerts` | `🧠` | Monitors finalized Kaito Info Markets Historical Data rows for Polymarket mindshare. |
 | `kma-seoul-precip` | `/koreaprecip` | `#koreaprecip` | `KMA Seoul Precip Alerts` | `â˜”` | Monitors KMA Seoul monthly precipitation for Polymarket resolution checks. |
+| `mrbeast-subscribers` | `/mrbeastsubs` | `#mrbeastsubs` | `MrBeast Subs Alerts` | `👥` | Tracks MrBeast YouTube channel subscribers, dailyized rate, and Polymarket target projections. |
 | `mrbeast-views` | `/mrbeast` | `#mrbeast` | `MrBeast Views Alerts` | `👀` | Tracks MrBeast YouTube channel total views, dailyized rate, and Polymarket target projections. |
 | `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `â˜”` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
 | `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `â˜”` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
@@ -103,7 +104,7 @@ The bot invite needs `Manage Channels`, `Send Messages`, `View Channels`, `Manag
 
 The bot creates a channel for each registered adapter when it starts, then checks every minute for missing channels.
 
-For Bonbast, use these commands inside `#bonbast-usd-irr`; for AAA gas, Free App Store, and precipitation integrations, use the same subcommands under `/aaa`, `/allin`, `/arenaai`, `/aws`, `/basedrevenue`, `/bea`, `/blscpi`, `/beef`, `/cloudflare`, `/discord`, `/eia`, `/earthquake`, `/eggs`, `/fdic`, `/fertility`, `/freeappstore`, `/fulllid`, `/kaitomindshare`, `/measles`, `/mrbeast`, `/nbs`, `/ngprice`, `/nytfront`, `/ornnb200`, `/ornnh200`, `/paidappstore`, `/spotifyusa`, `/spotifyglobal`, `/strategybtc`, `/tesla`, `/trumptruth`, `/tsa`, `/wti`, `/xagusd`, `/xauusd`, `/hkprecip`, `/koreaprecip`, `/nycprecip`, or `/seattleprecip` inside their own channels:
+For Bonbast, use these commands inside `#bonbast-usd-irr`; for AAA gas, Free App Store, and precipitation integrations, use the same subcommands under `/aaa`, `/allin`, `/arenaai`, `/aws`, `/basedrevenue`, `/bea`, `/blscpi`, `/beef`, `/cloudflare`, `/discord`, `/eia`, `/earthquake`, `/eggs`, `/fdic`, `/fertility`, `/freeappstore`, `/fulllid`, `/kaitomindshare`, `/measles`, `/mrbeast`, `/mrbeastsubs`, `/nbs`, `/ngprice`, `/nytfront`, `/ornnb200`, `/ornnh200`, `/paidappstore`, `/spotifyusa`, `/spotifyglobal`, `/strategybtc`, `/tesla`, `/trumptruth`, `/tsa`, `/wti`, `/xagusd`, `/xauusd`, `/hkprecip`, `/koreaprecip`, `/nycprecip`, or `/seattleprecip` inside their own channels:
 
 - `/bonbast status`
 - `/bonbast check`
@@ -180,7 +181,8 @@ Free App Store uses `ðŸ†“` and the `Free App Store Alerts` role. Paid App 
 - FRED beef monitors the latest 2026 ground beef price; it polls hourly except on the day before and day of the parsed next release date, when it polls every minute.
 - FDIC monitors the latest failed-bank table row; changes to that row trigger the normal value-change alert.
 - Kaito mindshare monitors a configured Kaito Historical Data JSON/API endpoint for finalized Polymarket mindshare rows because the public Kaito page is Cloudflare-protected from direct bot scraping.
-- MrBeast monitors the YouTube channel About metadata total view count and compares it to Gamma-parsed billion-view market targets for dailyized rate and projection output.
+- MrBeast subscribers monitors the YouTube channel About metadata subscriber count and compares it to Gamma-parsed million-subscriber market targets for dailyized rate and projection output.
+- MrBeast views monitors the YouTube channel About metadata total view count and compares it to Gamma-parsed billion-view market targets for dailyized rate and projection output.
 - ORNN B200 and H200 monitor the dashboard's GPU index-history API and use the second latest point as finalized because daily values finalize after the following day's point is published.
 - Pyth Natural Gas, WTI, XAGUSD, and XAUUSD parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.
 - AWS monitors the public AWS Health Dashboard history events JSON and treats status code `3` as the disrupted severity classification.
