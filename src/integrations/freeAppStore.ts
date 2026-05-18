@@ -1,15 +1,8 @@
 ﻿import type { AdapterValue, WebsiteAdapter } from "./types.js";
-import { fetchWithTimeout } from "../http.js";
+import { fetchAppleAppStoreChart, type AppStoreChartResponse } from "./appleAppStore.js";
 
 const sourceUrl = "https://apps.apple.com/us/charts/iphone";
 const feedUrl = "https://rss.applemarketingtools.com/api/v2/us/apps/top-free/2/apps.json";
-
-type AppStoreChartResponse = {
-  feed?: {
-    updated?: string;
-    results?: AppStoreChartResult[];
-  };
-};
 
 type AppStoreChartResult = {
   name?: string;
@@ -50,17 +43,7 @@ export const freeAppStoreAdapter: WebsiteAdapter = {
     label: "12:00 PM ET snapshot"
   },
   async fetchCurrentValue(): Promise<AdapterValue> {
-    const response = await fetchWithTimeout(feedUrl, {
-      headers: {
-        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Apple App Store chart returned HTTP ${response.status}`);
-    }
-
-    const json = (await response.json()) as AppStoreChartResponse;
+    const json = await fetchAppleAppStoreChart(feedUrl);
     const value = extractFreeAppStoreTop2(json);
     return {
       value,
