@@ -11,13 +11,20 @@ const maxPosts = 20;
 const maxOcrImagesPerPost = 2;
 const archiveDetailTimeoutMs = 8_000;
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
+const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const strikeRefreshIntervalMs = 5 * 60_000;
+const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
+const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
+const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
+const trumpTruthMarketSearchQuery = "what will trump post this week";
+const trumpTruthMarketSearchTags = ["trump", "mention-markets"];
 const ocrTextCache = new Map<string, string>();
 
 export type TrumpTruthSettings = {
   strikeTerms?: string[];
   parsedFromUrl?: string;
   lastParsedAt?: string;
+  lastDiscoveryAt?: string;
   markets?: TrumpTruthMarket[];
 };
 
@@ -57,6 +64,19 @@ type TrumpTruthArchiveItem = {
 };
 
 type GammaEvent = {
+  markets?: GammaMarket[];
+};
+
+type GammaSearchResponse = {
+  events?: GammaSearchEvent[];
+};
+
+type GammaSearchEvent = {
+  slug?: string;
+  title?: string;
+  active?: boolean;
+  closed?: boolean;
+  tags?: Array<{ slug?: string | null }>;
   markets?: GammaMarket[];
 };
 
@@ -113,6 +133,7 @@ export const trumpTruthAdapter: WebsiteAdapter = {
 
 export async function refreshTrumpTruthSettings(integration: Integration, force = false, now = new Date()): Promise<TrumpTruthSettings> {
   let settings = ensureTrumpTruthMarkets(parseTrumpTruthSettings(integration.settingsJson, now), integration.polymarketUrl ?? defaultPolymarketUrl, now);
+  settings = await discoverTrumpTruthMarketsIfDue(settings, now);
   const activeMarket = getActiveTrumpTruthMarket(settings.markets ?? [], now);
   if (!activeMarket) {
     return { ...settings, strikeTerms: [], parsedFromUrl: undefined, lastParsedAt: undefined };
@@ -149,13 +170,21 @@ export function parseTrumpTruthSettings(settingsJson: string | null, now = new D
     const settings = JSON.parse(settingsJson) as TrumpTruthSettings;
     const markets = Array.isArray(settings.markets) ? settings.markets.map(normalizeStoredMarket).filter((market) => market !== null) : undefined;
     if (markets?.length) {
-      return withActiveTrumpTruthMarket({ markets }, now);
+      return withActiveTrumpTruthMarket(
+        {
+          ...settings,
+          markets,
+          lastDiscoveryAt: typeof settings.lastDiscoveryAt === "string" ? settings.lastDiscoveryAt : undefined
+        },
+        now
+      );
     }
 
     return {
       strikeTerms: Array.isArray(settings.strikeTerms) ? settings.strikeTerms.filter(isNonEmptyString) : undefined,
       parsedFromUrl: typeof settings.parsedFromUrl === "string" ? settings.parsedFromUrl : undefined,
-      lastParsedAt: typeof settings.lastParsedAt === "string" ? settings.lastParsedAt : undefined
+      lastParsedAt: typeof settings.lastParsedAt === "string" ? settings.lastParsedAt : undefined,
+      lastDiscoveryAt: typeof settings.lastDiscoveryAt === "string" ? settings.lastDiscoveryAt : undefined
     };
   } catch {
     return {};
@@ -196,6 +225,114 @@ async function fetchTrumpTruthGammaMarket(url: string, now: Date): Promise<Trump
     ...terms,
     lastParsedAt: new Date().toISOString()
   };
+}
+
+async function discoverTrumpTruthMarketsIfDue(settings: TrumpTruthSettings, now: Date): Promise<TrumpTruthSettings> {
+  if (!shouldDiscoverTrumpTruthMarkets(settings, now)) {
+    return settings;
+  }
+
+  const discoveryTimestamp = now.toISOString();
+  try {
+    const candidates = await fetchTrumpTruthMarketSearchCandidates(now);
+    let nextSettings: TrumpTruthSettings = { ...settings, lastDiscoveryAt: discoveryTimestamp };
+    const existingSlugs = new Set((settings.markets ?? []).map((market) => market.slug));
+
+    for (const candidate of candidates) {
+      if (existingSlugs.has(candidate.slug)) {
+        continue;
+      }
+
+      const market = await fetchTrumpTruthGammaMarket(candidate.url, now);
+      if (market.strikeTerms.length === 0) {
+        continue;
+      }
+
+      nextSettings = upsertMarket(nextSettings, market, now);
+      existingSlugs.add(market.slug);
+    }
+
+    return withActiveTrumpTruthMarket(nextSettings, now);
+  } catch {
+    return { ...settings, lastDiscoveryAt: discoveryTimestamp };
+  }
+}
+
+function shouldDiscoverTrumpTruthMarkets(settings: TrumpTruthSettings, now: Date): boolean {
+  if (hasQueuedFutureMarket(settings.markets ?? [], now)) {
+    return false;
+  }
+
+  const activeMarket = getActiveTrumpTruthMarket(settings.markets ?? [], now);
+  const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
+  if (!isDiscoveryIntervalDue(settings.lastDiscoveryAt, now, intervalMs)) {
+    return false;
+  }
+
+  if (!activeMarket) {
+    return true;
+  }
+
+  return new Date(activeMarket.endAt).getTime() - now.getTime() <= marketDiscoveryLookaheadMs;
+}
+
+function hasQueuedFutureMarket(markets: TrumpTruthMarket[], now: Date): boolean {
+  const nowMs = now.getTime();
+  return markets.some((market) => new Date(market.startAt).getTime() > nowMs);
+}
+
+function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, intervalMs: number): boolean {
+  if (!lastDiscoveryAt) {
+    return true;
+  }
+
+  const lastDiscoveryMs = new Date(lastDiscoveryAt).getTime();
+  return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
+}
+
+async function fetchTrumpTruthMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const searchUrl = new URL(gammaSearchUrl);
+  searchUrl.searchParams.set("q", trumpTruthMarketSearchQuery);
+  searchUrl.searchParams.set("events_status", "active");
+  searchUrl.searchParams.set("limit_per_type", "10");
+  searchUrl.searchParams.set("search_tags", "true");
+  for (const tag of trumpTruthMarketSearchTags) {
+    searchUrl.searchParams.append("events_tag", tag);
+  }
+
+  const response = await fetchWithTimeout(searchUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GammaSearchResponse;
+  return (payload.events ?? [])
+    .map((event) => normalizeTrumpTruthSearchEvent(event, now))
+    .filter((candidate) => candidate !== null);
+}
+
+function normalizeTrumpTruthSearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
+  if (event.active === false || event.closed === true || !isNonEmptyString(event.slug) || !isNonEmptyString(event.title)) {
+    return null;
+  }
+
+  if (!event.slug.startsWith("what-will-trump-post-this-week-") || !event.title.toLowerCase().startsWith("what will trump post this week")) {
+    return null;
+  }
+
+  const tagSlugs = new Set((event.tags ?? []).map((tag) => tag.slug).filter(isNonEmptyString));
+  if (!trumpTruthMarketSearchTags.every((tag) => tagSlugs.has(tag))) {
+    return null;
+  }
+
+  if ((event.markets?.length ?? 0) > 0 && !event.markets!.some((market) => extractPolymarketStrikeTerms(market.question ?? "").length > 0)) {
+    return null;
+  }
+
+  const url = `https://polymarket.com/event/${event.slug}`;
+  return parseTrumpTruthMarketWindow(url, now) ? { slug: event.slug, url } : null;
 }
 
 function ensureTrumpTruthMarkets(settings: TrumpTruthSettings, fallbackUrl: string, now: Date): TrumpTruthSettings {

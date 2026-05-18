@@ -242,6 +242,139 @@ describe("Trump Truth strike parser", () => {
     expect(settings.strikeTerms).toEqual(["Trust"]);
     expect(settings.parsedFromUrl).toBe("https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17");
   });
+
+  it("discovers and queues the next Trump Truth market when the active week is near expiry", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "what-will-trump-post-this-week-may-11-may-17",
+              title: "What will Trump post this week? (May 11 - May 17)",
+              active: true,
+              closed: false,
+              tags: [{ slug: "trump" }, { slug: "mention-markets" }]
+            },
+            {
+              slug: "what-will-trump-post-this-week-may-24",
+              title: "What will Trump post this week? (May 24)",
+              active: true,
+              closed: false,
+              tags: [{ slug: "trump" }, { slug: "mention-markets" }]
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            markets: [
+              {
+                question: 'Will Trump post "Harvard" on Truth Social this week?',
+                closed: false,
+                outcomes: '["Yes","No"]',
+                outcomePrices: '["0.4","0.6"]'
+              }
+            ]
+          }
+        ]
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const settings = await refreshTrumpTruthSettings(
+      {
+        settingsJson: JSON.stringify({
+          markets: [
+            {
+              url: "https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17",
+              slug: "what-will-trump-post-this-week-may-11-may-17",
+              startAt: "2026-05-11T04:00:00.000Z",
+              endAt: "2026-05-18T03:59:00.000Z",
+              strikeTerms: ["King"],
+              resolvedTerms: [],
+              activeStrikeTerms: ["King"],
+              lastParsedAt: "2026-05-16T12:00:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17"
+      } as Integration,
+      false,
+      new Date("2026-05-16T12:00:00.000Z")
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toContain("public-search");
+    expect(settings.markets?.map((market) => market.slug)).toEqual([
+      "what-will-trump-post-this-week-may-11-may-17",
+      "what-will-trump-post-this-week-may-24"
+    ]);
+    expect(settings.strikeTerms).toEqual(["King"]);
+    expect(settings.lastDiscoveryAt).toBe("2026-05-16T12:00:00.000Z");
+  });
+
+  it("discovers the active Trump Truth market when the stored market is expired", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "what-will-trump-post-this-week-may-24",
+              title: "What will Trump post this week? (May 24)",
+              active: true,
+              closed: false,
+              tags: [{ slug: "trump" }, { slug: "mention-markets" }]
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            markets: [
+              {
+                question: 'Will Trump post "Harvard" on Truth Social this week?',
+                closed: false,
+                outcomes: '["Yes","No"]',
+                outcomePrices: '["0.4","0.6"]'
+              }
+            ]
+          }
+        ]
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const settings = await refreshTrumpTruthSettings(
+      {
+        settingsJson: JSON.stringify({
+          markets: [
+            {
+              url: "https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17",
+              slug: "what-will-trump-post-this-week-may-11-may-17",
+              startAt: "2026-05-11T04:00:00.000Z",
+              endAt: "2026-05-18T03:59:00.000Z",
+              strikeTerms: ["King"],
+              resolvedTerms: [],
+              activeStrikeTerms: ["King"],
+              lastParsedAt: "2026-05-16T00:00:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17"
+      } as Integration,
+      false,
+      new Date("2026-05-18T12:00:00.000Z")
+    );
+
+    expect(settings.parsedFromUrl).toBe("https://polymarket.com/event/what-will-trump-post-this-week-may-24");
+    expect(settings.strikeTerms).toEqual(["Harvard"]);
+  });
 });
 
 describe("Trump Truth strike matcher", () => {
