@@ -246,7 +246,7 @@ export async function handleAdapterCommand(
       refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson
         ? database.setSettingsJson(integration.id, refreshedSettingsJson)
         : integration;
-    const settings = parseTrumpTruthSettings(updated.settingsJson);
+    const settings = adapter.getStrikeTerms?.(updated) ?? parseTrumpTruthSettings(updated.settingsJson);
     const activeUpdated =
       settings.parsedFromUrl && settings.parsedFromUrl !== updated.polymarketUrl
         ? database.setPolymarketUrl(updated.id, settings.parsedFromUrl)
@@ -319,6 +319,21 @@ export async function handleAdapterCommand(
     if (queue.activeUrl && queue.activeUrl !== updated.polymarketUrl) {
       updated = database.setPolymarketUrl(updated.id, queue.activeUrl);
     }
+
+    if (adapter.supportsStrikes && adapter.refreshSettings) {
+      await interaction.deferReply();
+      const refreshedSettingsJson = await adapter.refreshSettings(updated, { force: true });
+      if (refreshedSettingsJson && refreshedSettingsJson !== updated.settingsJson) {
+        updated = database.setSettingsJson(updated.id, refreshedSettingsJson);
+      }
+      const settings = adapter.getStrikeTerms?.(updated);
+      if (settings?.parsedFromUrl && settings.parsedFromUrl !== updated.polymarketUrl) {
+        updated = database.setPolymarketUrl(updated.id, settings.parsedFromUrl);
+      }
+      await interaction.editReply({ embeds: [buildPolymarketUpdatedEmbed(updated)] });
+      return;
+    }
+
     await interaction.reply({ embeds: [buildPolymarketUpdatedEmbed(updated)] });
     return;
   }

@@ -233,7 +233,7 @@ export function buildEventPostMessagePayload(integration: Integration, post: Eve
   return {
     content: formatEventPostMessageContent(integration, post),
     embeds: buildEventPostEmbed(integration, post),
-    components: [buildTruthSocialLinkRow(post.url)],
+    components: [buildEventSourceLinkRow(post.url)],
     allowedMentions: integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
   };
 }
@@ -347,9 +347,10 @@ function baseEmbed(integration: Integration, title: string): EmbedBuilder {
     .setTitle(`${integration.displayName} - ${title}`);
 }
 
-function buildTruthSocialLinkRow(url: string): ActionRowBuilder<ButtonBuilder> {
+function buildEventSourceLinkRow(url: string): ActionRowBuilder<ButtonBuilder> {
+  const label = url.includes("truthsocial.com") ? "Open Truth" : "Open source";
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setLabel("Open Truth").setStyle(ButtonStyle.Link).setURL(url)
+    new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url)
   );
 }
 

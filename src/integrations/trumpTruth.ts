@@ -104,6 +104,10 @@ export const trumpTruthAdapter: WebsiteAdapter = {
   },
   async refreshSettings(integration: Integration, options?: { force?: boolean }): Promise<string> {
     return JSON.stringify(await refreshTrumpTruthSettings(integration, options?.force));
+  },
+  getStrikeTerms(integration: Integration): { strikeTerms: string[]; parsedFromUrl?: string; lastParsedAt?: string } {
+    const settings = parseTrumpTruthSettings(integration.settingsJson);
+    return { strikeTerms: settings.strikeTerms ?? [], parsedFromUrl: settings.parsedFromUrl, lastParsedAt: settings.lastParsedAt };
   }
 };
 

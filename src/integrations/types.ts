@@ -47,7 +47,7 @@ export type AdapterValue = {
 
 export type EventMonitorPost = {
   id: string;
-  type: "Truth" | "Reply" | "Quote" | "ReTruth";
+  type: string;
   text: string;
   qualifyingText: string;
   postedAt: Date;
@@ -93,5 +93,7 @@ export type WebsiteAdapter = {
   fetchCurrentValue(integration?: Integration): Promise<AdapterValue>;
   fetchEventUpdates?(integration: Integration): Promise<EventMonitorResult>;
   enrichEventPost?(post: EventMonitorPost, strikeTerms: string[]): Promise<EventMonitorPost>;
+  shouldAlertOnEventPost?(post: EventMonitorPost): boolean;
   refreshSettings?(integration: Integration, options?: { force?: boolean }): Promise<string>;
+  getStrikeTerms?(integration: Integration): { strikeTerms: string[]; parsedFromUrl?: string; lastParsedAt?: string };
 };

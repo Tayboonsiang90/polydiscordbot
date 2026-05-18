@@ -284,6 +284,17 @@ describe("adapter commands", () => {
       options: expect.arrayContaining([expect.objectContaining({ name: "period" })])
     });
 
+    const nytFrontCommand = buildAdapterCommands().find((command) => command.name === "nytfront");
+    expect(nytFrontCommand?.toJSON()).toMatchObject({
+      name: "nytfront",
+      options: expect.arrayContaining([
+        expect.objectContaining({ name: "check" }),
+        expect.objectContaining({ name: "strikes" }),
+        expect.objectContaining({ name: "test" }),
+        expect.objectContaining({ name: "polymarket" })
+      ])
+    });
+
     const ornnB200Command = buildAdapterCommands().find((command) => command.name === "ornnb200");
     expect(ornnB200Command?.toJSON()).toMatchObject({
       name: "ornnb200",

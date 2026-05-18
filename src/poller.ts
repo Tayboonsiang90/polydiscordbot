@@ -146,21 +146,26 @@ export async function checkEventIntegration(database: BotDatabase, integration: 
       : settingsIntegration;
   const latestSeenId = result.posts[0]?.id ?? integration.lastValue;
   const eventSelection = selectNewEventPosts(result.posts, integration.lastValue, activeIntegration.settingsJson);
+  const candidatePosts =
+    integration.lastValue === null && adapter.shouldAlertOnEventPost ? result.posts.slice(0, 1) : eventSelection.newPosts;
   const eventSettingsJson = updateEventSeenPostIds(activeIntegration.settingsJson, eventSelection.nextSeenPostIds);
   const eventStateIntegration =
     eventSettingsJson !== activeIntegration.settingsJson
       ? database.setSettingsJson(activeIntegration.id, eventSettingsJson)
       : activeIntegration;
   const enrichedNewPosts = adapter.enrichEventPost
-    ? await enrichEventPosts(adapter, eventSelection.newPosts, result.strikeTerms)
-    : eventSelection.newPosts;
+    ? await enrichEventPosts(adapter, candidatePosts, result.strikeTerms)
+    : candidatePosts;
+  const alertPosts = adapter.shouldAlertOnEventPost
+    ? enrichedNewPosts.filter((post) => adapter.shouldAlertOnEventPost!(post))
+    : enrichedNewPosts;
   const updatedIntegration = latestSeenId
     ? database.recordCheck(eventStateIntegration.id, latestSeenId, result.observedAt)
     : database.recordCheck(eventStateIntegration.id, "no-posts", result.observedAt);
 
   return {
     integration: updatedIntegration,
-    newPosts: enrichedNewPosts,
+    newPosts: alertPosts,
     strikeTerms: result.strikeTerms,
     latestSeenId: latestSeenId ?? null,
     latestSeenUrl: result.posts[0]?.url ?? null

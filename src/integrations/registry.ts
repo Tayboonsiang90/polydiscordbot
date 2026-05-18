@@ -20,6 +20,7 @@ import { kmaSeoulPrecipAdapter } from "./kmaSeoulPrecip.js";
 import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
 import { noaaNycPrecipAdapter } from "./noaaNycPrecip.js";
 import { noaaSeattlePrecipAdapter } from "./noaaSeattlePrecip.js";
+import { nytFrontPageAdapter } from "./nytFrontPage.js";
 import { ornnB200IndexAdapter } from "./ornnB200Index.js";
 import { ornnH200IndexAdapter } from "./ornnH200Index.js";
 import { paidAppStoreAdapter } from "./paidAppStore.js";
@@ -60,6 +61,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [nbsPressReleaseAdapter.id, nbsPressReleaseAdapter],
   [noaaNycPrecipAdapter.id, noaaNycPrecipAdapter],
   [noaaSeattlePrecipAdapter.id, noaaSeattlePrecipAdapter],
+  [nytFrontPageAdapter.id, nytFrontPageAdapter],
   [ornnB200IndexAdapter.id, ornnB200IndexAdapter],
   [ornnH200IndexAdapter.id, ornnH200IndexAdapter],
   [paidAppStoreAdapter.id, paidAppStoreAdapter],

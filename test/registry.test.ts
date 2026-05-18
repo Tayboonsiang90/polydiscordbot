@@ -25,6 +25,7 @@ describe("adapter registry", () => {
     const nbs = getAdapterByCommandName("nbs");
     const noaaNyc = getAdapterByCommandName("nycprecip");
     const noaaSeattle = getAdapterByCommandName("seattleprecip");
+    const nytFront = getAdapterByCommandName("nytfront");
     const ornnB200 = getAdapterByCommandName("ornnb200");
     const ornnH200 = getAdapterByCommandName("ornnh200");
     const paidAppStore = getAdapterByCommandName("paidappstore");
@@ -169,6 +170,14 @@ describe("adapter registry", () => {
     expect(noaaSeattle.alertRoleName).toBe("NOAA Seattle Precip Alerts");
     expect(noaaSeattle.alertRoleEmoji).toBe("\u2614");
     expect(noaaSeattle.supportsPeriod).toBe(true);
+    expect(nytFront.id).toBe("nyt-front-page");
+    expect(nytFront.defaultChannelName).toBe("nytfront");
+    expect(nytFront.defaultPolymarketUrl).toBe(
+      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24"
+    );
+    expect(nytFront.alertRoleName).toBe("NYT Front Page Alerts");
+    expect(nytFront.alertRoleEmoji).toBe("\uD83D\uDCF0");
+    expect(nytFront.supportsStrikes).toBe(true);
     expect(ornnB200.id).toBe("ornn-b200-index");
     expect(ornnB200.defaultChannelName).toBe("ornnb200");
     expect(ornnB200.defaultPolymarketUrl).toBe("https://polymarket.com/event/gpu-rental-prices-b200-hit-by-may-31");
