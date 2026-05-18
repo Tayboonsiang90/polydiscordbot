@@ -483,16 +483,29 @@ async function fetchArchiveDetailIfNeeded(item: TrumpTruthArchiveItem): Promise<
 
 export function parseTrumpTruthMarketWindow(url: string, now = new Date()): { slug: string; startAt: string; endAt: string } | null {
   const slug = getPolymarketSlug(url);
-  const match = slug?.match(/what-will-trump-post-this-week-([a-z]+)-(\d+)-([a-z]+)-(\d+)/i);
-  if (!slug || !match) {
+  if (!slug) {
     return null;
   }
 
-  const startMonth = monthNumber(match[1]);
-  const startDay = Number(match[2]);
-  const endMonth = monthNumber(match[3]);
-  const endDay = Number(match[4]);
+  const rangeMatch = slug.match(/what-will-trump-post-this-week-([a-z]+)-(\d+)-([a-z]+)-(\d+)/i);
+  const endOnlyMatch = slug.match(/what-will-trump-post-this-week-([a-z]+)-(\d+)$/i);
   const year = getEasternYear(now);
+  const range = rangeMatch
+    ? {
+        startMonth: monthNumber(rangeMatch[1]),
+        startDay: Number(rangeMatch[2]),
+        endMonth: monthNumber(rangeMatch[3]),
+        endDay: Number(rangeMatch[4])
+      }
+    : endOnlyMatch
+      ? getWeekEndingRange(monthNumber(endOnlyMatch[1]), Number(endOnlyMatch[2]), year)
+      : null;
+
+  if (!range) {
+    return null;
+  }
+
+  const { startMonth, startDay, endMonth, endDay } = range;
   if (!startMonth || !endMonth || !isValidDay(startDay) || !isValidDay(endDay)) {
     return null;
   }
@@ -504,6 +517,24 @@ export function parseTrumpTruthMarketWindow(url: string, now = new Date()): { sl
   }
 
   return { slug, startAt: startAt.toISOString(), endAt: endAt.toISOString() };
+}
+
+function getWeekEndingRange(
+  endMonth: number | null,
+  endDay: number,
+  year: number
+): { startMonth: number; startDay: number; endMonth: number; endDay: number } | null {
+  if (!endMonth || !isValidDay(endDay)) {
+    return null;
+  }
+
+  const startDate = new Date(Date.UTC(year, endMonth - 1, endDay - 6));
+  return {
+    startMonth: startDate.getUTCMonth() + 1,
+    startDay: startDate.getUTCDate(),
+    endMonth,
+    endDay
+  };
 }
 
 export function getActiveTrumpTruthMarket(markets: TrumpTruthMarket[], now = new Date()): TrumpTruthMarket | null {

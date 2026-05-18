@@ -115,6 +115,17 @@ describe("Trump Truth strike parser", () => {
       startAt: "2026-05-11T04:00:00.000Z",
       endAt: "2026-05-18T03:59:00.000Z"
     });
+
+    expect(
+      parseTrumpTruthMarketWindow(
+        "https://polymarket.com/event/what-will-trump-post-this-week-may-24",
+        new Date("2026-05-18T12:00:00.000Z")
+      )
+    ).toMatchObject({
+      slug: "what-will-trump-post-this-week-may-24",
+      startAt: "2026-05-18T04:00:00.000Z",
+      endAt: "2026-05-25T03:59:00.000Z"
+    });
   });
 
   it("removes Gamma child markets that already resolved Yes", () => {
@@ -541,7 +552,7 @@ describe("Trump Truth archive feed", () => {
             url: "https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17",
             slug: "what-will-trump-post-this-week-may-11-may-17",
             startAt: "2026-05-11T04:00:00.000Z",
-            endAt: "2026-05-18T03:59:00.000Z",
+            endAt: "2100-01-01T00:00:00.000Z",
             strikeTerms: ["King"],
             resolvedTerms: [],
             activeStrikeTerms: ["King"],
