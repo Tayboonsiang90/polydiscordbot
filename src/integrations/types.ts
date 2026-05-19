@@ -66,6 +66,21 @@ export type EventMonitorResult = {
   observedAt: Date;
 };
 
+export type StrikeSearchHit = {
+  url: string;
+  postedAt: string;
+  snippet: string;
+};
+
+export type StrikeSearchResult = {
+  term: string;
+  searchUrl: string;
+  startAt: string;
+  endAt: string;
+  totalResults: number;
+  hits: StrikeSearchHit[];
+};
+
 export type WebsiteAdapter = {
   id: string;
   commandName: string;
@@ -96,4 +111,5 @@ export type WebsiteAdapter = {
   shouldAlertOnEventPost?(post: EventMonitorPost): boolean;
   refreshSettings?(integration: Integration, options?: { force?: boolean }): Promise<string>;
   getStrikeTerms?(integration: Integration): { strikeTerms: string[]; parsedFromUrl?: string; lastParsedAt?: string };
+  searchStrikeTerm?(integration: Integration, term: string): Promise<StrikeSearchResult>;
 };

@@ -11,6 +11,7 @@ import {
   buildPeriodUpdatedEmbed,
   buildPolymarketUpdatedEmbed,
   buildSnapshotStoredEmbed,
+  buildStrikeSearchEmbed,
   buildStrikeTermsEmbed,
   buildStatusEmbed
 } from "./embeds.js";
@@ -115,6 +116,22 @@ export function buildAdapterCommands() {
     if (adapter.supportsStrikes) {
       command.addSubcommand((subcommand) =>
         subcommand.setName("strikes").setDescription("Fetch, store, and show current Polymarket strike terms")
+      );
+    }
+
+    if (adapter.searchStrikeTerm) {
+      command.addSubcommand((subcommand) =>
+        subcommand
+          .setName("search")
+          .setDescription("Search for a strike term inside the active market timeframe")
+          .addStringOption((option) =>
+            option
+              .setName("term")
+              .setDescription("Word or phrase to search")
+              .setRequired(true)
+              .setMinLength(1)
+              .setMaxLength(80)
+          )
       );
     }
 
@@ -254,6 +271,30 @@ export async function handleAdapterCommand(
     await interaction.editReply({
       embeds: [buildStrikeTermsEmbed(activeUpdated, settings.strikeTerms ?? [], settings.parsedFromUrl, settings.lastParsedAt)]
     });
+    return;
+  }
+
+  if (subcommand === "search") {
+    if (!adapter.searchStrikeTerm) {
+      await interaction.reply({ content: "This integration does not support strike-term search.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply();
+    const refreshedSettingsJson = adapter.refreshSettings
+      ? await adapter.refreshSettings(integration)
+      : integration.settingsJson;
+    let updated =
+      refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, refreshedSettingsJson)
+        : integration;
+    const settings = adapter.getStrikeTerms?.(updated) ?? parseTrumpTruthSettings(updated.settingsJson);
+    if (settings.parsedFromUrl && settings.parsedFromUrl !== updated.polymarketUrl) {
+      updated = database.setPolymarketUrl(updated.id, settings.parsedFromUrl);
+    }
+
+    const result = await adapter.searchStrikeTerm(updated, interaction.options.getString("term", true));
+    await interaction.editReply({ embeds: [buildStrikeSearchEmbed(updated, result)] });
     return;
   }
 

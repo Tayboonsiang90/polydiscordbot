@@ -10,8 +10,10 @@ import {
   matchesStrikeTerm,
   normalizeTrumpTruthArchiveItem,
   normalizeTruthSocialStatus,
+  buildTrumpTruthArchiveSearchUrl,
   parseTrumpTruthMarketWindow,
   parseTrumpTruthArchiveFeed,
+  parseTrumpTruthArchiveSearchResults,
   parseTrumpTruthSettings,
   refreshTrumpTruthSettings,
   upsertTrumpTruthPolymarketMarket
@@ -440,6 +442,52 @@ describe("Trump Truth post normalization", () => {
 });
 
 describe("Trump Truth archive feed", () => {
+  it("builds archive search URLs with ET date filters", () => {
+    expect(
+      buildTrumpTruthArchiveSearchUrl(
+        "King",
+        new Date("2026-05-04T04:00:00.000Z"),
+        new Date("2026-05-11T03:59:00.000Z")
+      )
+    ).toBe("https://www.trumpstruth.org/search?query=King&start_date=2026-05-04&end_date=2026-05-10&removed=include&per_page=100");
+  });
+
+  it("parses archive search results for a strike term", () => {
+    const result = parseTrumpTruthArchiveSearchResults(
+      `
+      <h2 class="search-page__heading">2 results for 'King'</h2>
+      <div class="search-result" data-status-url="https://www.trumpstruth.org/statuses/1">
+        <div class="status-info__meta">
+          <a class="status-info__meta-item">@realDonaldTrump</a>
+          <a class="status-info__meta-item">May 6, 2026, 1:00 PM</a>
+        </div>
+        <div class="search-result__body">
+          <div class="snippet-content">Hello <em>King</em>.</div>
+        </div>
+      </div>
+      <div class="search-result" data-status-url="/statuses/2">
+        <div class="status-info__meta">
+          <a class="status-info__meta-item">@realDonaldTrump</a>
+          <a class="status-info__meta-item">May 7, 2026, 2:00 PM</a>
+        </div>
+        <div class="search-result__body">
+          <div class="snippet-content">makingdom should not match.</div>
+        </div>
+      </div>
+      `,
+      "King"
+    );
+
+    expect(result.totalResults).toBe(1);
+    expect(result.hits).toEqual([
+      {
+        url: "https://www.trumpstruth.org/statuses/1",
+        postedAt: "May 6, 2026, 1:00 PM",
+        snippet: "Hello King."
+      }
+    ]);
+  });
+
   it("parses archive feed items with original Truth Social metadata", () => {
     const items = parseTrumpTruthArchiveFeed(`
       <rss xmlns:truth="https://truthsocial.com/ns"><channel><item>

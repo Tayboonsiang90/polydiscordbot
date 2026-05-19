@@ -1,6 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
 import type { CheckResult, EventCheckResult, SnapshotResult } from "./poller.js";
-import type { EventMonitorPost, Integration } from "./integrations/types.js";
+import type { EventMonitorPost, Integration, StrikeSearchResult } from "./integrations/types.js";
 import type { MarketEndReminder } from "./marketEnd.js";
 import { formatSingaporeDateTime, nowSingaporeDateTime } from "./time.js";
 
@@ -125,6 +125,23 @@ export function buildStrikeTermsEmbed(integration: Integration, strikeTerms: str
       { name: "Terms", value: formatStrikeTerms(strikeTerms), inline: false },
       { name: "Parsed from", value: parsedFromUrl ?? "not parsed yet", inline: false },
       { name: "Parsed at", value: formatSingaporeDateTime(lastParsedAt ?? null), inline: false },
+      { name: "Links", value: formatLinks(integration), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildStrikeSearchEmbed(integration: Integration, result: StrikeSearchResult): EmbedBuilder {
+  return baseEmbed(integration, "Strike search")
+    .addFields(
+      { name: "Term", value: result.term, inline: true },
+      { name: "Matches", value: String(result.totalResults), inline: true },
+      {
+        name: "Timeframe",
+        value: `${formatEasternDateTime(new Date(result.startAt))} ET to ${formatEasternDateTime(new Date(result.endAt))} ET`,
+        inline: false
+      },
+      { name: "Results", value: formatStrikeSearchHits(result), inline: false },
+      { name: "Search", value: result.searchUrl, inline: false },
       { name: "Links", value: formatLinks(integration), inline: false }
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
@@ -367,6 +384,23 @@ function formatEventPostMessageContent(integration: Integration, post: EventMoni
 
 function formatMatchedStrikeTerms(matchedTerms: string[]): string {
   return `**${matchedTerms.join(", ")}**\n\`\`\`text\n${matchedTerms.join("\n")}\n\`\`\``;
+}
+
+function formatStrikeSearchHits(result: StrikeSearchResult): string {
+  if (result.hits.length === 0) {
+    return "No matching posts found in the active timeframe.";
+  }
+
+  const lines = result.hits.slice(0, 10).map((hit, index) => {
+    const snippet = hit.snippet ? ` - ${hit.snippet}` : "";
+    return `${index + 1}. [${hit.postedAt}](${hit.url})${snippet}`;
+  });
+  const remaining = result.totalResults - result.hits.length;
+  if (remaining > 0) {
+    lines.push(`...and ${remaining} more result(s). Open the search link for the full list.`);
+  }
+
+  return truncateEmbedValue(lines.join("\n"));
 }
 
 function formatLinks(integration: Integration): string {

@@ -1,11 +1,12 @@
 ﻿import * as cheerio from "cheerio";
 import Tesseract from "tesseract.js";
-import type { AdapterValue, EventMonitorPost, EventMonitorResult, Integration, WebsiteAdapter } from "./types.js";
+import type { AdapterValue, EventMonitorPost, EventMonitorResult, Integration, StrikeSearchHit, StrikeSearchResult, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlug, parseManualEasternDateTime } from "../marketEnd.js";
 
 const sourceUrl = "https://truthsocial.com/@realDonaldTrump";
 const archiveFeedUrl = "https://www.trumpstruth.org/feed";
+const archiveSearchUrl = "https://www.trumpstruth.org/search";
 const defaultPolymarketUrl = "https://polymarket.com/event/what-will-trump-post-this-week-may-4-may-10";
 const maxPosts = 20;
 const maxOcrImagesPerPost = 2;
@@ -128,8 +129,42 @@ export const trumpTruthAdapter: WebsiteAdapter = {
   getStrikeTerms(integration: Integration): { strikeTerms: string[]; parsedFromUrl?: string; lastParsedAt?: string } {
     const settings = parseTrumpTruthSettings(integration.settingsJson);
     return { strikeTerms: settings.strikeTerms ?? [], parsedFromUrl: settings.parsedFromUrl, lastParsedAt: settings.lastParsedAt };
+  },
+  async searchStrikeTerm(integration: Integration, term: string): Promise<StrikeSearchResult> {
+    return searchTrumpTruthStrikeTerm(integration, term);
   }
 };
+
+export async function searchTrumpTruthStrikeTerm(integration: Integration, term: string, now = new Date()): Promise<StrikeSearchResult> {
+  const cleanedTerm = term.trim();
+  if (!cleanedTerm) {
+    throw new Error("Search term cannot be empty");
+  }
+
+  const settings = parseTrumpTruthSettings(integration.settingsJson, now);
+  const activeMarket = getActiveTrumpTruthMarket(settings.markets ?? [], now);
+  const window = activeMarket ?? (integration.polymarketUrl ? parseTrumpTruthMarketWindow(integration.polymarketUrl, now) : null);
+  if (!window) {
+    throw new Error("No active Trump Truth market timeframe is configured");
+  }
+
+  const searchUrl = buildTrumpTruthArchiveSearchUrl(cleanedTerm, new Date(window.startAt), new Date(window.endAt));
+  const response = await fetchWithTimeout(searchUrl, {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Trump's Truth archive search returned HTTP ${response.status}`);
+  }
+
+  const result = parseTrumpTruthArchiveSearchResults(await response.text(), cleanedTerm);
+  return {
+    term: cleanedTerm,
+    searchUrl,
+    startAt: window.startAt,
+    endAt: window.endAt,
+    ...result
+  };
+}
 
 export async function refreshTrumpTruthSettings(integration: Integration, force = false, now = new Date()): Promise<TrumpTruthSettings> {
   let settings = ensureTrumpTruthMarkets(parseTrumpTruthSettings(integration.settingsJson, now), integration.polymarketUrl ?? defaultPolymarketUrl, now);
@@ -583,6 +618,40 @@ export function parseTrumpTruthArchiveFeed(xml: string): TrumpTruthArchiveItem[]
     .filter((item) => item.id && item.archiveUrl && !Number.isNaN(item.postedAt.getTime()));
 }
 
+export function buildTrumpTruthArchiveSearchUrl(term: string, startAt: Date, endAt: Date): string {
+  const url = new URL(archiveSearchUrl);
+  url.searchParams.set("query", term);
+  url.searchParams.set("start_date", formatEasternDate(startAt));
+  url.searchParams.set("end_date", formatEasternDate(endAt));
+  url.searchParams.set("removed", "include");
+  url.searchParams.set("per_page", "100");
+  return url.toString();
+}
+
+export function parseTrumpTruthArchiveSearchResults(html: string, term: string): { totalResults: number; hits: StrikeSearchHit[] } {
+  const $ = cheerio.load(html);
+  const hits: StrikeSearchHit[] = [];
+
+  for (const element of $(".search-result").toArray()) {
+    const result = $(element);
+    const url = normalizeArchiveUrl(result.attr("data-status-url"));
+    if (!url) {
+      continue;
+    }
+
+    const postedAt = normalizeText(result.find(".status-info__meta .status-info__meta-item").last().text()) || "date not listed";
+    const snippet = normalizeText(result.find(".search-result__body").text());
+    if (snippet && !matchesStrikeTerm(snippet, term)) {
+      continue;
+    }
+
+    hits.push({ url, postedAt, snippet: truncateText(snippet, 220) });
+  }
+
+  const dedupedHits = dedupeSearchHits(hits);
+  return { totalResults: dedupedHits.length, hits: dedupedHits };
+}
+
 async function fetchTrumpTruthArchiveItems(): Promise<TrumpTruthArchiveItem[]> {
   const response = await fetchWithTimeout(archiveFeedUrl, {
     headers: {
@@ -616,6 +685,33 @@ async function fetchArchiveDetailIfNeeded(item: TrumpTruthArchiveItem): Promise<
   } catch {
     return item;
   }
+}
+
+function normalizeArchiveUrl(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value.trim(), "https://www.trumpstruth.org").toString();
+  } catch {
+    return null;
+  }
+}
+
+function dedupeSearchHits(hits: StrikeSearchHit[]): StrikeSearchHit[] {
+  const seen = new Set<string>();
+  const deduped: StrikeSearchHit[] = [];
+  for (const hit of hits) {
+    const key = `${hit.url}|${hit.postedAt}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(hit);
+  }
+  return deduped;
 }
 
 export function parseTrumpTruthMarketWindow(url: string, now = new Date()): { slug: string; startAt: string; endAt: string } | null {
@@ -813,7 +909,7 @@ async function recognizeImageText(imageUrl: string): Promise<string> {
 
 function htmlToText(html: string): string {
   const $ = cheerio.load(html);
-  return $.text().replace(/\s+/g, " ").trim();
+  return normalizeText($.text());
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -821,8 +917,28 @@ function decodeHtmlEntities(value: string): string {
   return $.text();
 }
 
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function truncateText(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+}
+
+function formatEasternDate(date: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(date).map((part) => [part.type, part.value])
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function getEasternYear(date: Date): number {

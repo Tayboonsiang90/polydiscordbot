@@ -14,6 +14,7 @@ import {
   buildIntegrationSummaryEmbeds,
   buildLastEmbed,
   buildMarketEndManualUpdatedEmbed,
+  buildStrikeSearchEmbed,
   buildStatusEmbed
 } from "../src/embeds.js";
 import type { EventMonitorPost, Integration } from "../src/integrations/types.js";
@@ -430,6 +431,7 @@ describe("adapter commands", () => {
       name: "trumptruth",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "check" }),
+        expect.objectContaining({ name: "search" }),
         expect.objectContaining({ name: "strikes" }),
         expect.objectContaining({ name: "test" }),
         expect.objectContaining({ name: "polymarket" })
@@ -586,6 +588,45 @@ describe("adapter commands", () => {
     expect(payload.components[0].toJSON()).toMatchObject({
       components: [expect.objectContaining({ label: "Open Truth", style: 5, url: post.url })]
     });
+  });
+
+  it("formats strike search results with timeframe and source search link", () => {
+    const embed = buildStrikeSearchEmbed(
+      { ...checkedIntegration, adapterId: "trump-truth" },
+      {
+        term: "King",
+        searchUrl:
+          "https://www.trumpstruth.org/search?query=King&start_date=2026-05-04&end_date=2026-05-10&removed=include&per_page=100",
+        startAt: "2026-05-04T04:00:00.000Z",
+        endAt: "2026-05-11T03:59:00.000Z",
+        totalResults: 1,
+        hits: [
+          {
+            url: "https://www.trumpstruth.org/statuses/1",
+            postedAt: "May 6, 2026, 1:00 PM",
+            snippet: "Hello King."
+          }
+        ]
+      }
+    ).toJSON();
+
+    expect(embed.title).toBe("Bonbast USD/IRR - Strike search");
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Term", value: "King" }),
+        expect.objectContaining({ name: "Matches", value: "1" }),
+        expect.objectContaining({ name: "Timeframe", value: "May 04, 2026, 00:00 ET to May 10, 2026, 23:59 ET" }),
+        expect.objectContaining({
+          name: "Results",
+          value: "1. [May 6, 2026, 1:00 PM](https://www.trumpstruth.org/statuses/1) - Hello King."
+        }),
+        expect.objectContaining({
+          name: "Search",
+          value:
+            "https://www.trumpstruth.org/search?query=King&start_date=2026-05-04&end_date=2026-05-10&removed=include&per_page=100"
+        })
+      ])
+    );
   });
 
   it("does not mention alert roles for non-strike Trump Truth event alerts", () => {
