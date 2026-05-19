@@ -230,11 +230,12 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
 }
 
 export function buildEventPostMessagePayload(integration: Integration, post: EventMonitorPost) {
+  const content = formatEventPostMessageContent(integration, post);
   return {
-    content: formatEventPostMessageContent(integration, post),
+    content,
     embeds: buildEventPostEmbed(integration, post),
     components: [buildEventSourceLinkRow(post.url)],
-    allowedMentions: integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
+    allowedMentions: content && integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
   };
 }
 
@@ -357,7 +358,7 @@ function buildEventSourceLinkRow(url: string): ActionRowBuilder<ButtonBuilder> {
 function formatEventPostMessageContent(integration: Integration, post: EventMonitorPost): string | undefined {
   const roleMention = integration.alertRoleId ? `<@&${integration.alertRoleId}>` : undefined;
   if (!post.matchedTerms.length) {
-    return roleMention;
+    return undefined;
   }
 
   const strikeLine = `TEXT STRIKE DETECTED: ${post.matchedTerms.join(", ")}`;

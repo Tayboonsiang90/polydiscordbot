@@ -588,6 +588,25 @@ describe("adapter commands", () => {
     });
   });
 
+  it("does not mention alert roles for non-strike Trump Truth event alerts", () => {
+    const post: EventMonitorPost = {
+      id: "123",
+      type: "Truth",
+      text: "Hello world",
+      qualifyingText: "Hello world",
+      postedAt: new Date("2026-05-06T00:00:00.000Z"),
+      url: "https://truthsocial.com/@realDonaldTrump/123",
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: ["King"]
+    };
+    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "trump-truth" }, post);
+
+    expect(payload.content).toBeUndefined();
+    expect(payload.allowedMentions).toEqual({ parse: [] });
+  });
+
   it("uses the post-specific Polymarket URL in Trump Truth event alerts", () => {
     const post: EventMonitorPost = {
       id: "123",
