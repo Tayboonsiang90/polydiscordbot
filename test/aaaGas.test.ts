@@ -45,6 +45,12 @@ describe("extractAaaRegularGasCurrentAvg", () => {
     expect(extractAaaRegularGasCurrentAvg(html)).toBe("4.483");
   });
 
+  it("extracts Regular from the headline fallback with a curly apostrophe", () => {
+    const html = "<html><body>Today’s AAA National Average $4.483</body></html>";
+
+    expect(extractAaaRegularGasCurrentAvg(html)).toBe("4.483");
+  });
+
   it("throws when no current average is present", () => {
     expect(() => extractAaaRegularGasCurrentAvg("<html><body>No gas price here</body></html>")).toThrow(
       "Could not find AAA Current Avg. Regular gas price"

@@ -16,60 +16,62 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 
 | Adapter ID | Command | Channel | Alert Role | Emoji | Description |
 | --- | --- | --- | --- | --- | --- |
-| `bonbast-usd-irr` | `/bonbast` | `#bonbast-usd-irr` | `Bonbast Alerts` | `ðŸ’±` | Monitors Bonbast USD/IRR values for Polymarket resolution checks. |
-| `aaa-regular-gas` | `/aaa` | `#aaa-regular-gas` | `AAA Gas Alerts` | `â›½` | Monitors AAA national Current Avg. Regular gas price for Polymarket resolution checks. |
-| `all-in-podcast` | `/allin` | `#allinpod` | `All-In Podcast Alerts` | `ðŸŽ§` | Monitors allin.com episodes for the latest All-In Podcast release. |
+| `bonbast-usd-irr` | `/bonbast` | `#bonbast-usd-irr` | `Bonbast Alerts` | `💱` | Monitors Bonbast USD/IRR values for Polymarket resolution checks. |
+| `aaa-regular-gas` | `/aaa` | `#aaa-regular-gas` | `AAA Gas Alerts` | `⛽` | Monitors AAA national Current Avg. Regular gas price for Polymarket resolution checks. |
+| `all-in-podcast` | `/allin` | `#allinpod` | `All-In Podcast Alerts` | `🎧` | Monitors allin.com episodes for the latest All-In Podcast release. |
 | `arena-ai-no-style-control` | `/arenaai` | `#arenaai` | `Arena AI Alerts` | `🤖` | Monitors the top 3 models on Arena AI's overall no-style-control leaderboard. |
 | `aws-disrupted-events` | `/aws` | `#aws-disrupted` | `AWS Disrupted Alerts` | `⚠` | Monitors AWS Health Dashboard history events for disrupted service interruption events in the June 30 market window. |
 | `based-revenue` | `/basedrevenue` | `#basedrevenue` | `Based Revenue Alerts` | `💵` | Monitors Dune query results for Based cumulative revenue updates. |
-| `bea-current-releases` | `/bea` | `#bea-releases` | `BEA Release Alerts` | `ðŸ“°` | Monitors BEA Current Releases hourly and alerts when the latest article changes. |
-| `bls-cpi-releases` | `/blscpi` | `#blscpi-releases` | `BLS CPI Release Alerts` | `ðŸ“ˆ` | Monitors BLS CPI archived news releases hourly and alerts when the latest article changes. |
+| `bea-current-releases` | `/bea` | `#bea-releases` | `BEA Release Alerts` | `📰` | Monitors BEA Current Releases hourly and alerts when the latest article changes. |
+| `bls-cpi-releases` | `/blscpi` | `#blscpi-releases` | `BLS CPI Release Alerts` | `📈` | Monitors BLS CPI archived news releases hourly and alerts when the latest article changes. |
 | `cdc-fertility-rate` | `/fertility` | `#fertility` | `CDC Fertility Alerts` | `👶` | Monitors CDC natality dashboard 2026 Q1 general fertility rate publication. |
 | `cdc-measles` | `/measles` | `#measles` | `CDC Measles Alerts` | `🦠` | Monitors CDC's 2026 confirmed U.S. measles total cases counter. |
 | `cloudflare-critical-incidents` | `/cloudflare` | `#cloudflare-critical` | `Cloudflare Critical Alerts` | `🔴` | Monitors Cloudflare's official incidents API for Critical/red incidents. |
 | `discord-critical-incidents` | `/discord` | `#discord-critical` | `Discord Critical Alerts` | `🔴` | Monitors Discord's official incidents API for Critical/red incidents in the May 31 market window. |
 | `eia-crude-spr` | `/eia` | `#eia-crude-spr` | `EIA Crude SPR Alerts` | `⛽` | Monitors EIA weekly U.S. Ending Stocks of Crude Oil in the Strategic Petroleum Reserve. |
-| `fdic-failed-banks` | `/fdic` | `#fdic-failed-banks` | `FDIC Failed Bank Alerts` | `??` | Monitors the latest row in the FDIC Failed Bank List for new bank failures. |
+| `fdic-failed-banks` | `/fdic` | `#fdic-failed-banks` | `FDIC Failed Bank Alerts` | `🏦` | Monitors the latest row in the FDIC Failed Bank List for new bank failures. |
 | `fred-egg-price` | `/eggs` | `#eggs` | `FRED Egg Price Alerts` | `🥚` | Monitors FRED April 2026 Eggs, Grade A, Large cost per dozen and release-date polling. |
 | `fred-ground-beef` | `/beef` | `#beef` | `FRED Ground Beef Alerts` | `🥩` | Monitors FRED 2026 Ground beef, 100% beef cost per pound and release-date polling. |
-| `free-app-store` | `/freeappstore` | `#freeappstore` | `Free App Store Alerts` | `ðŸ†“` | Monitors the US iPhone App Store Top Free Apps top 2 list for Polymarket resolution checks. |
+| `free-app-store` | `/freeappstore` | `#freeappstore` | `Free App Store Alerts` | `🆓` | Monitors the US iPhone App Store Top Free Apps top 2 list for Polymarket resolution checks. |
 | `nbs-press-release` | `/nbs` | `#nbs-press` | `NBS Press Release Alerts` | `🇨🇳` | Monitors China NBS English press releases hourly and alerts when the latest item changes. |
 | `ornn-b200-index` | `/ornnb200` | `#ornnb200` | `ORNN B200 Alerts` | `🖥️` | Monitors finalized ORNN B200 Index daily chart values for GPU rental-price resolution checks. |
 | `ornn-h200-index` | `/ornnh200` | `#ornnh200` | `ORNN H200 Alerts` | `🖥️` | Monitors finalized ORNN H200 Index daily chart values for GPU rental-price resolution checks. |
-| `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `ðŸ’°` | Monitors the US iPhone App Store Top Paid Apps top 2 list for Polymarket resolution checks. |
+| `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Monitors the US iPhone App Store Top Paid Apps top 2 list for Polymarket resolution checks. |
 | `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-xauusd-strikes` | `/xauusd` | `#xauusd` | `XAUUSD Price Alerts` | `🥇` | Monitors the Pyth XAUUSD feed and alerts only when live price crosses parsed Polymarket strikes. |
-| `spotify-top-50-usa` | `/spotifyusa` | `#spotifyusa` | `Spotify USA Top 50 Alerts` | `ðŸŽµ` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - USA for Polymarket resolution checks. |
-| `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `??` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global for Polymarket resolution checks. |
+| `spotify-top-50-usa` | `/spotifyusa` | `#spotifyusa` | `Spotify USA Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - USA for Polymarket resolution checks. |
+| `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global for Polymarket resolution checks. |
 | `strategy-bitcoin-purchases` | `/strategybtc` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active Polymarket date range. |
 | `tesla-deliveries` | `/tesla` | `#tesla` | `Tesla Deliveries Alerts` | `🚗` | Monitors Tesla production and deliveries press releases for Q2 2026 delivery updates. |
-| `trump-truth` | `/trumptruth` | `#trumptruth` | `Trump Truth Alerts` | `ðŸ“°` | Monitors the Trump's Truth archive feed for @realDonaldTrump posts and parsed weekly Polymarket strike terms. |
+| `trump-truth` | `/trumptruth` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Monitors the Trump's Truth archive feed for @realDonaldTrump posts and parsed weekly Polymarket strike terms. |
 | `tsa-passengers` | `/tsa` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
 | `usgs-earthquakes` | `/earthquake` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Monitors the latest USGS 5.5+ earthquake in the May 4-May 10 market window. |
 | `white-house-full-lid` | `/fulllid` | `#fulllid` | `White House Lid Alerts` | `🧢` | Monitors Roll Call and Forth for the first daily White House full lid and labels whether it was before 6:30 PM ET. |
-| `hk-precip` | `/hkprecip` | `#hkprecip` | `HKO Hong Kong Precip Alerts` | `â˜”` | Monitors HKO Hong Kong monthly total rainfall from Daily Extract for Polymarket resolution checks. |
+| `hk-precip` | `/hkprecip` | `#hkprecip` | `HKO Hong Kong Precip Alerts` | `☔` | Monitors HKO Hong Kong monthly total rainfall from Daily Extract for Polymarket resolution checks. |
 | `kaito-polymarket-mindshare` | `/kaitomindshare` | `#kaitomindshare` | `Kaito Mindshare Alerts` | `🧠` | Monitors finalized Kaito Info Markets Historical Data rows for Polymarket mindshare. |
-| `kma-seoul-precip` | `/koreaprecip` | `#koreaprecip` | `KMA Seoul Precip Alerts` | `â˜”` | Monitors KMA Seoul monthly precipitation for Polymarket resolution checks. |
+| `kma-seoul-precip` | `/koreaprecip` | `#koreaprecip` | `KMA Seoul Precip Alerts` | `☔` | Monitors KMA Seoul monthly precipitation for Polymarket resolution checks. |
 | `mrbeast-subscribers` | `/mrbeastsubs` | `#mrbeastsubs` | `MrBeast Subs Alerts` | `👥` | Tracks MrBeast YouTube channel subscribers, dailyized rate, and Polymarket target projections. |
 | `mrbeast-views` | `/mrbeastviews` | `#mrbeastviews` | `MrBeast Views Alerts` | `👀` | Tracks MrBeast YouTube channel total views, dailyized rate, and Polymarket target projections. |
-| `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `â˜”` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
-| `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `â˜”` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
-| `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `ðŸ“°` | Monitors the daily New York print front page on PressReader and OCRs page one for active Polymarket strike terms. |
+| `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
+| `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
+| `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `📰` | Monitors the daily New York print front page on PressReader and OCRs page one for active Polymarket strike terms. |
 
 ## Agent Quick Context
 
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
 - One adapter creates one monitor channel, one slash-command group, one alert role, and one reaction-role selector.
-- Shared commands are generated in `src/commands.ts`: `status`, `check`, `test`, `last`, `clear`, `polymarket`, `interval`, `pause`, `resume`; adapters with month/year settings also get `period`.
+- Shared commands are generated in `src/commands.ts`: `status`, `check`, `test`, `last`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, and strike-text adapters get `strikes`.
 - Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
 - Polling and alert sends live in `src/poller.ts`; reaction-role add/remove logic lives in `src/reactionRoles.ts`.
 - Market-end reminder lookup lives in `src/marketEnd.ts`; it uses Polymarket Gamma API `endDate` by URL slug, stores the result in SQLite, and sends shared 24h, 12h, 1h, and end alerts.
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
+- Dated Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window and expired queued URLs are pruned after rollover.
+- Trump Truth and TSA have adapter-specific auto-discovery for upcoming weekly markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 
@@ -104,7 +106,7 @@ The bot invite needs `Manage Channels`, `Send Messages`, `View Channels`, `Manag
 
 The bot creates a channel for each registered adapter when it starts, then checks every minute for missing channels.
 
-For Bonbast, use these commands inside `#bonbast-usd-irr`; for AAA gas, Free App Store, and precipitation integrations, use the same subcommands under `/aaa`, `/allin`, `/arenaai`, `/aws`, `/basedrevenue`, `/bea`, `/blscpi`, `/beef`, `/cloudflare`, `/discord`, `/eia`, `/earthquake`, `/eggs`, `/fdic`, `/fertility`, `/freeappstore`, `/fulllid`, `/kaitomindshare`, `/measles`, `/mrbeastsubs`, `/mrbeastviews`, `/nbs`, `/ngprice`, `/nytfront`, `/ornnb200`, `/ornnh200`, `/paidappstore`, `/spotifyusa`, `/spotifyglobal`, `/strategybtc`, `/tesla`, `/trumptruth`, `/tsa`, `/wti`, `/xagusd`, `/xauusd`, `/hkprecip`, `/koreaprecip`, `/nycprecip`, or `/seattleprecip` inside their own channels:
+Every integration uses the same command shape inside its own channel. Replace `/bonbast` below with that channel's command, for example `/trumptruth`, `/tsa`, `/mrbeastviews`, or `/nytfront`:
 
 - `/bonbast status`
 - `/bonbast check`
@@ -127,7 +129,7 @@ Precipitation integrations also support:
 - `/nycprecip period year:2026 month:5`
 - `/seattleprecip period year:2026 month:5`
 
-Commands are intentionally channel-scoped. Bonbast commands only work in the Bonbast channel.
+Commands are intentionally channel-scoped. A command only executes in the channel owned by the matching adapter.
 Command replies and alerts display timestamps in Singapore local time.
 Status replies show both the configured base interval and the current effective interval. Dynamic polling integrations also show the current polling mode/reason.
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
@@ -137,10 +139,18 @@ The stored Polymarket URL also drives market-end reminders. The bot reads the ma
 Use `/bonbast clear` to clear the current integration channel. You and the bot both need `Manage Messages`.
 Use `/bonbast test` to preview the exact role ping and alert embed without fetching Bonbast or changing stored values.
 
+## Polymarket URL Queue
+
+For most integrations, `/... polymarket url:<url>` appends or updates a queued Polymarket URL in `settingsJson.polymarketMarkets`. If the URL slug contains a date range such as `may-18-may-24`, the bot derives an ET window, keeps the current market active until the new window starts, switches automatically on the next poll/check, and prunes expired queued URLs after rollover.
+
+If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. TSA uses the shared queue plus adapter-specific auto-discovery for upcoming weekly markets.
+
 Trump Truth and NYT Front Page also support:
 
 - `/trumptruth strikes`
 - `/nytfront strikes`
+
+The `strikes` command force-refreshes Gamma-derived strike terms and then displays the currently active unresolved terms.
 
 App Store integrations have one extra command:
 
@@ -151,9 +161,9 @@ The Free App Store and Paid App Store integrations run a separate daily snapshot
 
 ## Alert Roles
 
-The bot creates `#market-alert-roles` and posts one reaction selector per integration. React to the integration emoji to receive that alert role; remove the reaction to opt out. Bonbast uses `💱` and the `Bonbast Alerts` role. When Bonbast changes, alert messages mention that role before the embed.
+The bot creates `#market-alert-roles` and posts grouped reaction selectors for all integrations. React to an integration emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing user reactions while adding missing bot reactions.
 
-Free App Store uses `ðŸ†“` and the `Free App Store Alerts` role. Paid App Store uses `ðŸ’°` and the `Paid App Store Alerts` role. HKO Hong Kong uses `â˜”` and the `HKO Hong Kong Precip Alerts` role. Kaito mindshare uses `🧠` and the `Kaito Mindshare Alerts` role. KMA uses `â˜”` and the `KMA Seoul Precip Alerts` role. NOAA NYC uses `â˜”` and the `NOAA NYC Precip Alerts` role. NOAA Seattle uses `â˜”` and the `NOAA Seattle Precip Alerts` role. All-In uses `ðŸŽ§` and the `All-In Podcast Alerts` role. Arena AI uses `🤖` and the `Arena AI Alerts` role. AWS uses `⚠` and the `AWS Disrupted Alerts` role. Based Revenue uses `💵` and the `Based Revenue Alerts` role. BEA uses `ðŸ“°` and the `BEA Release Alerts` role. BLS CPI uses `ðŸ“ˆ` and the `BLS CPI Release Alerts` role. CDC fertility uses `👶` and the `CDC Fertility Alerts` role. Cloudflare uses `🔴` and the `Cloudflare Critical Alerts` role. Discord uses `🔴` and the `Discord Critical Alerts` role. EIA uses `⛽` and the `EIA Crude SPR Alerts` role. FDIC uses `??` and the `FDIC Failed Bank Alerts` role. FRED eggs uses `🥚` and the `FRED Egg Price Alerts` role. FRED beef uses `🥩` and the `FRED Ground Beef Alerts` role. NBS uses `🇨🇳` and the `NBS Press Release Alerts` role. Pyth Natural Gas uses `⛽` and the `NG Price Alerts` role. Pyth WTI uses `🛢️` and the `WTI Price Alerts` role. Pyth XAGUSD uses `🥈` and the `XAGUSD Price Alerts` role. Pyth XAUUSD uses `🥇` and the `XAUUSD Price Alerts` role. ORNN B200 uses `🖥️` and the `ORNN B200 Alerts` role. ORNN H200 uses `🖥️` and the `ORNN H200 Alerts` role. Tesla uses `🚗` and the `Tesla Deliveries Alerts` role. TSA uses `✈️` and the `TSA Passenger Alerts` role. USGS earthquakes uses `🌎` and the `USGS Earthquake Alerts` role. White House Full Lid uses `🧢` and the `White House Lid Alerts` role. AAA gas uses its own adapter-defined role and emoji.
+The Current Integrations table is the source of truth for each adapter's role name and emoji. Normal value-change alerts, daily snapshots, and market-end reminders mention the adapter alert role. Event-post integrations can be quieter: Trump Truth posts every new post but only mentions the role when a strike is detected, while NYT Front Page only posts alerts for strike matches.
 
 ## Integration Pattern
 
@@ -166,6 +176,7 @@ Free App Store uses `ðŸ†“` and the `Free App Store Alerts` role. Paid App 
 - Use the shared command set and embeds; do not create one-off Discord UI per integration.
 - Do not add integration-specific command handlers unless the shared command model cannot express the behavior.
 - Add focused tests for parser extraction, adapter registry metadata, command registration, and embed output.
+- Keep README Current Integrations metadata in sync with `listAdapters()`; `test/documentation.test.ts` checks adapter id, command, channel, alert role, and emoji.
 - Keep links in this exact embed field format:
 
   ```text
@@ -201,8 +212,9 @@ Free App Store uses `ðŸ†“` and the `Free App Store Alerts` role. Paid App 
 - Arena AI monitors the server-rendered no-style-control leaderboard and stores only the top 3 model names/ranks so score/vote movements do not trigger alerts.
 - Tesla deliveries monitors Tesla production and delivery press releases through the matching official SEC 8-K exhibit because direct local requests to `ir.tesla.com/press` are Akamai-blocked.
 - Trump Truth uses the reachable `https://www.trumpstruth.org/feed` archive feed because direct Truth Social access is Cloudflare-blocked locally; alerts include original Truth Social URLs and an Open Truth link button for verification.
-- Trump Truth parses weekly Polymarket strike terms into `settingsJson`, stores the latest seen Truth Social post ID in `lastValue`, and checks archive image descriptions, alt text, and basic OCR output for image-only strike review.
-- TSA passengers parses the date range from the current Polymarket URL slug and sums official TSA daily checkpoint throughput rows for that range.
+- Trump Truth parses weekly Polymarket strike terms into `settingsJson`, stores the latest seen Truth Social post ID in `lastValue`, checks archive image descriptions, alt text, and basic OCR output for image-only strike review, auto-discovers upcoming weekly markets, and only role-tags strike hits.
+- TSA passengers parses the date range from the active Polymarket URL slug, sums official TSA daily checkpoint throughput rows for that range, and auto-discovers upcoming weekly TSA markets into the shared queue.
+- Generic dated Polymarket queueing lives in `src/polymarketQueue.ts`; prefer it over adapter-specific queue fields unless the adapter needs extra parsed market state.
 
 ## Validation
 

@@ -34,14 +34,14 @@ describe("BotDatabase alert role metadata", () => {
       alertRoleId: "role",
       roleMessageId: "message",
       roleChannelId: "role-channel",
-      roleEmoji: "ðŸ’±"
+      roleEmoji: "💱"
     });
-    const found = database.getIntegrationByRoleMessage("message", "ðŸ’±");
+    const found = database.getIntegrationByRoleMessage("message", "💱");
 
     expect(updated.alertRoleId).toBe("role");
     expect(updated.roleMessageId).toBe("message");
     expect(updated.roleChannelId).toBe("role-channel");
-    expect(updated.roleEmoji).toBe("ðŸ’±");
+    expect(updated.roleEmoji).toBe("💱");
     expect(found?.id).toBe(integration.id);
 
     database.close();

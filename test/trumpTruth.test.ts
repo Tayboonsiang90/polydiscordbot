@@ -33,10 +33,11 @@ describe("Trump Truth strike parser", () => {
     const html = [
       'Will Trump post "King" on Truth Social this week?',
       'Will Trump post "Ass / Shit" on Truth Social this week?',
+      "Will Trump post “Ceasefire” or “Cease-fire” on Truth Social this week?",
       "Will Trump post Paper Tiger on Truth Social this week?"
     ].join("\n");
 
-    expect(extractPolymarketStrikeTerms(html)).toEqual(["Ass", "King", "Paper Tiger", "Shit"]);
+    expect(extractPolymarketStrikeTerms(html)).toEqual(["Ass", "Cease-fire", "Ceasefire", "King", "Paper Tiger", "Shit"]);
   });
 
   it("extracts JSON-escaped quoted alternatives from Polymarket HTML", () => {
@@ -382,6 +383,7 @@ describe("Trump Truth strike matcher", () => {
     expect(matchesStrikeTerm("KING", "king")).toBe(true);
     expect(matchesStrikeTerm("the kings arrived", "king")).toBe(true);
     expect(matchesStrikeTerm("king's order", "king")).toBe(true);
+    expect(matchesStrikeTerm("king’s order", "king")).toBe(true);
     expect(matchesStrikeTerm("#king", "king")).toBe(true);
   });
 

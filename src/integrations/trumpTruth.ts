@@ -460,7 +460,7 @@ export function extractPolymarketStrikeTerms(html: string): string[] {
       continue;
     }
 
-    const quotedTerms = [...rawTerm.matchAll(/["â€œ]([^"â€]+)["â€]/g)]
+    const quotedTerms = [...rawTerm.matchAll(/["“]([^"”]+)["”]/g)]
       .flatMap((quotedMatch) => quotedMatch[1]?.split("/") ?? [])
       .map((term) => term.trim())
       .filter(isNonEmptyString);
@@ -486,7 +486,7 @@ export function matchesStrikeTerm(text: string, term: string): boolean {
   const normalizedText = text.toLowerCase();
   const normalizedTerm = escapeRegExp(term.toLowerCase());
   const sigilPrefix = "(?:^|[^a-z0-9])[@#$]?";
-  const suffix = "(?:s|'s|â€™s)?";
+  const suffix = "(?:s|'s|’s)?";
   const pattern = new RegExp(`${sigilPrefix}${normalizedTerm}${suffix}(?=$|[^a-z0-9])`, "i");
   return pattern.test(normalizedText);
 }

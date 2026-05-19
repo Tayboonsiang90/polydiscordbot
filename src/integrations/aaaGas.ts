@@ -27,7 +27,7 @@ export function extractAaaRegularGasCurrentAvg(html: string): string {
     return normalizeGasPrice(tableMatch[1]);
   }
 
-  const headlinePattern = /Today(?:'|â€™)?s AAA National Average\s+\$?(\d+(?:\.\d+)?)/i;
+  const headlinePattern = /Today(?:'|’)?s AAA National Average\s+\$?(\d+(?:\.\d+)?)/i;
   const headlineMatch = pageText.match(headlinePattern);
   if (headlineMatch) {
     return normalizeGasPrice(headlineMatch[1]);
