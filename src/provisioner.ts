@@ -217,6 +217,7 @@ async function syncGroupedRoleMessage(
   groupCount: number
 ): Promise<AlertRoleEntry[]> {
   const reactedEntries = entries.map((entry) => ({ ...entry }));
+  await removeObsoleteRoleReactions(roleMessage, reactedEntries);
 
   const usedEmojis = new Set<string>();
   for (const entry of reactedEntries) {
@@ -226,6 +227,19 @@ async function syncGroupedRoleMessage(
 
   await roleMessage.edit({ embeds: [buildGroupedRoleSelectorEmbed(reactedEntries, groupIndex, groupCount)] });
   return reactedEntries;
+}
+
+async function removeObsoleteRoleReactions(roleMessage: Message, entries: AlertRoleEntry[]): Promise<void> {
+  const allowedEmojis = new Set(entries.map((entry) => entry.adapter.alertRoleEmoji));
+
+  for (const reaction of roleMessage.reactions.cache.values()) {
+    const emoji = reaction.emoji.name ?? reaction.emoji.toString();
+    if (allowedEmojis.has(emoji)) {
+      continue;
+    }
+
+    await reaction.remove().catch(() => undefined);
+  }
 }
 
 async function reactWithFallbackEmoji(
