@@ -281,13 +281,7 @@ export async function handleAdapterCommand(
     }
 
     await interaction.deferReply();
-    const refreshedSettingsJson = adapter.refreshSettings
-      ? await adapter.refreshSettings(integration)
-      : integration.settingsJson;
-    let updated =
-      refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, refreshedSettingsJson)
-        : integration;
+    let updated = integration;
     const settings = adapter.getStrikeTerms?.(updated) ?? parseTrumpTruthSettings(updated.settingsJson);
     if (settings.parsedFromUrl && settings.parsedFromUrl !== updated.polymarketUrl) {
       updated = database.setPolymarketUrl(updated.id, settings.parsedFromUrl);
