@@ -436,12 +436,13 @@ export async function handleAdapterCommand(
 
   if (subcommand === "check") {
     await interaction.deferReply();
+    await interaction.editReply(`Checking ${integration.displayName}...`);
     if (adapter.fetchEventUpdates) {
       const result = await checkEventIntegration(database, integration);
-      await interaction.editReply({ embeds: [buildEventCheckEmbed(result)] });
+      await interaction.editReply({ content: "", embeds: [buildEventCheckEmbed(result)] });
     } else {
       const result = await checkIntegration(database, integration);
-      await interaction.editReply({ embeds: [buildCheckEmbed(result)] });
+      await interaction.editReply({ content: "", embeds: [buildCheckEmbed(result)] });
     }
   }
 }

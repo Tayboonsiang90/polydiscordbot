@@ -10,8 +10,8 @@ const defaultPolygonRpcUrl = "https://polygon-bor-rpc.publicnode.com";
 const gammaMarketApiUrl = "https://gamma-api.polymarket.com/markets";
 const getQuestionSelector = "0x58c039cd";
 const defaultConfirmations = 12;
-const defaultInitialLookbackBlocks = 20_000;
-const defaultMaxScanBlocksPerRun = 20_000;
+const defaultInitialLookbackBlocks = 2_000;
+const defaultMaxScanBlocksPerRun = 2_000;
 const rpcLogChunkBlocks = 2_000;
 const rpcTimeoutMs = 20_000;
 

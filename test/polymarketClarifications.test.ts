@@ -123,6 +123,40 @@ describe("fetchPolymarketClarificationUpdates", () => {
       lastScanCompletedAt: "2026-05-20T00:00:00.000Z"
     });
   });
+
+  it("keeps the first scan small enough for a Discord check response", async () => {
+    const rpcUrl = "https://rpc.example";
+    let logParams: { fromBlock?: string; toBlock?: string } | null = null;
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (url.toString() !== rpcUrl) {
+        throw new Error(`Unexpected fetch: ${url.toString()}`);
+      }
+
+      const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, string>> };
+      if (body.method === "eth_blockNumber") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x2710" });
+      }
+      if (body.method === "eth_getLogs") {
+        logParams = body.params[0];
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: [] });
+      }
+
+      throw new Error(`Unexpected RPC method: ${body.method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketClarificationUpdates(
+      { settingsJson: JSON.stringify({ rpcUrl }) } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(logParams).toMatchObject({ fromBlock: "0x1f35", toBlock: "0x2704" });
+    expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
+      rpcUrl,
+      lastScannedBlock: 9988,
+      lastScanStartedBlock: 7989
+    });
+  });
 });
 
 function buildUpdateLog(updateText: string): PolygonLog {
