@@ -59,6 +59,7 @@ describe("Polymarket clarification parsing", () => {
       sourceLabel: "On-chain tx",
       buttonLabel: "Open transaction",
       mentionAlertRole: true,
+      textFieldName: "Clarification",
       text: "We are aware of the dispute on this market.",
       url: `https://polygonscan.com/tx/${transactionHash}`,
       polymarketUrl: "https://polymarket.com/event/trump-kiss-by-may-31"
@@ -118,7 +119,7 @@ describe("fetchPolymarketClarificationUpdates", () => {
     expect(result.posts[0].polymarketUrl).toBe("https://polymarket.com/event/trump-kiss-by-may-31");
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
-      lastScannedBlock: 988,
+      lastScannedBlock: 1000,
       lastScanStartedBlock: 981,
       lastScanCompletedAt: "2026-05-20T00:00:00.000Z"
     });
@@ -150,11 +151,11 @@ describe("fetchPolymarketClarificationUpdates", () => {
       new Date("2026-05-21T00:00:00.000Z")
     );
 
-    expect(logParams).toMatchObject({ fromBlock: "0x1f35", toBlock: "0x2704" });
+    expect(logParams).toMatchObject({ fromBlock: "0x2617", toBlock: "0x2710" });
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
-      lastScannedBlock: 9988,
-      lastScanStartedBlock: 7989
+      lastScannedBlock: 10000,
+      lastScanStartedBlock: 9751
     });
   });
 });

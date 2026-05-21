@@ -33,6 +33,8 @@ export type EventCheckResult = {
   strikeTerms: string[];
   latestSeenId: string | null;
   latestSeenUrl: string | null;
+  checkTitle?: string;
+  checkFields?: Array<{ name: string; value: string; inline?: boolean }>;
 };
 
 const maxEventSeenPostIds = 100;
@@ -177,7 +179,9 @@ export async function checkEventIntegration(database: BotDatabase, integration: 
     newPosts: alertPosts,
     strikeTerms: result.strikeTerms,
     latestSeenId: latestSeenId ?? null,
-    latestSeenUrl: result.posts[0]?.url ?? null
+    latestSeenUrl: result.posts[0]?.url ?? null,
+    checkTitle: result.checkTitle,
+    checkFields: result.checkFields
   };
 }
 

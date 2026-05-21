@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Polymarket Clarifications, Kaito Polymarket Mindshare, MrBeast YouTube Subscribers, MrBeast YouTube Views, NBS Press Releases, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, UMA Clarification Alerts, Kaito Polymarket Mindshare, MrBeast YouTube Subscribers, MrBeast YouTube Views, NBS Press Releases, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -37,7 +37,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `ornn-b200-index` | `/ornnb200` | `#ornnb200` | `ORNN B200 Alerts` | `🖥️` | Monitors finalized ORNN B200 Index daily chart values for GPU rental-price resolution checks. |
 | `ornn-h200-index` | `/ornnh200` | `#ornnh200` | `ORNN H200 Alerts` | `🖥️` | Monitors finalized ORNN H200 Index daily chart values for GPU rental-price resolution checks. |
 | `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Monitors the US iPhone App Store Top Paid Apps top 2 list for Polymarket resolution checks. |
-| `polymarket-clarifications` | `/pmclarify` | `#pmclarify` | `Polymarket Clarification Alerts` | `📣` | Monitors Polymarket UMA bulletin-board clarification updates on Polygon. |
+| `polymarket-clarifications` | `/umaalert` | `#uma-alerts` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
 | `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed and alerts only when live price crosses parsed Polymarket strikes. |
@@ -94,6 +94,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    KAITO_INFOMARKETS_API_URL=...
    KAITO_API_KEY=...
    POLYGON_RPC_URL=...
+   POLYGON_WS_URL=...
    ```
 
 3. Register slash commands for your test server:
@@ -165,7 +166,7 @@ The Free App Store and Paid App Store integrations run a separate daily snapshot
 
 ## Alert Roles
 
-The bot creates `#market-alert-roles` and posts grouped reaction selectors for all integrations. React to an integration emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing user reactions while adding missing bot reactions.
+The bot creates `#market-alert-roles` and posts grouped reaction selectors for market integration roles. It creates `#uma-alert-roles` for the global UMA clarification alert role. React to an alert emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing user reactions while adding missing bot reactions.
 
 The Current Integrations table is the source of truth for each adapter's role name and emoji. Normal value-change alerts, daily snapshots, and market-end reminders mention the adapter alert role. Event-post integrations can be quieter: Trump Truth posts every new post but only mentions the role when a strike is detected, while NYT Front Page only posts alerts for strike matches.
 
@@ -199,7 +200,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - MrBeast subscribers monitors the YouTube channel About metadata subscriber count and compares it to Gamma-parsed million-subscriber market targets for dailyized rate and projection output.
 - MrBeast views monitors the YouTube channel About metadata total view count and compares it to Gamma-parsed billion-view market targets for dailyized rate and projection output.
 - ORNN B200 and H200 monitor the dashboard's GPU index-history API and use the second latest point as finalized because daily values finalize after the following day's point is published.
-- Polymarket Clarifications monitors `AncillaryDataUpdated` events from Polymarket's UMA bulletin-board contract on Polygon, defaults to PublicNode's free Polygon RPC, and can be pointed at another provider with `POLYGON_RPC_URL`.
+- UMA Clarification Alerts subscribes to `AncillaryDataUpdated` events from Polymarket's UMA bulletin-board contract on Polygon over WebSocket, defaults to PublicNode's free Polygon Bor WS/RPC, and can be pointed at another provider with `POLYGON_WS_URL` and `POLYGON_RPC_URL`.
 - Pyth Natural Gas, WTI, XAGUSD, and XAUUSD parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.
 - AWS monitors the public AWS Health Dashboard history events JSON and treats status code `3` as the disrupted severity classification.
 - CDC fertility monitors the natality dashboard CSV for the 2026 Q1 general fertility rate row.

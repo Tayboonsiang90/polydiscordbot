@@ -6,12 +6,13 @@ export const polymarketBulletinBoardSourceUrl = `https://polygonscan.com/address
 export const ancillaryDataUpdatedTopic =
   "0x0059e11815211969c0c4aaf3f498b52b6c2f2d14f286275d0862d70de22a836b";
 
-const defaultPolygonRpcUrl = "https://polygon-bor-rpc.publicnode.com";
+export const defaultPolygonRpcUrl = "https://polygon-bor-rpc.publicnode.com";
+export const defaultPolygonWsUrl = "wss://polygon-bor-rpc.publicnode.com";
 const gammaMarketApiUrl = "https://gamma-api.polymarket.com/markets";
 const getQuestionSelector = "0x58c039cd";
-const defaultConfirmations = 12;
-const defaultInitialLookbackBlocks = 2_000;
-const defaultMaxScanBlocksPerRun = 2_000;
+const defaultConfirmations = 0;
+const defaultInitialLookbackBlocks = 250;
+const defaultMaxScanBlocksPerRun = 250;
 const rpcLogChunkBlocks = 2_000;
 const rpcTimeoutMs = 20_000;
 
@@ -26,6 +27,7 @@ export type PolymarketClarificationSettings = {
   lastScanStartedBlock?: number;
   lastScanCompletedAt?: string;
   rpcUrl?: string;
+  wsUrl?: string;
   confirmations?: number;
   initialLookbackBlocks?: number;
   maxScanBlocksPerRun?: number;
@@ -60,17 +62,20 @@ type GammaMarket = {
 
 export const polymarketClarificationsAdapter: WebsiteAdapter = {
   id: "polymarket-clarifications",
-  commandName: "pmclarify",
-  displayName: "Polymarket Clarifications",
+  commandName: "umaalert",
+  displayName: "UMA Clarification Alerts",
   sourceUrl: polymarketBulletinBoardSourceUrl,
-  defaultChannelName: "pmclarify",
-  alertRoleName: "Polymarket Clarification Alerts",
+  defaultChannelName: "uma-alerts",
+  legacyChannelNames: ["pmclarify"],
+  alertRoleName: "UMA Clarification Alerts",
   alertRoleEmoji: "\uD83D\uDCE3",
+  alertRoleChannelName: "uma-alert-roles",
+  alertRoleGroupTitle: "UMA Alert Roles",
   getPollIntervalMinutes(): number {
-    return 1;
+    return 0.1;
   },
   getPollIntervalReason(): string {
-    return "Polygon bulletin-board scan";
+    return "Near-real-time Polygon UMA log scan";
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     if (!integration) {
@@ -92,7 +97,7 @@ export async function fetchPolymarketClarificationUpdates(
   now = new Date()
 ): Promise<EventMonitorResult> {
   const settings = parsePolymarketClarificationSettings(integration.settingsJson);
-  const rpcUrl = getRpcUrl(settings);
+  const rpcUrl = getPolymarketClarificationRpcUrl(settings);
   const latestBlock = await fetchLatestBlockNumber(rpcUrl);
   const confirmations = getIntegerSetting(settings.confirmations, defaultConfirmations, 0, 1_000);
   const confirmedLatestBlock = Math.max(0, latestBlock - confirmations);
@@ -131,6 +136,13 @@ export async function fetchPolymarketClarificationUpdates(
       lastScanStartedBlock: fromBlock <= toBlock ? fromBlock : undefined,
       lastScanCompletedAt: now.toISOString()
     }),
+    checkTitle: "UMA alert check",
+    checkFields: [
+      { name: "Clarifications in scanned range", value: String(logs.length), inline: true },
+      { name: "Scanned blocks", value: fromBlock <= toBlock ? `${fromBlock} to ${toBlock}` : "already at latest block", inline: false },
+      { name: "Confirmed head", value: String(confirmedLatestBlock), inline: true },
+      { name: "Data source", value: `${rpcUrl} via eth_getLogs fallback`, inline: false }
+    ],
     observedAt: now
   };
 }
@@ -161,6 +173,7 @@ export function normalizePolymarketClarificationLog(log: PolygonLog, details: Qu
     sourceLabel: "On-chain tx",
     buttonLabel: "Open transaction",
     mentionAlertRole: true,
+    textFieldName: "Clarification",
     text: updateText,
     qualifyingText: [question, updateText].filter(Boolean).join("\n"),
     postedAt: blockTimestamp === null ? new Date() : new Date(blockTimestamp * 1_000),
@@ -172,6 +185,16 @@ export function normalizePolymarketClarificationLog(log: PolygonLog, details: Qu
     matchedTerms: [],
     strikeTerms: []
   };
+}
+
+export async function buildPolymarketClarificationPostFromLog(log: PolygonLog, rpcUrl = defaultPolygonRpcUrl): Promise<EventMonitorPost | null> {
+  const questionId = getTopic(log, 1);
+  if (!questionId) {
+    return null;
+  }
+
+  const details = await fetchQuestionDetails(rpcUrl, questionId).catch(() => null);
+  return normalizePolymarketClarificationLog(log, details ?? { questionId });
 }
 
 export function parsePolymarketAncillaryData(text: string): PolymarketAncillaryData {
@@ -201,7 +224,7 @@ export function decodeUmaCtfQuestionData(result: string): { creator: string; anc
   return { creator, ancillaryData };
 }
 
-function parsePolymarketClarificationSettings(settingsJson: string | null): PolymarketClarificationSettings {
+export function parsePolymarketClarificationSettings(settingsJson: string | null): PolymarketClarificationSettings {
   if (!settingsJson) {
     return {};
   }
@@ -214,8 +237,12 @@ function parsePolymarketClarificationSettings(settingsJson: string | null): Poly
   }
 }
 
-function getRpcUrl(settings: PolymarketClarificationSettings): string {
+export function getPolymarketClarificationRpcUrl(settings: PolymarketClarificationSettings = {}): string {
   return firstNonEmptyString(settings.rpcUrl, process.env.POLYGON_RPC_URL) ?? defaultPolygonRpcUrl;
+}
+
+export function getPolymarketClarificationWsUrl(settings: PolymarketClarificationSettings = {}): string {
+  return firstNonEmptyString(settings.wsUrl, process.env.POLYGON_WS_URL) ?? defaultPolygonWsUrl;
 }
 
 function getNextFromBlock(settings: PolymarketClarificationSettings, confirmedLatestBlock: number): number {
@@ -360,7 +387,7 @@ function parseAddressTopic(topic: string): string {
   return `0x${normalized.slice(-40)}`;
 }
 
-function parseHexQuantity(value: string): number {
+export function parseHexQuantity(value: string): number {
   if (!/^0x[0-9a-fA-F]+$/.test(value)) {
     throw new Error(`Invalid hex quantity: ${value}`);
   }

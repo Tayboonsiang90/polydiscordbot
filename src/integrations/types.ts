@@ -52,6 +52,7 @@ export type EventMonitorPost = {
   sourceLabel?: string;
   buttonLabel?: string;
   mentionAlertRole?: boolean;
+  textFieldName?: string;
   text: string;
   qualifyingText: string;
   postedAt: Date;
@@ -69,6 +70,8 @@ export type EventMonitorResult = {
   strikeTerms: string[];
   polymarketUrl?: string;
   settingsJson?: string;
+  checkTitle?: string;
+  checkFields?: Array<{ name: string; value: string; inline?: boolean }>;
   observedAt: Date;
 };
 
@@ -97,6 +100,8 @@ export type WebsiteAdapter = {
   legacyChannelNames?: string[];
   alertRoleName: string;
   alertRoleEmoji: string;
+  alertRoleChannelName?: string;
+  alertRoleGroupTitle?: string;
   defaultSettings?: IntegrationSettings;
   supportsPeriod?: boolean;
   dailySnapshot?: {

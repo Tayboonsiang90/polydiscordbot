@@ -346,9 +346,9 @@ describe("adapter commands", () => {
       ])
     });
 
-    const pmClarifyCommand = buildAdapterCommands().find((command) => command.name === "pmclarify");
-    expect(pmClarifyCommand?.toJSON()).toMatchObject({
-      name: "pmclarify",
+    const umaAlertCommand = buildAdapterCommands().find((command) => command.name === "umaalert");
+    expect(umaAlertCommand?.toJSON()).toMatchObject({
+      name: "umaalert",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "check" }),
         expect.objectContaining({ name: "test" }),

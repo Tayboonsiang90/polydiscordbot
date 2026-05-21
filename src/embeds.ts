@@ -107,6 +107,19 @@ export function buildCheckEmbed(result: CheckResult): EmbedBuilder {
 }
 
 export function buildEventCheckEmbed(result: EventCheckResult): EmbedBuilder {
+  if (result.checkFields?.length) {
+    return baseEmbed(result.integration, result.checkTitle ?? "Check complete")
+      .addFields(
+        ...result.checkFields.map((field) => ({
+          name: field.name,
+          value: truncateEmbedValue(field.value),
+          inline: field.inline ?? false
+        })),
+        { name: "Checked at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false }
+      )
+      .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+  }
+
   return baseEmbed(result.integration, "Event check complete")
     .addFields(
       { name: "New posts", value: String(result.newPosts.length), inline: true },
@@ -214,32 +227,42 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
     post.alertTitle ??
     (hasStrike ? "TEXT STRIKE DETECTED" : hasImages ? "New post - review attached images manually" : "New post");
   const sourceLabel = post.sourceLabel ?? "Truth Social";
+  const eventFields = [
+    ...(hasStrike ? [{ name: "STRIKE HIT", value: formatMatchedStrikeTerms(post.matchedTerms), inline: false }] : []),
+    { name: "Event type", value: post.type, inline: true },
+    { name: "Posted at", value: formatSingaporeDateTime(post.postedAt), inline: false },
+    { name: sourceLabel, value: post.url, inline: false },
+    ...(post.fields ?? []).map((field) => ({
+      name: field.name,
+      value: truncateEmbedValue(field.value),
+      inline: field.inline ?? false
+    })),
+    ...(post.matchedTerms.length ? [{ name: "Matched text terms", value: post.matchedTerms.join(", "), inline: false }] : []),
+    ...(hasImages
+      ? [
+          {
+            name: "Image review",
+            value: hasImages && !hasStrike ? "No text strike detected - review attached images manually." : "Images attached.",
+            inline: false
+          }
+        ]
+      : []),
+    ...(post.strikeTerms.length ? [{ name: "Strike list", value: formatStrikeTerms(post.strikeTerms), inline: false }] : []),
+    ...(post.imageText ? [{ name: "Image text", value: formatValue(post.imageText), inline: false }] : []),
+    { name: post.textFieldName ?? "Post text", value: formatValue(post.text || "(no text)"), inline: false },
+    {
+      name: "Links",
+      value: [
+        `Original: ${post.url}`,
+        `Polymarket: ${post.polymarketUrl ?? formatPolymarketValue(integration)}`
+      ].join("\n"),
+      inline: false
+    }
+  ];
   const embeds = [
     baseEmbed(integration, title)
       .setColor(hasStrike ? errorColor : successColor)
-      .addFields(
-        ...(hasStrike
-          ? [{ name: "STRIKE HIT", value: formatMatchedStrikeTerms(post.matchedTerms), inline: false }]
-          : []),
-        { name: "Post type", value: post.type, inline: true },
-        { name: "Posted at", value: formatSingaporeDateTime(post.postedAt), inline: false },
-        { name: sourceLabel, value: post.url, inline: false },
-        ...(post.fields ?? []).map((field) => ({
-          name: field.name,
-          value: truncateEmbedValue(field.value),
-          inline: field.inline ?? false
-        })),
-        { name: "Matched text terms", value: post.matchedTerms.length ? post.matchedTerms.join(", ") : "none", inline: false },
-        {
-          name: "Image review",
-          value: hasImages && !hasStrike ? "No text strike detected — review attached images manually." : hasImages ? "Images attached." : "none",
-          inline: false
-        },
-        { name: "Strike list", value: formatStrikeTerms(post.strikeTerms), inline: false },
-        ...(post.imageText ? [{ name: "Image text", value: formatValue(post.imageText), inline: false }] : []),
-        { name: "Post text", value: formatValue(post.text || "(no text)"), inline: false },
-        { name: "Links", value: [`Original: ${post.url}`, `Polymarket: ${post.polymarketUrl ?? formatPolymarketValue(integration)}`].join("\n"), inline: false }
-      )
+      .addFields(eventFields)
       .setFooter({ text: `Alert sent at ${nowSingaporeDateTime()}` })
   ];
 
@@ -342,9 +365,10 @@ export type GroupedRoleSelectorEntry = {
 export function buildGroupedRoleSelectorEmbed(
   entries: GroupedRoleSelectorEntry[],
   groupIndex: number,
-  groupCount: number
+  groupCount: number,
+  baseTitle = "Market Alert Roles"
 ): EmbedBuilder {
-  const title = groupCount > 1 ? `Market Alert Roles ${groupIndex + 1}/${groupCount}` : "Market Alert Roles";
+  const title = groupCount > 1 ? `${baseTitle} ${groupIndex + 1}/${groupCount}` : baseTitle;
   return new EmbedBuilder()
     .setColor(successColor)
     .setTitle(title)

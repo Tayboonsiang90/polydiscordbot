@@ -5,6 +5,7 @@ import { BotDatabase } from "./database.js";
 import { PollScheduler } from "./poller.js";
 import { IntegrationProvisioner } from "./provisioner.js";
 import { handleReactionRoleChange } from "./reactionRoles.js";
+import { UmaAlertSubscriber } from "./umaAlertSubscriber.js";
 
 const heartbeatIntervalMs = 10 * 60 * 1000;
 const config = loadConfig();
@@ -19,6 +20,7 @@ const client = new Client({
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User]
 });
 let provisioner: IntegrationProvisioner | null = null;
+let umaAlertSubscriber: UmaAlertSubscriber | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -27,6 +29,8 @@ client.once(Events.ClientReady, (readyClient) => {
     provisioner = new IntegrationProvisioner(client, database, config);
     provisioner.start();
     new PollScheduler(client, database).start();
+    umaAlertSubscriber = new UmaAlertSubscriber(client, database, config);
+    umaAlertSubscriber.start();
     heartbeatTimer = setInterval(() => {
       console.log(`Heartbeat: ${readyClient.user.tag} alive at ${new Date().toISOString()}`);
     }, heartbeatIntervalMs);
@@ -86,6 +90,7 @@ process.setUncaughtExceptionCaptureCallback((error) => {
 
 process.on("SIGINT", () => {
   provisioner?.stop();
+  umaAlertSubscriber?.stop();
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
