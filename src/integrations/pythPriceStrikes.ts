@@ -83,7 +83,7 @@ export async function fetchPythPriceStrikeMonitorValue(
   integration?: Integration
 ): Promise<string> {
   const polymarketUrl = integration?.polymarketUrl ?? config.defaultPolymarketUrl;
-  const strikes = await fetchPythStrikes(polymarketUrl);
+  const strikes = await fetchPythStrikes(polymarketUrl, parseStoredTrackedStrikes(integration?.lastValue ?? null, polymarketUrl));
   const feed = await fetchTopPythFeed(config);
   const historyRange = getHistoryRange(integration);
   const candles = await fetchPythCandles(feed, historyRange);
@@ -249,7 +249,7 @@ function isResolvedGammaMarket(market: NonNullable<GammaEvent["markets"]>[number
   }
 }
 
-async function fetchPythStrikes(polymarketUrl: string): Promise<PythStrike[]> {
+async function fetchPythStrikes(polymarketUrl: string, fallbackStrikes: PythStrike[] = []): Promise<PythStrike[]> {
   const slug = new URL(polymarketUrl).pathname.split("/").filter(Boolean).at(-1);
   if (!slug) {
     throw new Error(`Could not parse Polymarket slug from ${polymarketUrl}`);
@@ -267,7 +267,7 @@ async function fetchPythStrikes(polymarketUrl: string): Promise<PythStrike[]> {
 
   const strikes = extractPythStrikesFromGamma(await response.json());
   if (strikes.length === 0) {
-    throw new Error("Could not find unresolved strike prices in Polymarket Gamma markets");
+    return fallbackStrikes;
   }
 
   return strikes;
@@ -400,6 +400,32 @@ function parseStoredAlertedStrikes(value: string | null, polymarketUrl: string):
   }
 
   return new Set(alertedText.match(/\$[\d,]+(?:\.\d+)?/g) ?? []);
+}
+
+function parseStoredTrackedStrikes(value: string | null, polymarketUrl: string): PythStrike[] {
+  if (!value || !value.includes(`Alerted For: ${polymarketUrl}`)) {
+    return [];
+  }
+
+  const lines = value.split(/\r?\n/);
+  const start = lines.findIndex((line) => line === "Tracked Strikes:");
+  const end = lines.findIndex((line, index) => index > start && line.startsWith("Resolution:"));
+  if (start === -1 || end === -1 || end <= start) {
+    return [];
+  }
+
+  const trackedText = lines.slice(start + 1, end).join(" ");
+  if (!trackedText || trackedText === "none") {
+    return [];
+  }
+
+  return (trackedText.match(/\$[\d,]+(?:\.\d+)?/g) ?? [])
+    .map((display) => {
+      const value = parseNumber(display.replace("$", ""));
+      return value === null ? null : { display, value };
+    })
+    .filter((strike): strike is PythStrike => strike !== null)
+    .sort((left, right) => left.value - right.value);
 }
 
 function parseCurrentCrossings(value: string): string[] {
