@@ -66,17 +66,19 @@ export class IntegrationProvisioner {
     const channel = asTextChannel(existingChannel) ?? channelByName ?? (await createIntegrationChannel(guild, adapter));
 
     if (existingIntegration) {
+      let currentIntegration = this.database.syncIntegrationMetadata(existingIntegration.id, {
+        displayName: adapter.displayName,
+        sourceUrl: adapter.sourceUrl
+      });
       const existingTextChannel = asTextChannel(existingChannel);
       if (existingTextChannel && shouldRenameLegacyChannel(existingTextChannel.name, adapter)) {
         await existingTextChannel.setName(adapter.defaultChannelName);
       }
 
-      if (existingIntegration.channelId !== channel.id) {
-        const updatedIntegration = this.database.updateIntegrationChannel(existingIntegration.id, channel.id);
-        await findOrCreateRole(guild, updatedIntegration.alertRoleId, adapter.alertRoleName);
-        return;
+      if (currentIntegration.channelId !== channel.id) {
+        currentIntegration = this.database.updateIntegrationChannel(currentIntegration.id, channel.id);
       }
-      await findOrCreateRole(guild, existingIntegration.alertRoleId, adapter.alertRoleName);
+      await findOrCreateRole(guild, currentIntegration.alertRoleId, adapter.alertRoleName);
       return;
     }
 

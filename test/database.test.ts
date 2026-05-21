@@ -67,6 +67,34 @@ describe("BotDatabase alert role metadata", () => {
     database.close();
   });
 
+  it("syncs adapter-owned integration metadata without changing runtime state", () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "uma-alerts",
+      adapterId: "polymarket-clarifications",
+      displayName: "Polymarket Clarifications",
+      sourceUrl: "https://old.example",
+      settingsJson: JSON.stringify({ lastScannedBlock: 100 }),
+      pollIntervalMinutes: 5
+    });
+
+    const updated = database.syncIntegrationMetadata(integration.id, {
+      displayName: "UMA Clarification Alerts",
+      sourceUrl: "https://new.example"
+    });
+
+    expect(updated).toMatchObject({
+      displayName: "UMA Clarification Alerts",
+      sourceUrl: "https://new.example",
+      settingsJson: JSON.stringify({ lastScannedBlock: 100 }),
+      pollIntervalMinutes: 5,
+      lastValue: null
+    });
+
+    database.close();
+  });
+
   it("stores daily snapshots separately from regular checks", () => {
     const database = createTestDatabase();
     const integration = database.createIntegration({

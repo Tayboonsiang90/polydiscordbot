@@ -20,6 +20,11 @@ export type AlertRoleMetadataInput = {
   roleEmoji: string;
 };
 
+export type IntegrationMetadataInput = {
+  displayName: string;
+  sourceUrl: string;
+};
+
 export class BotDatabase {
   private readonly db: Database.Database;
 
@@ -122,6 +127,18 @@ export class BotDatabase {
         new Date().toISOString(),
         id
       );
+    return this.getIntegrationById(id);
+  }
+
+  syncIntegrationMetadata(id: number, input: IntegrationMetadataInput): Integration {
+    const integration = this.getIntegrationById(id);
+    if (integration.displayName === input.displayName && integration.sourceUrl === input.sourceUrl) {
+      return integration;
+    }
+
+    this.db
+      .prepare("UPDATE integrations SET displayName = ?, sourceUrl = ?, updatedAt = ? WHERE id = ?")
+      .run(input.displayName, input.sourceUrl, new Date().toISOString(), id);
     return this.getIntegrationById(id);
   }
 
