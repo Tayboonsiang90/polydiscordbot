@@ -1,4 +1,5 @@
 import type { Client } from "discord.js";
+import WebSocket, { type RawData } from "ws";
 import type { BotConfig } from "./config.js";
 import type { BotDatabase } from "./database.js";
 import { buildEventPostMessagePayload } from "./embeds.js";
@@ -67,7 +68,7 @@ export class UmaAlertSubscriber {
     const websocket = new WebSocket(wsUrl);
     this.websocket = websocket;
 
-    websocket.onopen = () => {
+    websocket.on("open", () => {
       websocket.send(
         JSON.stringify({
           jsonrpc: "2.0",
@@ -83,24 +84,24 @@ export class UmaAlertSubscriber {
         })
       );
       console.log(`UMA alert WebSocket subscribed via ${wsUrl}`);
-    };
+    });
 
-    websocket.onmessage = (event) => {
-      void this.handleMessage(event.data).catch((error) => {
+    websocket.on("message", (data) => {
+      void this.handleMessage(data).catch((error) => {
         console.error("UMA alert WebSocket message failed:", formatError(error));
       });
-    };
+    });
 
-    websocket.onerror = () => {
-      console.error(`UMA alert WebSocket error from ${wsUrl}`);
-    };
+    websocket.on("error", (error) => {
+      console.error(`UMA alert WebSocket error from ${wsUrl}: ${formatError(error)}`);
+    });
 
-    websocket.onclose = () => {
+    websocket.on("close", () => {
       if (this.websocket === websocket) {
         this.websocket = null;
       }
       this.scheduleReconnect();
-    };
+    });
   }
 
   private scheduleReconnect(): void {
@@ -168,8 +169,8 @@ export class UmaAlertSubscriber {
   }
 }
 
-function parseSubscriptionMessage(data: unknown): SubscriptionMessage {
-  const text = typeof data === "string" ? data : data instanceof ArrayBuffer ? Buffer.from(data).toString("utf8") : "";
+function parseSubscriptionMessage(data: RawData | unknown): SubscriptionMessage {
+  const text = typeof data === "string" ? data : Buffer.isBuffer(data) ? data.toString("utf8") : "";
   if (!text) {
     return {};
   }

@@ -29,8 +29,12 @@ client.once(Events.ClientReady, (readyClient) => {
     provisioner = new IntegrationProvisioner(client, database, config);
     provisioner.start();
     new PollScheduler(client, database).start();
-    umaAlertSubscriber = new UmaAlertSubscriber(client, database, config);
-    umaAlertSubscriber.start();
+    try {
+      umaAlertSubscriber = new UmaAlertSubscriber(client, database, config);
+      umaAlertSubscriber.start();
+    } catch (error) {
+      console.error("UMA alert subscriber startup failed:", error);
+    }
     heartbeatTimer = setInterval(() => {
       console.log(`Heartbeat: ${readyClient.user.tag} alive at ${new Date().toISOString()}`);
     }, heartbeatIntervalMs);
