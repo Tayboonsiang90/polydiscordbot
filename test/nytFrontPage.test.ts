@@ -74,6 +74,49 @@ describe("NYT front page adapter", () => {
     });
   });
 
+  it("extracts issue metadata from PressReader RDFa when page headlines are absent", () => {
+    expect(
+      extractNytFrontPageIssue(
+        `
+        <html>
+          <head>
+            <meta property="article:published_time" content="2026-05-21" />
+            <script type="application/ld+json">
+              {
+                "@context": "https://schema.org",
+                "@graph": [
+                  {
+                    "@type": "PublicationIssue",
+                    "datePublished": "2026-05-21T02:07:00.0000000",
+                    "thumbnailUrl": "https://t.prcdn.co/img?cid=8302&page=1&date=20260521&width=190"
+                  },
+                ]
+              }
+            </script>
+          </head>
+          <body>
+            <div vocab="https://schema.org/">
+              <p typeof="PublicationIssue">
+                <p property="datePublished">2026-05-21T02:07:00.0000000</p>
+                <p property="thumbnailUrl">
+                  <img src="https://t.prcdn.co/img?cid=8302&page=1&date=20260521&width=190">
+                </p>
+              </p>
+            </div>
+          </body>
+        </html>
+        `,
+        "https://nytimes.pressreader.com/the-new-york-times/20260521/page/1"
+      )
+    ).toEqual({
+      id: "nyt-front-page-2026-05-21",
+      date: "2026-05-21",
+      pageUrl: "https://nytimes.pressreader.com/the-new-york-times/20260521/page/1",
+      pageImageUrl: "https://t.prcdn.co/img?cid=8302&page=1&date=20260521&width=1200",
+      headlines: []
+    });
+  });
+
   it("reads stored NYT strike settings", () => {
     expect(
       parseNytFrontPageSettings(

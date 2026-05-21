@@ -202,12 +202,15 @@ export function extractNytFrontPageIssue(html: string, pageUrl: string): NytFron
   const issue = nodes.find((node) => hasJsonLdType(node, "PublicationIssue"));
   const articles = nodes.filter((node) => hasJsonLdType(node, "NewsArticle"));
   const date = normalizeIssueDate(
-    $("meta[property='article:published_time']").attr("content") ?? issue?.datePublished ?? articles[0]?.datePublished
+    $("meta[property='article:published_time']").attr("content") ??
+      issue?.datePublished ??
+      articles[0]?.datePublished ??
+      $("[typeof='PublicationIssue'] [property='datePublished']").first().text()
   );
-  const thumbnailUrl = issue?.thumbnailUrl;
+  const thumbnailUrl = issue?.thumbnailUrl ?? $("[typeof='PublicationIssue'] [property='thumbnailUrl'] img").first().attr("src");
   const headlines = articles.map((article) => normalizeText(article.headline ?? "")).filter(isNonEmptyString);
 
-  if (!date || !thumbnailUrl || headlines.length === 0) {
+  if (!date || !thumbnailUrl) {
     throw new Error("Could not find NYT front page issue metadata");
   }
 
@@ -316,13 +319,17 @@ function extractJsonLdNodes($: cheerio.CheerioAPI): JsonLdNode[] {
   const nodes: JsonLdNode[] = [];
   $("script[type='application/ld+json']").each((_, element) => {
     try {
-      const parsed = JSON.parse($(element).text()) as JsonLdNode;
+      const parsed = JSON.parse(sanitizeJsonLd($(element).text())) as JsonLdNode;
       nodes.push(...(Array.isArray(parsed["@graph"]) ? parsed["@graph"] : [parsed]));
     } catch {
       return;
     }
   });
   return nodes;
+}
+
+function sanitizeJsonLd(value: string): string {
+  return value.replace(/,\s*([}\]])/g, "$1");
 }
 
 function hasJsonLdType(node: JsonLdNode, type: string): boolean {
