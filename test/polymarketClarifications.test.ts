@@ -129,7 +129,7 @@ describe("fetchPolymarketClarificationUpdates", () => {
 
   it("keeps the first scan small enough for a Discord check response", async () => {
     const rpcUrl = "https://rpc.example";
-    let logParams: { fromBlock?: string; toBlock?: string } | null = null;
+    const logParams: Array<{ fromBlock?: string; toBlock?: string }> = [];
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       if (url.toString() !== rpcUrl) {
         throw new Error(`Unexpected fetch: ${url.toString()}`);
@@ -140,7 +140,7 @@ describe("fetchPolymarketClarificationUpdates", () => {
         return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x2710" });
       }
       if (body.method === "eth_getLogs") {
-        logParams = body.params[0];
+        logParams.push(body.params[0]);
         return jsonResponse({ jsonrpc: "2.0", id: 1, result: [] });
       }
 
@@ -153,11 +153,61 @@ describe("fetchPolymarketClarificationUpdates", () => {
       new Date("2026-05-21T00:00:00.000Z")
     );
 
-    expect(logParams).toMatchObject({ fromBlock: "0x2617", toBlock: "0x2710" });
+    expect(logParams[0]).toMatchObject({ fromBlock: "0x2617", toBlock: "0x267a" });
+    expect(logParams.at(-1)).toMatchObject({ fromBlock: "0x26df", toBlock: "0x2710" });
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
       lastScannedBlock: 10000,
       lastScanStartedBlock: 9751
+    });
+  });
+
+  it("splits eth_getLogs requests when an RPC rejects the block range", async () => {
+    const rpcUrl = "https://rpc.example";
+    const logParams: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (url.toString() !== rpcUrl) {
+        throw new Error(`Unexpected fetch: ${url.toString()}`);
+      }
+
+      const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, unknown>> };
+      if (body.method === "eth_blockNumber") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+      }
+      if (body.method === "eth_getLogs") {
+        const params = body.params[0];
+        logParams.push(params);
+        if (params.fromBlock === "0x3d5" && params.toBlock === "0x3e8") {
+          return jsonResponse({ jsonrpc: "2.0", id: 1, error: { code: -32602, message: "invalid block range params" } });
+        }
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: [] });
+      }
+
+      throw new Error(`Unexpected RPC method: ${body.method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketClarificationUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          lastScannedBlock: 980,
+          maxScanBlocksPerRun: 20
+        })
+      } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(result.posts).toHaveLength(0);
+    expect(logParams).toEqual([
+      { address: "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7", fromBlock: "0x3d5", toBlock: "0x3e8", topics: [ancillaryDataUpdatedTopic] },
+      { address: "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7", fromBlock: "0x3d5", toBlock: "0x3de", topics: [ancillaryDataUpdatedTopic] },
+      { address: "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7", fromBlock: "0x3df", toBlock: "0x3e8", topics: [ancillaryDataUpdatedTopic] }
+    ]);
+    expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
+      rpcUrl,
+      lastScannedBlock: 1000,
+      lastScanStartedBlock: 981
     });
   });
 

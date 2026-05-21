@@ -19,7 +19,7 @@ const getQuestionSelector = "0x58c039cd";
 const defaultConfirmations = 0;
 const defaultInitialLookbackBlocks = 250;
 const defaultMaxScanBlocksPerRun = 250;
-const rpcLogChunkBlocks = 2_000;
+const rpcLogChunkBlocks = 100;
 const rpcTimeoutMs = 5_000;
 
 type JsonRpcResponse<T> = {
@@ -303,23 +303,43 @@ async function fetchAncillaryDataUpdateLogs(
   let activeRpcUrl = preferredRpcUrl;
   for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += rpcLogChunkBlocks) {
     const chunkTo = Math.min(toBlock, chunkFrom + rpcLogChunkBlocks - 1);
-    const response = await polygonRpc<PolygonLog[]>(
+    const response = await fetchAncillaryDataUpdateLogRange(rpcUrls, chunkFrom, chunkTo, activeRpcUrl);
+    activeRpcUrl = response.rpcUrl;
+    logs.push(...response.result);
+  }
+  return { result: logs, rpcUrl: activeRpcUrl ?? rpcUrls[0] };
+}
+
+async function fetchAncillaryDataUpdateLogRange(
+  rpcUrls: string[],
+  fromBlock: number,
+  toBlock: number,
+  preferredRpcUrl?: string
+): Promise<PolygonRpcResult<PolygonLog[]>> {
+  try {
+    return await polygonRpc<PolygonLog[]>(
       rpcUrls,
       "eth_getLogs",
       [
         {
           address: polymarketBulletinBoardAddress,
-          fromBlock: toHexQuantity(chunkFrom),
-          toBlock: toHexQuantity(chunkTo),
+          fromBlock: toHexQuantity(fromBlock),
+          toBlock: toHexQuantity(toBlock),
           topics: [ancillaryDataUpdatedTopic]
         }
       ],
-      activeRpcUrl
+      preferredRpcUrl
     );
-    activeRpcUrl = response.rpcUrl;
-    logs.push(...response.result);
+  } catch (error) {
+    if (!isInvalidBlockRangeError(error) || fromBlock >= toBlock) {
+      throw error;
+    }
+
+    const midBlock = Math.floor((fromBlock + toBlock) / 2);
+    const first = await fetchAncillaryDataUpdateLogRange(rpcUrls, fromBlock, midBlock, preferredRpcUrl);
+    const second = await fetchAncillaryDataUpdateLogRange(rpcUrls, midBlock + 1, toBlock, first.rpcUrl);
+    return { result: [...first.result, ...second.result], rpcUrl: second.rpcUrl };
   }
-  return { result: logs, rpcUrl: activeRpcUrl ?? rpcUrls[0] };
 }
 
 async function fetchQuestionDetails(
@@ -517,6 +537,11 @@ function orderRpcUrls(rpcUrls: string[], preferredRpcUrl?: string): string[] {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isInvalidBlockRangeError(error: unknown): boolean {
+  const message = formatError(error).toLowerCase();
+  return message.includes("block range") && (message.includes("invalid") || message.includes("too large"));
 }
 
 function compareClarificationPostsDescending(left: EventMonitorPost, right: EventMonitorPost): number {
