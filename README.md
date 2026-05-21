@@ -38,6 +38,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `ornn-h200-index` | `/ornnh200` | `#ornnh200` | `ORNN H200 Alerts` | `🖥️` | Monitors finalized ORNN H200 Index daily chart values for GPU rental-price resolution checks. |
 | `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Monitors the US iPhone App Store Top Paid Apps top 2 list for Polymarket resolution checks. |
 | `polymarket-clarifications` | `/umaalert` | `#uma-alerts` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
+| `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
 | `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed and alerts only when live price crosses parsed Polymarket strikes. |
@@ -202,6 +203,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - MrBeast views monitors the YouTube channel About metadata total view count and compares it to Gamma-parsed billion-view market targets for dailyized rate and projection output.
 - ORNN B200 and H200 monitor the dashboard's GPU index-history API and use the second latest point as finalized because daily values finalize after the following day's point is published.
 - UMA Clarification Alerts subscribes to `AncillaryDataUpdated` events from Polymarket's UMA bulletin-board contract on Polygon over WebSocket, defaults to PublicNode's free Polygon Bor WebSocket, and uses dRPC, PublicNode, Tenderly's public gateway, and 1RPC as HTTP fallback candidates for manual checks/backfill. It can be pointed at another provider with `POLYGON_WS_URL`, `POLYGON_RPC_URL`, or comma-separated `POLYGON_RPC_URLS`.
+- UMA Dispute Alerts subscribes to UMA OptimisticOracle `DisputePrice` events on Polygon, filters requester addresses to known Polymarket UMA CTF Adapter deployments, and enriches alerts through the CLOB `markets-by-question-id` endpoint.
 - Pyth Natural Gas, WTI, XAGUSD, and XAUUSD parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.
 - AWS monitors the public AWS Health Dashboard history events JSON and treats status code `3` as the disrupted severity classification.
 - CDC fertility monitors the natality dashboard CSV for the 2026 Q1 general fertility rate row.

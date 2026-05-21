@@ -33,6 +33,7 @@ describe("adapter registry", () => {
     const ornnH200 = getAdapterByCommandName("ornnh200");
     const paidAppStore = getAdapterByCommandName("paidappstore");
     const umaAlert = getAdapterByCommandName("umaalert");
+    const umaDispute = getAdapterByCommandName("umadispute");
     const ngPrice = getAdapterByCommandName("ngprice");
     const wti = getAdapterByCommandName("wti");
     const xagusd = getAdapterByCommandName("xagusd");
@@ -227,6 +228,12 @@ describe("adapter registry", () => {
     expect(umaAlert.alertRoleEmoji).toBe("\uD83D\uDCE3");
     expect(umaAlert.alertRoleChannelName).toBe("uma-alert-roles");
     expect(umaAlert.getPollIntervalMinutes?.({} as never)).toBe(0.1);
+    expect(umaDispute.id).toBe("polymarket-disputes");
+    expect(umaDispute.defaultChannelName).toBe("uma-disputes");
+    expect(umaDispute.alertRoleName).toBe("UMA Dispute Alerts");
+    expect(umaDispute.alertRoleEmoji).toBe("\u2696\uFE0F");
+    expect(umaDispute.alertRoleChannelName).toBe("uma-alert-roles");
+    expect(umaDispute.getPollIntervalMinutes?.({} as never)).toBe(0.1);
     expect(ngPrice.id).toBe("pyth-natural-gas-strikes");
     expect(ngPrice.defaultChannelName).toBe("ngprice");
     expect(ngPrice.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-price-will-ng-hit-in-may-2026");

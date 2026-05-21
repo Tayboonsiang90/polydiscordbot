@@ -356,6 +356,16 @@ describe("adapter commands", () => {
       ])
     });
 
+    const umaDisputeCommand = buildAdapterCommands().find((command) => command.name === "umadispute");
+    expect(umaDisputeCommand?.toJSON()).toMatchObject({
+      name: "umadispute",
+      options: expect.arrayContaining([
+        expect.objectContaining({ name: "check" }),
+        expect.objectContaining({ name: "test" }),
+        expect.objectContaining({ name: "polymarket" })
+      ])
+    });
+
     const ngPriceCommand = buildAdapterCommands().find((command) => command.name === "ngprice");
     expect(ngPriceCommand?.toJSON()).toMatchObject({
       name: "ngprice",

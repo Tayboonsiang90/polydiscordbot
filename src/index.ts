@@ -6,6 +6,7 @@ import { PollScheduler } from "./poller.js";
 import { IntegrationProvisioner } from "./provisioner.js";
 import { handleReactionRoleChange } from "./reactionRoles.js";
 import { UmaAlertSubscriber } from "./umaAlertSubscriber.js";
+import { UmaDisputeSubscriber } from "./umaDisputeSubscriber.js";
 
 const heartbeatIntervalMs = 10 * 60 * 1000;
 const config = loadConfig();
@@ -21,6 +22,7 @@ const client = new Client({
 });
 let provisioner: IntegrationProvisioner | null = null;
 let umaAlertSubscriber: UmaAlertSubscriber | null = null;
+let umaDisputeSubscriber: UmaDisputeSubscriber | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -34,6 +36,12 @@ client.once(Events.ClientReady, (readyClient) => {
       umaAlertSubscriber.start();
     } catch (error) {
       console.error("UMA alert subscriber startup failed:", error);
+    }
+    try {
+      umaDisputeSubscriber = new UmaDisputeSubscriber(client, database, config);
+      umaDisputeSubscriber.start();
+    } catch (error) {
+      console.error("UMA dispute subscriber startup failed:", error);
     }
     heartbeatTimer = setInterval(() => {
       console.log(`Heartbeat: ${readyClient.user.tag} alive at ${new Date().toISOString()}`);
@@ -95,6 +103,7 @@ process.setUncaughtExceptionCaptureCallback((error) => {
 process.on("SIGINT", () => {
   provisioner?.stop();
   umaAlertSubscriber?.stop();
+  umaDisputeSubscriber?.stop();
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
