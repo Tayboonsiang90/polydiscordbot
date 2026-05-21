@@ -48,11 +48,16 @@ export type AdapterValue = {
 export type EventMonitorPost = {
   id: string;
   type: string;
+  alertTitle?: string;
+  sourceLabel?: string;
+  buttonLabel?: string;
+  mentionAlertRole?: boolean;
   text: string;
   qualifyingText: string;
   postedAt: Date;
   url: string;
   polymarketUrl?: string;
+  fields?: Array<{ name: string; value: string; inline?: boolean }>;
   imageUrls: string[];
   imageText: string;
   matchedTerms: string[];
@@ -63,6 +68,7 @@ export type EventMonitorResult = {
   posts: EventMonitorPost[];
   strikeTerms: string[];
   polymarketUrl?: string;
+  settingsJson?: string;
   observedAt: Date;
 };
 

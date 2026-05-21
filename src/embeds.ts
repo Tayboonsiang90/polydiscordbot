@@ -111,7 +111,7 @@ export function buildEventCheckEmbed(result: EventCheckResult): EmbedBuilder {
     .addFields(
       { name: "New posts", value: String(result.newPosts.length), inline: true },
       { name: "Latest seen post", value: result.latestSeenId ?? "none", inline: true },
-      { name: "Latest Truth", value: result.latestSeenUrl ?? "none", inline: false },
+      { name: "Latest source", value: result.latestSeenUrl ?? "none", inline: false },
       { name: "Strike terms", value: formatStrikeTerms(result.strikeTerms), inline: false },
       { name: "Checked at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false },
       { name: "Links", value: formatLinks(result.integration), inline: false }
@@ -210,11 +210,10 @@ export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
 export function buildEventPostEmbed(integration: Integration, post: EventMonitorPost): EmbedBuilder[] {
   const hasStrike = post.matchedTerms.length > 0;
   const hasImages = post.imageUrls.length > 0;
-  const title = hasStrike
-    ? "TEXT STRIKE DETECTED"
-    : hasImages
-      ? "New post - review attached images manually"
-      : "New post";
+  const title =
+    post.alertTitle ??
+    (hasStrike ? "TEXT STRIKE DETECTED" : hasImages ? "New post - review attached images manually" : "New post");
+  const sourceLabel = post.sourceLabel ?? "Truth Social";
   const embeds = [
     baseEmbed(integration, title)
       .setColor(hasStrike ? errorColor : successColor)
@@ -224,7 +223,12 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
           : []),
         { name: "Post type", value: post.type, inline: true },
         { name: "Posted at", value: formatSingaporeDateTime(post.postedAt), inline: false },
-        { name: "Truth Social", value: post.url, inline: false },
+        { name: sourceLabel, value: post.url, inline: false },
+        ...(post.fields ?? []).map((field) => ({
+          name: field.name,
+          value: truncateEmbedValue(field.value),
+          inline: field.inline ?? false
+        })),
         { name: "Matched text terms", value: post.matchedTerms.length ? post.matchedTerms.join(", ") : "none", inline: false },
         {
           name: "Image review",
@@ -251,7 +255,7 @@ export function buildEventPostMessagePayload(integration: Integration, post: Eve
   return {
     content,
     embeds: buildEventPostEmbed(integration, post),
-    components: [buildEventSourceLinkRow(post.url)],
+    components: [buildEventSourceLinkRow(post.url, post.buttonLabel)],
     allowedMentions: content && integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
   };
 }
@@ -365,8 +369,10 @@ function baseEmbed(integration: Integration, title: string): EmbedBuilder {
     .setTitle(`${integration.displayName} - ${title}`);
 }
 
-function buildEventSourceLinkRow(url: string): ActionRowBuilder<ButtonBuilder> {
-  const label = url.includes("truthsocial.com") ? "Open Truth" : "Open source";
+function buildEventSourceLinkRow(url: string, labelOverride?: string): ActionRowBuilder<ButtonBuilder> {
+  const label =
+    labelOverride ??
+    (url.includes("truthsocial.com") ? "Open Truth" : url.includes("polygonscan.com") ? "Open transaction" : "Open source");
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url)
   );
@@ -375,7 +381,12 @@ function buildEventSourceLinkRow(url: string): ActionRowBuilder<ButtonBuilder> {
 function formatEventPostMessageContent(integration: Integration, post: EventMonitorPost): string | undefined {
   const roleMention = integration.alertRoleId ? `<@&${integration.alertRoleId}>` : undefined;
   if (!post.matchedTerms.length) {
-    return undefined;
+    if (!post.mentionAlertRole) {
+      return undefined;
+    }
+
+    const title = post.alertTitle ?? "New post";
+    return roleMention ? `${roleMention}\n**${title}**` : `**${title}**`;
   }
 
   const strikeLine = `TEXT STRIKE DETECTED: ${post.matchedTerms.join(", ")}`;

@@ -32,6 +32,7 @@ describe("adapter registry", () => {
     const ornnB200 = getAdapterByCommandName("ornnb200");
     const ornnH200 = getAdapterByCommandName("ornnh200");
     const paidAppStore = getAdapterByCommandName("paidappstore");
+    const pmClarify = getAdapterByCommandName("pmclarify");
     const ngPrice = getAdapterByCommandName("ngprice");
     const wti = getAdapterByCommandName("wti");
     const xagusd = getAdapterByCommandName("xagusd");
@@ -219,6 +220,11 @@ describe("adapter registry", () => {
       minute: 0,
       windowMinutes: 5
     });
+    expect(pmClarify.id).toBe("polymarket-clarifications");
+    expect(pmClarify.defaultChannelName).toBe("pmclarify");
+    expect(pmClarify.alertRoleName).toBe("Polymarket Clarification Alerts");
+    expect(pmClarify.alertRoleEmoji).toBe("\uD83D\uDCE3");
+    expect(pmClarify.getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(ngPrice.id).toBe("pyth-natural-gas-strikes");
     expect(ngPrice.defaultChannelName).toBe("ngprice");
     expect(ngPrice.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-price-will-ng-hit-in-may-2026");

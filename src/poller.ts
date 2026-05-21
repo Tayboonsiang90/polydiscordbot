@@ -153,10 +153,11 @@ export async function checkEventIntegration(database: BotDatabase, integration: 
       ? database.setPolymarketUrl(settingsIntegration.id, result.polymarketUrl)
       : settingsIntegration;
   const latestSeenId = result.posts[0]?.id ?? integration.lastValue;
-  const eventSelection = selectNewEventPosts(result.posts, integration.lastValue, activeIntegration.settingsJson);
+  const baseSettingsJson = result.settingsJson ?? activeIntegration.settingsJson;
+  const eventSelection = selectNewEventPosts(result.posts, integration.lastValue, baseSettingsJson);
   const candidatePosts =
     integration.lastValue === null && adapter.shouldAlertOnEventPost ? result.posts.slice(0, 1) : eventSelection.newPosts;
-  const eventSettingsJson = updateEventSeenPostIds(activeIntegration.settingsJson, eventSelection.nextSeenPostIds);
+  const eventSettingsJson = updateEventSeenPostIds(baseSettingsJson, eventSelection.nextSeenPostIds);
   const eventStateIntegration =
     eventSettingsJson !== activeIntegration.settingsJson
       ? database.setSettingsJson(activeIntegration.id, eventSettingsJson)

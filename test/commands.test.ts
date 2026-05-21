@@ -346,6 +346,16 @@ describe("adapter commands", () => {
       ])
     });
 
+    const pmClarifyCommand = buildAdapterCommands().find((command) => command.name === "pmclarify");
+    expect(pmClarifyCommand?.toJSON()).toMatchObject({
+      name: "pmclarify",
+      options: expect.arrayContaining([
+        expect.objectContaining({ name: "check" }),
+        expect.objectContaining({ name: "test" }),
+        expect.objectContaining({ name: "polymarket" })
+      ])
+    });
+
     const ngPriceCommand = buildAdapterCommands().find((command) => command.name === "ngprice");
     expect(ngPriceCommand?.toJSON()).toMatchObject({
       name: "ngprice",
@@ -646,6 +656,41 @@ describe("adapter commands", () => {
 
     expect(payload.content).toBeUndefined();
     expect(payload.allowedMentions).toEqual({ parse: [] });
+  });
+
+  it("mentions alert roles for generic event alerts that request a ping", () => {
+    const post: EventMonitorPost = {
+      id: "0xtx:0x1",
+      type: "Polymarket clarification",
+      alertTitle: "Polymarket clarification",
+      sourceLabel: "On-chain tx",
+      buttonLabel: "Open transaction",
+      mentionAlertRole: true,
+      text: "Clarification issued.",
+      qualifyingText: "Clarification issued.",
+      postedAt: new Date("2026-05-20T00:00:00.000Z"),
+      url: "https://polygonscan.com/tx/0xtx",
+      polymarketUrl: "https://polymarket.com/event/test",
+      fields: [{ name: "Question", value: "Test market", inline: false }],
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: []
+    };
+    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "polymarket-clarifications" }, post);
+    const embed = payload.embeds[0].toJSON();
+
+    expect(payload.content).toBe("<@&role>\n**Polymarket clarification**");
+    expect(payload.allowedMentions).toEqual({ roles: ["role"] });
+    expect(payload.components[0].toJSON()).toMatchObject({
+      components: [expect.objectContaining({ label: "Open transaction", style: 5, url: post.url })]
+    });
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "On-chain tx", value: post.url }),
+        expect.objectContaining({ name: "Question", value: "Test market" })
+      ])
+    );
   });
 
   it("uses the post-specific Polymarket URL in Trump Truth event alerts", () => {
