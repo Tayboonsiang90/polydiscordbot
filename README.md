@@ -94,6 +94,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    KAITO_INFOMARKETS_API_URL=...
    KAITO_API_KEY=...
    POLYGON_RPC_URL=...
+   POLYGON_RPC_URLS=...
    POLYGON_WS_URL=...
    ```
 
@@ -200,7 +201,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - MrBeast subscribers monitors the YouTube channel About metadata subscriber count and compares it to Gamma-parsed million-subscriber market targets for dailyized rate and projection output.
 - MrBeast views monitors the YouTube channel About metadata total view count and compares it to Gamma-parsed billion-view market targets for dailyized rate and projection output.
 - ORNN B200 and H200 monitor the dashboard's GPU index-history API and use the second latest point as finalized because daily values finalize after the following day's point is published.
-- UMA Clarification Alerts subscribes to `AncillaryDataUpdated` events from Polymarket's UMA bulletin-board contract on Polygon over WebSocket, defaults to PublicNode's free Polygon Bor WS/RPC, and can be pointed at another provider with `POLYGON_WS_URL` and `POLYGON_RPC_URL`.
+- UMA Clarification Alerts subscribes to `AncillaryDataUpdated` events from Polymarket's UMA bulletin-board contract on Polygon over WebSocket, defaults to PublicNode's free Polygon Bor WebSocket, and uses dRPC, PublicNode, Tenderly's public gateway, and 1RPC as HTTP fallback candidates for manual checks/backfill. It can be pointed at another provider with `POLYGON_WS_URL`, `POLYGON_RPC_URL`, or comma-separated `POLYGON_RPC_URLS`.
 - Pyth Natural Gas, WTI, XAGUSD, and XAUUSD parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.
 - AWS monitors the public AWS Health Dashboard history events JSON and treats status code `3` as the disrupted severity classification.
 - CDC fertility monitors the natality dashboard CSV for the 2026 Q1 general fertility rate row.

@@ -6,7 +6,13 @@ export const polymarketBulletinBoardSourceUrl = `https://polygonscan.com/address
 export const ancillaryDataUpdatedTopic =
   "0x0059e11815211969c0c4aaf3f498b52b6c2f2d14f286275d0862d70de22a836b";
 
-export const defaultPolygonRpcUrl = "https://polygon-bor-rpc.publicnode.com";
+export const defaultPolygonRpcUrls = [
+  "https://polygon.drpc.org",
+  "https://polygon-bor-rpc.publicnode.com",
+  "https://gateway.tenderly.co/public/polygon",
+  "https://1rpc.io/matic"
+];
+export const defaultPolygonRpcUrl = defaultPolygonRpcUrls[0];
 export const defaultPolygonWsUrl = "wss://polygon-bor-rpc.publicnode.com";
 const gammaMarketApiUrl = "https://gamma-api.polymarket.com/markets";
 const getQuestionSelector = "0x58c039cd";
@@ -14,11 +20,16 @@ const defaultConfirmations = 0;
 const defaultInitialLookbackBlocks = 250;
 const defaultMaxScanBlocksPerRun = 250;
 const rpcLogChunkBlocks = 2_000;
-const rpcTimeoutMs = 20_000;
+const rpcTimeoutMs = 5_000;
 
 type JsonRpcResponse<T> = {
   result?: T;
   error?: { code: number; message: string };
+};
+
+type PolygonRpcResult<T> = {
+  result: T;
+  rpcUrl: string;
 };
 
 export type PolymarketClarificationSettings = {
@@ -97,8 +108,10 @@ export async function fetchPolymarketClarificationUpdates(
   now = new Date()
 ): Promise<EventMonitorResult> {
   const settings = parsePolymarketClarificationSettings(integration.settingsJson);
-  const rpcUrl = getPolymarketClarificationRpcUrl(settings);
-  const latestBlock = await fetchLatestBlockNumber(rpcUrl);
+  const rpcUrls = getPolymarketClarificationRpcUrls(settings);
+  const latestBlockResult = await fetchLatestBlockNumber(rpcUrls);
+  const latestBlock = latestBlockResult.result;
+  let activeRpcUrl = latestBlockResult.rpcUrl;
   const confirmations = getIntegerSetting(settings.confirmations, defaultConfirmations, 0, 1_000);
   const confirmedLatestBlock = Math.max(0, latestBlock - confirmations);
   const fromBlock = getNextFromBlock(settings, confirmedLatestBlock);
@@ -106,7 +119,11 @@ export async function fetchPolymarketClarificationUpdates(
     ? Math.min(confirmedLatestBlock, fromBlock + getMaxScanBlocksPerRun(settings) - 1)
     : confirmedLatestBlock;
 
-  const logs = fromBlock <= toBlock ? await fetchAncillaryDataUpdateLogs(rpcUrl, fromBlock, toBlock) : [];
+  const logsResult = fromBlock <= toBlock
+    ? await fetchAncillaryDataUpdateLogs(rpcUrls, fromBlock, toBlock, activeRpcUrl)
+    : { result: [], rpcUrl: activeRpcUrl };
+  const logs = logsResult.result;
+  activeRpcUrl = logsResult.rpcUrl;
   const detailsByQuestionId = new Map<string, QuestionDetails | null>();
   const posts: EventMonitorPost[] = [];
 
@@ -118,7 +135,7 @@ export async function fetchPolymarketClarificationUpdates(
 
     let details = detailsByQuestionId.get(questionId);
     if (details === undefined) {
-      details = await fetchQuestionDetails(rpcUrl, questionId).catch(() => null);
+      details = await fetchQuestionDetails(rpcUrls, questionId, activeRpcUrl).catch(() => null);
       detailsByQuestionId.set(questionId, details);
     }
 
@@ -141,7 +158,8 @@ export async function fetchPolymarketClarificationUpdates(
       { name: "Clarifications in scanned range", value: String(logs.length), inline: true },
       { name: "Scanned blocks", value: fromBlock <= toBlock ? `${fromBlock} to ${toBlock}` : "already at latest block", inline: false },
       { name: "Confirmed head", value: String(confirmedLatestBlock), inline: true },
-      { name: "Data source", value: `${rpcUrl} via eth_getLogs fallback`, inline: false }
+      { name: "Data source", value: `${activeRpcUrl} via eth_getLogs fallback`, inline: false },
+      ...(rpcUrls.length > 1 ? [{ name: "RPC fallback pool", value: `${rpcUrls.length} endpoints configured`, inline: true }] : [])
     ],
     observedAt: now
   };
@@ -187,13 +205,16 @@ export function normalizePolymarketClarificationLog(log: PolygonLog, details: Qu
   };
 }
 
-export async function buildPolymarketClarificationPostFromLog(log: PolygonLog, rpcUrl = defaultPolygonRpcUrl): Promise<EventMonitorPost | null> {
+export async function buildPolymarketClarificationPostFromLog(
+  log: PolygonLog,
+  rpcUrls: string | string[] = defaultPolygonRpcUrls
+): Promise<EventMonitorPost | null> {
   const questionId = getTopic(log, 1);
   if (!questionId) {
     return null;
   }
 
-  const details = await fetchQuestionDetails(rpcUrl, questionId).catch(() => null);
+  const details = await fetchQuestionDetails(normalizeRpcUrls(rpcUrls), questionId).catch(() => null);
   return normalizePolymarketClarificationLog(log, details ?? { questionId });
 }
 
@@ -238,7 +259,16 @@ export function parsePolymarketClarificationSettings(settingsJson: string | null
 }
 
 export function getPolymarketClarificationRpcUrl(settings: PolymarketClarificationSettings = {}): string {
-  return firstNonEmptyString(settings.rpcUrl, process.env.POLYGON_RPC_URL) ?? defaultPolygonRpcUrl;
+  return getPolymarketClarificationRpcUrls(settings)[0];
+}
+
+export function getPolymarketClarificationRpcUrls(settings: PolymarketClarificationSettings = {}): string[] {
+  const configured = [
+    ...splitRpcUrls(settings.rpcUrl),
+    ...splitRpcUrls(process.env.POLYGON_RPC_URLS),
+    ...splitRpcUrls(process.env.POLYGON_RPC_URL)
+  ];
+  return uniqueStrings(configured.length > 0 ? [...configured, ...defaultPolygonRpcUrls] : defaultPolygonRpcUrls);
 }
 
 export function getPolymarketClarificationWsUrl(settings: PolymarketClarificationSettings = {}): string {
@@ -258,34 +288,55 @@ function getMaxScanBlocksPerRun(settings: PolymarketClarificationSettings): numb
   return getIntegerSetting(settings.maxScanBlocksPerRun, defaultMaxScanBlocksPerRun, 1, 100_000);
 }
 
-async function fetchLatestBlockNumber(rpcUrl: string): Promise<number> {
-  return parseHexQuantity(await polygonRpc<string>(rpcUrl, "eth_blockNumber", []));
+async function fetchLatestBlockNumber(rpcUrls: string[]): Promise<PolygonRpcResult<number>> {
+  const response = await polygonRpc<string>(rpcUrls, "eth_blockNumber", []);
+  return { result: parseHexQuantity(response.result), rpcUrl: response.rpcUrl };
 }
 
-async function fetchAncillaryDataUpdateLogs(rpcUrl: string, fromBlock: number, toBlock: number): Promise<PolygonLog[]> {
+async function fetchAncillaryDataUpdateLogs(
+  rpcUrls: string[],
+  fromBlock: number,
+  toBlock: number,
+  preferredRpcUrl?: string
+): Promise<PolygonRpcResult<PolygonLog[]>> {
   const logs: PolygonLog[] = [];
+  let activeRpcUrl = preferredRpcUrl;
   for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += rpcLogChunkBlocks) {
     const chunkTo = Math.min(toBlock, chunkFrom + rpcLogChunkBlocks - 1);
-    logs.push(
-      ...(await polygonRpc<PolygonLog[]>(rpcUrl, "eth_getLogs", [
+    const response = await polygonRpc<PolygonLog[]>(
+      rpcUrls,
+      "eth_getLogs",
+      [
         {
           address: polymarketBulletinBoardAddress,
           fromBlock: toHexQuantity(chunkFrom),
           toBlock: toHexQuantity(chunkTo),
           topics: [ancillaryDataUpdatedTopic]
         }
-      ]))
+      ],
+      activeRpcUrl
     );
+    activeRpcUrl = response.rpcUrl;
+    logs.push(...response.result);
   }
-  return logs;
+  return { result: logs, rpcUrl: activeRpcUrl ?? rpcUrls[0] };
 }
 
-async function fetchQuestionDetails(rpcUrl: string, questionId: string): Promise<QuestionDetails> {
-  const result = await polygonRpc<string>(rpcUrl, "eth_call", [
-    { to: polymarketBulletinBoardAddress, data: `${getQuestionSelector}${stripHexPrefix(questionId)}` },
-    "latest"
-  ]);
-  const questionData = decodeUmaCtfQuestionData(result);
+async function fetchQuestionDetails(
+  rpcUrls: string[],
+  questionId: string,
+  preferredRpcUrl?: string
+): Promise<QuestionDetails> {
+  const response = await polygonRpc<string>(
+    rpcUrls,
+    "eth_call",
+    [
+      { to: polymarketBulletinBoardAddress, data: `${getQuestionSelector}${stripHexPrefix(questionId)}` },
+      "latest"
+    ],
+    preferredRpcUrl
+  );
+  const questionData = decodeUmaCtfQuestionData(response.result);
   const parsed = parsePolymarketAncillaryData(questionData.ancillaryData);
   const gammaMarket = parsed.marketId ? await fetchGammaMarket(parsed.marketId).catch(() => null) : null;
 
@@ -310,29 +361,45 @@ async function fetchGammaMarket(marketId: string): Promise<GammaMarket | null> {
   return payload && typeof payload === "object" ? payload : null;
 }
 
-async function polygonRpc<T>(rpcUrl: string, method: string, params: unknown[]): Promise<T> {
-  const response = await fetchWithTimeout(
-    rpcUrl,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "user-agent": "PolymarketResolutionMonitorBot/0.1"
-      },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+async function polygonRpc<T>(
+  rpcUrls: string[],
+  method: string,
+  params: unknown[],
+  preferredRpcUrl?: string
+): Promise<PolygonRpcResult<T>> {
+  const errors: string[] = [];
+  for (const rpcUrl of orderRpcUrls(rpcUrls, preferredRpcUrl)) {
+    try {
+      const result = await polygonRpcOne<T>(rpcUrl, method, params);
+      return { result, rpcUrl };
+    } catch (error) {
+      errors.push(`${rpcUrl}: ${formatError(error)}`);
+    }
+  }
+
+  throw new Error(`Polygon RPC ${method} failed on all endpoints: ${errors.join("; ")}`);
+}
+
+async function polygonRpcOne<T>(rpcUrl: string, method: string, params: unknown[]): Promise<T> {
+  const response = await fetch(rpcUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "user-agent": "PolymarketResolutionMonitorBot/0.1"
     },
-    rpcTimeoutMs
-  );
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: AbortSignal.timeout(rpcTimeoutMs)
+  });
   if (!response.ok) {
-    throw new Error(`Polygon RPC returned HTTP ${response.status}`);
+    throw new Error(`HTTP ${response.status}`);
   }
 
   const payload = (await response.json()) as JsonRpcResponse<T>;
   if (payload.error) {
-    throw new Error(`Polygon RPC ${method} failed: ${payload.error.message}`);
+    throw new Error(payload.error.message);
   }
   if (payload.result === undefined) {
-    throw new Error(`Polygon RPC ${method} returned no result`);
+    throw new Error("returned no result");
   }
 
   return payload.result;
@@ -421,6 +488,35 @@ function firstNonEmptyString(...values: unknown[]): string | null {
     }
   }
   return null;
+}
+
+function normalizeRpcUrls(value: string | string[]): string[] {
+  const urls = uniqueStrings(Array.isArray(value) ? value : splitRpcUrls(value));
+  return urls.length > 0 ? urls : defaultPolygonRpcUrls;
+}
+
+function splitRpcUrls(value: unknown): string[] {
+  return typeof value === "string"
+    ? value
+        .split(/[,\s]+/)
+        .map((candidate) => candidate.trim())
+        .filter(Boolean)
+    : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values));
+}
+
+function orderRpcUrls(rpcUrls: string[], preferredRpcUrl?: string): string[] {
+  const urls = uniqueStrings(rpcUrls);
+  return preferredRpcUrl && urls.includes(preferredRpcUrl)
+    ? [preferredRpcUrl, ...urls.filter((url) => url !== preferredRpcUrl)]
+    : urls;
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function compareClarificationPostsDescending(left: EventMonitorPost, right: EventMonitorPost): number {

@@ -6,7 +6,7 @@ import { buildEventPostMessagePayload } from "./embeds.js";
 import {
   ancillaryDataUpdatedTopic,
   buildPolymarketClarificationPostFromLog,
-  getPolymarketClarificationRpcUrl,
+  getPolymarketClarificationRpcUrls,
   getPolymarketClarificationWsUrl,
   parseHexQuantity,
   parsePolymarketClarificationSettings,
@@ -144,7 +144,7 @@ export class UmaAlertSubscriber {
       }
 
       const settings = parsePolymarketClarificationSettings(integration.settingsJson);
-      const post = await buildPolymarketClarificationPostFromLog(log, getPolymarketClarificationRpcUrl(settings));
+      const post = await buildPolymarketClarificationPostFromLog(log, getPolymarketClarificationRpcUrls(settings));
       if (!post) {
         return;
       }

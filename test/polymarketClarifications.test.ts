@@ -3,6 +3,7 @@ import {
   ancillaryDataUpdatedTopic,
   decodeUmaCtfQuestionData,
   decodeUtf8AbiBytes,
+  defaultPolygonRpcUrls,
   fetchPolymarketClarificationUpdates,
   normalizePolymarketClarificationLog,
   parsePolymarketAncillaryData,
@@ -16,6 +17,7 @@ const transactionHash = "0xfd8e083f7ba43f100f5d662979bdd1a4d5726d626b1f2f47ddeb7
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("Polymarket clarification parsing", () => {
@@ -157,6 +159,51 @@ describe("fetchPolymarketClarificationUpdates", () => {
       lastScannedBlock: 10000,
       lastScanStartedBlock: 9751
     });
+  });
+
+  it("falls back to another public HTTP RPC when the configured endpoint times out", async () => {
+    const slowRpcUrl = "https://slow-rpc.example";
+    const fallbackRpcUrl = defaultPolygonRpcUrls[0];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const target = url.toString();
+      if (target === slowRpcUrl) {
+        throw new Error("The operation was aborted due to timeout");
+      }
+      if (target !== fallbackRpcUrl) {
+        throw new Error(`Unexpected fetch: ${target}`);
+      }
+
+      const body = JSON.parse(String(init?.body)) as { method: string };
+      if (body.method === "eth_blockNumber") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+      }
+      if (body.method === "eth_getLogs") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: [] });
+      }
+
+      throw new Error(`Unexpected RPC method: ${body.method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketClarificationUpdates(
+      {
+        settingsJson: JSON.stringify({ rpcUrl: slowRpcUrl, lastScannedBlock: 980 })
+      } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(result.posts).toHaveLength(0);
+    expect(result.checkFields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "Data source", value: `${fallbackRpcUrl} via eth_getLogs fallback` })])
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      slowRpcUrl,
+      expect.objectContaining({ method: "POST", body: expect.stringContaining("eth_blockNumber") })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      fallbackRpcUrl,
+      expect.objectContaining({ method: "POST", body: expect.stringContaining("eth_getLogs") })
+    );
   });
 });
 
