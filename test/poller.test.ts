@@ -4,6 +4,7 @@ import {
   getEffectivePollIntervalMinutes,
   getErrorNoticeDecision,
   getPollIntervalReason,
+  formatSchedulerNetworkError,
   hasValueChanged,
   selectNewEventPosts
 } from "../src/poller.js";
@@ -100,6 +101,19 @@ describe("getErrorNoticeDecision", () => {
     expect(second.shouldSend).toBe(true);
     expect(second.message).toBe("HTTP 503");
     expect(second.nextState.signature).toBe("HTTP 503");
+  });
+});
+
+describe("formatSchedulerNetworkError", () => {
+  it("formats transient Discord DNS failures without a full stack", () => {
+    const error = Object.assign(new Error("getaddrinfo EAI_AGAIN discord.com"), {
+      code: "EAI_AGAIN",
+      hostname: "discord.com"
+    });
+
+    expect(formatSchedulerNetworkError(error)).toBe(
+      "Discord/network send failed (EAI_AGAIN): getaddrinfo EAI_AGAIN discord.com. This is usually Pi DNS/VPN/router access to Discord; scheduler will retry."
+    );
   });
 });
 

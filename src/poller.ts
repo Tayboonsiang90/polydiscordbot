@@ -38,6 +38,8 @@ export type EventCheckResult = {
 };
 
 const maxEventSeenPostIds = 100;
+const schedulerErrorNoticeWindowMs = 10 * 60_000;
+let schedulerErrorNotice: ErrorNoticeState | undefined;
 
 export type ErrorNoticeState = {
   signature: string;
@@ -558,7 +560,17 @@ export function getPollIntervalReason(integration: Integration, now: Date = new 
 }
 
 function logSchedulerError(error: unknown): void {
-  console.error("Poll scheduler error:", error);
+  if (!isTransientNetworkError(error)) {
+    console.error("Poll scheduler error:", error);
+    return;
+  }
+
+  const message = formatSchedulerNetworkError(error);
+  const decision = getErrorNoticeDecision(schedulerErrorNotice, message, Date.now(), schedulerErrorNoticeWindowMs);
+  schedulerErrorNotice = decision.nextState;
+  if (decision.shouldSend) {
+    console.error(`Poll scheduler error: ${decision.message}`);
+  }
 }
 
 function logMarketEndLookupError(integration: Integration, error: unknown): void {
@@ -567,6 +579,42 @@ function logMarketEndLookupError(integration: Integration, error: unknown): void
 
 function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export function formatSchedulerNetworkError(error: unknown): string {
+  const codes = [...new Set(collectErrorCodes(error))].join(", ");
+  const codeText = codes ? ` (${codes})` : "";
+  return `Discord/network send failed${codeText}: ${formatErrorMessage(error)}. This is usually Pi DNS/VPN/router access to Discord; scheduler will retry.`;
+}
+
+function isTransientNetworkError(error: unknown): boolean {
+  const codes = collectErrorCodes(error);
+  const message = formatErrorMessage(error).toLowerCase();
+  return (
+    codes.some((code) =>
+      ["EAI_AGAIN", "ECONNRESET", "ECONNABORTED", "EHOSTUNREACH", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].includes(code)
+    ) ||
+    message.includes("eai_again") ||
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("connection reset")
+  );
+}
+
+function collectErrorCodes(error: unknown): string[] {
+  if (!error || typeof error !== "object") {
+    return [];
+  }
+
+  const codes: string[] = [];
+  const maybeCode = "code" in error ? error.code : undefined;
+  if (typeof maybeCode === "string") {
+    codes.push(maybeCode);
+  }
+
+  const maybeCause = "cause" in error ? error.cause : undefined;
+  codes.push(...collectErrorCodes(maybeCause));
+  return codes;
 }
 
 function getZonedDateTimeParts(date: Date, timeZone: string): { date: string; hour: number; minute: number } {
