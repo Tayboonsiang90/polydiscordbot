@@ -245,7 +245,9 @@ async function syncGroupedRoleMessage(
 }
 
 async function removeObsoleteRoleReactions(roleMessage: Message, entries: AlertRoleEntry[]): Promise<void> {
-  const allowedEmojis = new Set(entries.map((entry) => entry.adapter.alertRoleEmoji));
+  const allowedEmojis = new Set(
+    entries.flatMap((entry) => [entry.adapter.alertRoleEmoji, entry.integration.roleEmoji].filter(isNonEmptyString))
+  );
 
   for (const reaction of roleMessage.reactions.cache.values()) {
     const emoji = reaction.emoji.name ?? reaction.emoji.toString();
@@ -361,6 +363,10 @@ function isGroupedRoleMessage(message: Message, title: string): boolean {
 
 function isUnknownEmojiError(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === 10014);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
 }
 
 function logProvisionerError(error: unknown): void {

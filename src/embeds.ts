@@ -426,11 +426,12 @@ function formatStrikeSearchHits(result: StrikeSearchResult): string {
     return "No matching posts found in the active timeframe.";
   }
 
-  const lines = result.hits.slice(0, 10).map((hit, index) => {
+  const shownHits = result.hits.slice(0, 10);
+  const lines = shownHits.map((hit, index) => {
     const snippet = hit.snippet ? ` - ${hit.snippet}` : "";
     return `${index + 1}. [${hit.postedAt}](${hit.url})${snippet}`;
   });
-  const remaining = result.totalResults - result.hits.length;
+  const remaining = result.totalResults - shownHits.length;
   if (remaining > 0) {
     lines.push(`...and ${remaining} more result(s). Open the search link for the full list.`);
   }

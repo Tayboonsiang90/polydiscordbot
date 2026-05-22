@@ -282,6 +282,11 @@ export async function handleAdapterCommand(
 
     await interaction.deferReply();
     let updated = integration;
+    const refreshedSettingsJson = adapter.refreshSettings ? await adapter.refreshSettings(updated) : updated.settingsJson;
+    if (refreshedSettingsJson && refreshedSettingsJson !== updated.settingsJson) {
+      updated = database.setSettingsJson(updated.id, refreshedSettingsJson);
+    }
+
     const settings = adapter.getStrikeTerms?.(updated) ?? parseTrumpTruthSettings(updated.settingsJson);
     if (settings.parsedFromUrl && settings.parsedFromUrl !== updated.polymarketUrl) {
       updated = database.setPolymarketUrl(updated.id, settings.parsedFromUrl);
@@ -351,7 +356,7 @@ export async function handleAdapterCommand(
       queue.settingsJson && queue.settingsJson !== integration.settingsJson
         ? database.setSettingsJson(integration.id, queue.settingsJson)
         : integration;
-    if (queue.activeUrl && queue.activeUrl !== updated.polymarketUrl) {
+    if (queue.activeUrl !== updated.polymarketUrl) {
       updated = database.setPolymarketUrl(updated.id, queue.activeUrl);
     }
 

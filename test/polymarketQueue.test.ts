@@ -86,4 +86,20 @@ describe("Polymarket URL queue", () => {
     expect(resolved.activeUrl).toBe("https://polymarket.com/event/number-of-tsa-passengers-may-11-may-17");
     expect(settings.polymarketMarkets).toHaveLength(1);
   });
+
+  it("clears an expired dated current market when no queued market is active", () => {
+    const first = upsertPolymarketQueueUrl(
+      integration,
+      "https://polymarket.com/event/number-of-tsa-passengers-may-4-may-10",
+      new Date("2026-05-10T12:00:00.000Z")
+    );
+    const resolved = resolveIntegrationPolymarketQueue(
+      { ...integration, settingsJson: first.settingsJson },
+      new Date("2026-05-18T12:00:00.000Z")
+    );
+    const settings = JSON.parse(resolved.settingsJson ?? "{}") as { polymarketMarkets: unknown[] };
+
+    expect(resolved.activeUrl).toBeNull();
+    expect(settings.polymarketMarkets).toHaveLength(0);
+  });
 });

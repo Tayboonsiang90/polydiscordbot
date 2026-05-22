@@ -55,6 +55,21 @@ describe("fetchWithTimeout", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("retries temporary DNS failures", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error("getaddrinfo EAI_AGAIN discord.com"), { code: "EAI_AGAIN" }))
+      .mockResolvedValueOnce(new Response("ok"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const assertion = expect(fetchWithTimeout("https://discord.com")).resolves.toMatchObject({ ok: true });
+    await vi.runAllTimersAsync();
+
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("does not retry non-transient fetch errors", async () => {
     const fetchMock = vi.fn(async () => {
       throw new Error("bad request body");

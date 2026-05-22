@@ -458,8 +458,9 @@ export class PollScheduler {
 
         const result = await captureDailySnapshot(this.database, latest, latestSnapshotDate);
         await this.sendSnapshot(latest.channelId, result);
+        this.errorNotices.delete(latest.id);
       } catch (error) {
-        await this.sendError(integration.channelId, integration, error).catch(logSchedulerError);
+        await this.sendErrorIfDue(integration.channelId, integration, error).catch(logSchedulerError);
       } finally {
         this.snapshotRuns.delete(integration.id);
       }
@@ -542,7 +543,7 @@ function activateQueuedPolymarket(database: BotDatabase, integration: Integratio
   if (queue.settingsJson && queue.settingsJson !== updated.settingsJson) {
     updated = database.setSettingsJson(updated.id, queue.settingsJson);
   }
-  if (queue.activeUrl && queue.activeUrl !== updated.polymarketUrl) {
+  if (queue.activeUrl !== updated.polymarketUrl) {
     updated = database.setPolymarketUrl(updated.id, queue.activeUrl);
   }
 

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BotDatabase } from "../src/database.js";
 import {
+  clearMarketEndLookupBackoff,
   fetchPolymarketEndDateFromGamma,
   getDueMarketEndReminders,
   getPolymarketSlug,
@@ -20,6 +21,7 @@ const integration = {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  clearMarketEndLookupBackoff();
   if (tempDir) {
     rmSync(tempDir, { recursive: true, force: true });
     tempDir = null;
@@ -139,6 +141,58 @@ describe("Polymarket market end reminders", () => {
       missingWarningDue: false
     });
     expect(fetch).toHaveBeenCalledTimes(1);
+
+    database.close();
+  });
+
+  it("uses queued ET market end windows without calling Gamma", async () => {
+    const database = createTestDatabase();
+    const polymarketUrl = "https://polymarket.com/event/number-of-tsa-passengers-may-11-may-17";
+    const storedIntegration = database.createIntegration({
+      guildId: "guild",
+      channelId: "channel",
+      adapterId: "tsa-passengers",
+      displayName: "TSA Passenger Volumes",
+      sourceUrl: "https://www.tsa.gov/travel/passenger-volumes",
+      polymarketUrl,
+      settingsJson: JSON.stringify({
+        polymarketMarkets: [
+          {
+            url: polymarketUrl,
+            slug: "number-of-tsa-passengers-may-11-may-17",
+            startAt: "2026-05-11T04:00:00.000Z",
+            endAt: "2026-05-18T03:59:00.000Z",
+            addedAt: "2026-05-10T00:00:00.000Z"
+          }
+        ]
+      }),
+      pollIntervalMinutes: 5
+    });
+    vi.stubGlobal("fetch", vi.fn());
+
+    await expect(getStoredOrFetchPolymarketEndDate(database, storedIntegration)).resolves.toEqual({
+      endAt: new Date("2026-05-18T03:59:00.000Z"),
+      missingWarningDue: false
+    });
+    expect(fetch).not.toHaveBeenCalled();
+
+    database.close();
+  });
+
+  it("backs off failed Gamma end-date lookups", async () => {
+    const database = createTestDatabase();
+    const storedIntegration = createIntegration(database, "https://polymarket.com/event/gamma-fails");
+    const fetchMock = vi.fn(async () => new Response("blocked", { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getStoredOrFetchPolymarketEndDate(database, storedIntegration, new Date("2026-05-08T00:00:00.000Z"))).rejects.toThrow(
+      "Polymarket Gamma returned HTTP 503"
+    );
+    await expect(getStoredOrFetchPolymarketEndDate(database, storedIntegration, new Date("2026-05-08T00:01:00.000Z"))).resolves.toEqual({
+      endAt: null,
+      missingWarningDue: false
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     database.close();
   });

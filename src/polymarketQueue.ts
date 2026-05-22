@@ -73,12 +73,13 @@ export function parsePolymarketDateRangeWindow(url: string, now = new Date()): {
 
 function resolvePolymarketQueue(settings: Record<string, unknown>, currentUrl: string | null, now: Date): PolymarketQueueResolution {
   const markets = normalizeMarkets(settings.polymarketMarkets);
-  const activeMarket = getActiveMarket(markets, now) ?? getFallbackMarket(markets, currentUrl);
+  const activeMarket = getActiveMarket(markets, now);
+  const activeUrl = activeMarket?.url ?? getFallbackUrl(markets, currentUrl, now);
   const retainedMarkets = pruneExpiredMarkets(markets, activeMarket, now);
   const nextSettings = { ...settings, polymarketMarkets: retainedMarkets };
   return {
     settingsJson: JSON.stringify(nextSettings),
-    activeUrl: activeMarket?.url ?? currentUrl
+    activeUrl
   };
 }
 
@@ -111,8 +112,27 @@ function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): Polymarke
   );
 }
 
-function getFallbackMarket(markets: PolymarketQueueMarket[], currentUrl: string | null): PolymarketQueueMarket | null {
-  return markets.find((market) => market.url === currentUrl) ?? markets.find((market) => !market.startAt || !market.endAt) ?? null;
+function getFallbackUrl(markets: PolymarketQueueMarket[], currentUrl: string | null, now: Date): string | null {
+  const undatedMarket = markets.find((market) => !market.startAt || !market.endAt);
+  if (undatedMarket) {
+    return undatedMarket.url;
+  }
+
+  if (!currentUrl) {
+    return null;
+  }
+
+  return isCurrentUrlStillUsable(currentUrl, now) ? currentUrl : null;
+}
+
+function isCurrentUrlStillUsable(currentUrl: string, now: Date): boolean {
+  const window = parsePolymarketDateRangeWindow(currentUrl, now);
+  if (!window) {
+    return true;
+  }
+
+  const nowMs = now.getTime();
+  return nowMs >= Date.parse(window.startAt) && nowMs <= Date.parse(window.endAt);
 }
 
 function pruneExpiredMarkets(markets: PolymarketQueueMarket[], activeMarket: PolymarketQueueMarket | null, now: Date): PolymarketQueueMarket[] {

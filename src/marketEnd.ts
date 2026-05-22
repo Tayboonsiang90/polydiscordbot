@@ -17,6 +17,8 @@ type GammaEvent = {
 };
 
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
+const failedMarketEndLookupBackoffMs = 30 * 60_000;
+const failedMarketEndLookups = new Map<string, { retryAfterMs: number }>();
 
 const reminders: Array<{ key: MarketEndReminderKey; label: string; offsetMs: number }> = [
   { key: "24h", label: "24 hours before market end", offsetMs: 24 * 60 * 60 * 1000 },
@@ -94,6 +96,11 @@ export async function getStoredOrFetchPolymarketEndDate(
     return { endAt: null, missingWarningDue: false };
   }
 
+  const queuedEndAt = getQueuedMarketEndAt(integration);
+  if (queuedEndAt) {
+    return { endAt: queuedEndAt, missingWarningDue: false };
+  }
+
   const existing = database.getMarketEndMetadata(integration.id, integration.polymarketUrl);
   if (existing) {
     return {
@@ -102,9 +109,27 @@ export async function getStoredOrFetchPolymarketEndDate(
     };
   }
 
-  const endAt = await fetchPolymarketEndDateFromGamma(integration.polymarketUrl);
+  if (isMarketEndLookupBackedOff(integration.polymarketUrl, now)) {
+    return { endAt: null, missingWarningDue: false };
+  }
+
+  let endAt: Date | null;
+  try {
+    endAt = await fetchPolymarketEndDateFromGamma(integration.polymarketUrl);
+    failedMarketEndLookups.delete(integration.polymarketUrl);
+  } catch (error) {
+    failedMarketEndLookups.set(integration.polymarketUrl, {
+      retryAfterMs: now.getTime() + failedMarketEndLookupBackoffMs
+    });
+    throw error;
+  }
+
   database.recordMarketEndMetadata(integration.id, integration.polymarketUrl, endAt, now);
   return { endAt, missingWarningDue: !endAt };
+}
+
+export function clearMarketEndLookupBackoff(): void {
+  failedMarketEndLookups.clear();
 }
 
 export async function fetchPolymarketEndDateFromGamma(polymarketUrl: string | null): Promise<Date | null> {
@@ -219,4 +244,59 @@ function getTimeZoneParts(date: Date, timeZone: string) {
     minute: Number(parts.minute),
     second: Number(parts.second)
   };
+}
+
+function isMarketEndLookupBackedOff(polymarketUrl: string, now: Date): boolean {
+  const failure = failedMarketEndLookups.get(polymarketUrl);
+  if (!failure) {
+    return false;
+  }
+
+  if (now.getTime() < failure.retryAfterMs) {
+    return true;
+  }
+
+  failedMarketEndLookups.delete(polymarketUrl);
+  return false;
+}
+
+function getQueuedMarketEndAt(integration: Integration): Date | null {
+  const settings = parseSettingsJson(integration.settingsJson);
+  const market = [...normalizeQueuedMarkets(settings.polymarketMarkets), ...normalizeQueuedMarkets(settings.markets)].find(
+    (candidate) => candidate.url === integration.polymarketUrl
+  );
+  if (!market?.endAt) {
+    return null;
+  }
+
+  const endAt = new Date(market.endAt);
+  return Number.isNaN(endAt.getTime()) ? null : endAt;
+}
+
+function normalizeQueuedMarkets(value: unknown): Array<{ url: string; endAt: string | null }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const market = item as { url?: unknown; endAt?: unknown };
+    return typeof market.url === "string" ? [{ url: market.url, endAt: typeof market.endAt === "string" ? market.endAt : null }] : [];
+  });
+}
+
+function parseSettingsJson(settingsJson: string | null): Record<string, unknown> {
+  if (!settingsJson) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(settingsJson) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 }

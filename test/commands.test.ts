@@ -649,6 +649,28 @@ describe("adapter commands", () => {
     );
   });
 
+  it("shows when strike search results are truncated", () => {
+    const embed = buildStrikeSearchEmbed(
+      { ...checkedIntegration, adapterId: "trump-truth" },
+      {
+        term: "King",
+        searchUrl: "https://www.trumpstruth.org/search?query=King",
+        startAt: "2026-05-04T04:00:00.000Z",
+        endAt: "2026-05-11T03:59:00.000Z",
+        totalResults: 12,
+        hits: Array.from({ length: 12 }, (_, index) => ({
+          url: `https://www.trumpstruth.org/statuses/${index + 1}`,
+          postedAt: `May ${index + 1}, 2026`,
+          snippet: `King mention ${index + 1}`
+        }))
+      }
+    ).toJSON();
+    const results = embed.fields?.find((field) => field.name === "Results")?.value;
+
+    expect(results).toContain("10. [May 10, 2026]");
+    expect(results).toContain("...and 2 more result(s). Open the search link for the full list.");
+  });
+
   it("does not mention alert roles for non-strike Trump Truth event alerts", () => {
     const post: EventMonitorPost = {
       id: "123",

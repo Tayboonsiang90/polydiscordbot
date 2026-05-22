@@ -98,7 +98,7 @@ export class BotDatabase {
     return this.getIntegrationById(id);
   }
 
-  setPolymarketUrl(id: number, polymarketUrl: string): Integration {
+  setPolymarketUrl(id: number, polymarketUrl: string | null): Integration {
     this.db
       .prepare("UPDATE integrations SET polymarketUrl = ?, updatedAt = ? WHERE id = ?")
       .run(polymarketUrl, new Date().toISOString(), id);
