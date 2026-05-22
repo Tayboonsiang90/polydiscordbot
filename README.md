@@ -69,10 +69,10 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
 - Polling and alert sends live in `src/poller.ts`; reaction-role add/remove logic lives in `src/reactionRoles.ts`.
-- Market-end reminder lookup lives in `src/marketEnd.ts`; it uses Polymarket Gamma API `endDate` by URL slug, stores the result in SQLite, and sends shared 24h, 12h, 1h, and end alerts.
+- Market-end reminder lookup lives in `src/marketEnd.ts`; it uses queued ET windows when available, otherwise Polymarket Gamma API `endDate` by URL slug, stores the result in SQLite, backs off failed Gamma lookups, and sends shared 24h, 12h, 1h, and end alerts.
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
-- Dated Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window and expired queued URLs are pruned after rollover.
+- Dated Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and stale dated URLs are cleared when no queued or undated market is active.
 - Trump Truth and TSA have adapter-specific auto-discovery for upcoming weekly markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
@@ -140,15 +140,15 @@ Status replies show both the configured base interval and the current effective 
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
 Bonbast replies use Discord embeds with compact fields, colored status accents, and clickable links.
 Use `/bonbast polymarket` once per market so future alerts include a clickable Polymarket link.
-The stored Polymarket URL also drives market-end reminders. The bot reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.
+The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.
 Use `/bonbast clear` to clear the current integration channel. You and the bot both need `Manage Messages`.
 Use `/bonbast test` to preview the exact role ping and alert embed without fetching Bonbast or changing stored values.
 
 ## Polymarket URL Queue
 
-For most integrations, `/... polymarket url:<url>` appends or updates a queued Polymarket URL in `settingsJson.polymarketMarkets`. If the URL slug contains a date range such as `may-18-may-24`, the bot derives an ET window, keeps the current market active until the new window starts, switches automatically on the next poll/check, and prunes expired queued URLs after rollover.
+For most integrations, `/... polymarket url:<url>` appends or updates a queued Polymarket URL in `settingsJson.polymarketMarkets`. If the URL slug contains a date range such as `may-18-may-24`, the bot derives an ET window, keeps the current market active until the new window starts, switches automatically on the next poll/check, and prunes expired queued URLs after rollover. When no queued dated market is active and there is no undated fallback, the bot clears the active Polymarket URL so stale expired markets stop driving checks and reminders.
 
-If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. TSA uses the shared queue plus adapter-specific auto-discovery for upcoming weekly markets.
+If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. TSA uses the shared queue plus adapter-specific auto-discovery for upcoming weekly markets.
 
 Trump Truth and NYT Front Page also support:
 
@@ -157,18 +157,18 @@ Trump Truth and NYT Front Page also support:
 - `/nytfront strikes`
 
 The `strikes` command force-refreshes Gamma-derived strike terms and then displays the currently active unresolved terms.
-The Trump Truth `search` command searches the Trump Truth archive for a word or phrase inside the active weekly market's ET timeframe and returns matching posts plus the source search URL.
+The Trump Truth `search` command refreshes settings, searches the Trump Truth archive for a word or phrase inside the active weekly market's ET timeframe, and returns matching posts plus the source search URL.
 
 App Store integrations have one extra command:
 
 - `/freeappstore snapshot`
 - `/paidappstore snapshot`
 
-The Free App Store and Paid App Store integrations run a separate daily snapshot check during the 12:00-12:05 PM ET window. That snapshot is posted as a distinct snapshot alert, stored in separate SQLite fields, and is not overwritten by regular interval checks. The next ET day noon snapshot replaces the previous stored snapshot.
+The Free App Store and Paid App Store integrations run a separate daily snapshot check during the 12:00-12:05 PM ET window. That snapshot is posted as a distinct snapshot alert, stored in separate SQLite fields, and is not overwritten by regular interval checks. The next ET day noon snapshot replaces the previous stored snapshot. Repeated snapshot failures use the shared integration error-throttling window.
 
 ## Alert Roles
 
-The bot creates `#market-alert-roles` and posts grouped reaction selectors for market integration roles. It creates `#uma-alert-roles` for the global UMA clarification alert role. React to an alert emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing user reactions while adding missing bot reactions.
+The bot creates `#market-alert-roles` and posts grouped reaction selectors for market integration roles. It creates `#uma-alert-roles` for the global UMA clarification alert role. React to an alert emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing user reactions while adding missing bot reactions. If duplicate adapter emojis land in the same selector message, the provisioner assigns a fallback emoji for that message and preserves the stored emoji mapping on later refreshes.
 
 The Current Integrations table is the source of truth for each adapter's role name and emoji. Normal value-change alerts, daily snapshots, and market-end reminders mention the adapter alert role. Event-post integrations can be quieter: Trump Truth posts every new post but only mentions the role when a strike is detected, while NYT Front Page only posts alerts for strike matches.
 
