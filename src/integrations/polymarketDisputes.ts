@@ -89,10 +89,13 @@ export const polymarketDisputesAdapter: WebsiteAdapter = {
   alertRoleChannelName: "uma-alert-roles",
   alertRoleGroupTitle: "UMA Alert Roles",
   getPollIntervalMinutes(): number {
-    return 0.1;
+    return 1;
   },
   getPollIntervalReason(): string {
-    return "Near-real-time Polygon UMA dispute log scan";
+    return "WebSocket primary; 1-minute HTTP backfill";
+  },
+  getErrorNoticeWindowMinutes(): number {
+    return 60;
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     if (!integration) {
