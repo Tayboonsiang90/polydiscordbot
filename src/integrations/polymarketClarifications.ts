@@ -74,10 +74,10 @@ type GammaMarket = {
 export const polymarketClarificationsAdapter: WebsiteAdapter = {
   id: "polymarket-clarifications",
   commandName: "umaalert",
-  displayName: "UMA Clarification Alerts",
+  displayName: "UMA Clarifications",
   sourceUrl: polymarketBulletinBoardSourceUrl,
-  defaultChannelName: "uma-alerts",
-  legacyChannelNames: ["pmclarify"],
+  defaultChannelName: "uma-clarifications",
+  legacyChannelNames: ["pmclarify", "uma-alerts"],
   alertRoleName: "UMA Clarification Alerts",
   alertRoleEmoji: "\uD83D\uDCE3",
   alertRoleChannelName: "uma-alert-roles",

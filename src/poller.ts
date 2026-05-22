@@ -154,11 +154,12 @@ export async function checkEventIntegration(database: BotDatabase, integration: 
     result.polymarketUrl && result.polymarketUrl !== settingsIntegration.polymarketUrl
       ? database.setPolymarketUrl(settingsIntegration.id, result.polymarketUrl)
       : settingsIntegration;
-  const latestSeenId = result.posts[0]?.id ?? integration.lastValue;
-  const baseSettingsJson = result.settingsJson ?? activeIntegration.settingsJson;
-  const eventSelection = selectNewEventPosts(result.posts, integration.lastValue, baseSettingsJson);
+  const currentIntegration = database.getIntegrationById(activeIntegration.id);
+  const latestSeenId = result.posts[0]?.id ?? currentIntegration.lastValue;
+  const baseSettingsJson = mergeEventSeenPostIds(result.settingsJson ?? activeIntegration.settingsJson, currentIntegration.settingsJson);
+  const eventSelection = selectNewEventPosts(result.posts, currentIntegration.lastValue, baseSettingsJson);
   const candidatePosts =
-    integration.lastValue === null && adapter.shouldAlertOnEventPost ? result.posts.slice(0, 1) : eventSelection.newPosts;
+    currentIntegration.lastValue === null && adapter.shouldAlertOnEventPost ? result.posts.slice(0, 1) : eventSelection.newPosts;
   const eventSettingsJson = updateEventSeenPostIds(baseSettingsJson, eventSelection.nextSeenPostIds);
   const eventStateIntegration =
     eventSettingsJson !== activeIntegration.settingsJson
@@ -219,6 +220,22 @@ function getEventSeenPostIds(settingsJson: string | null): string[] {
 function updateEventSeenPostIds(settingsJson: string | null, eventSeenPostIds: string[]): string {
   return JSON.stringify({
     ...parseSettingsJson(settingsJson),
+    eventSeenPostIds
+  });
+}
+
+function mergeEventSeenPostIds(primarySettingsJson: string | null, secondarySettingsJson: string | null): string | null {
+  const primarySettings = parseSettingsJson(primarySettingsJson);
+  const primarySeen = getEventSeenPostIds(primarySettingsJson);
+  const secondarySeen = getEventSeenPostIds(secondarySettingsJson);
+  const eventSeenPostIds = uniqueStrings([...primarySeen, ...secondarySeen]).slice(0, maxEventSeenPostIds);
+
+  if (!eventSeenPostIds.length) {
+    return primarySettingsJson;
+  }
+
+  return JSON.stringify({
+    ...primarySettings,
     eventSeenPostIds
   });
 }

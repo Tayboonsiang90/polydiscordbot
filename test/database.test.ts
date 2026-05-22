@@ -71,7 +71,7 @@ describe("BotDatabase alert role metadata", () => {
     const database = createTestDatabase();
     const integration = database.createIntegration({
       guildId: "guild",
-      channelId: "uma-alerts",
+      channelId: "uma-clarifications",
       adapterId: "polymarket-clarifications",
       displayName: "Polymarket Clarifications",
       sourceUrl: "https://old.example",
@@ -80,12 +80,12 @@ describe("BotDatabase alert role metadata", () => {
     });
 
     const updated = database.syncIntegrationMetadata(integration.id, {
-      displayName: "UMA Clarification Alerts",
+      displayName: "UMA Clarifications",
       sourceUrl: "https://new.example"
     });
 
     expect(updated).toMatchObject({
-      displayName: "UMA Clarification Alerts",
+      displayName: "UMA Clarifications",
       sourceUrl: "https://new.example",
       settingsJson: JSON.stringify({ lastScannedBlock: 100 }),
       pollIntervalMinutes: 5,

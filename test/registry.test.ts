@@ -222,8 +222,8 @@ describe("adapter registry", () => {
       windowMinutes: 5
     });
     expect(umaAlert.id).toBe("polymarket-clarifications");
-    expect(umaAlert.defaultChannelName).toBe("uma-alerts");
-    expect(umaAlert.legacyChannelNames).toEqual(["pmclarify"]);
+    expect(umaAlert.defaultChannelName).toBe("uma-clarifications");
+    expect(umaAlert.legacyChannelNames).toEqual(["pmclarify", "uma-alerts"]);
     expect(umaAlert.alertRoleName).toBe("UMA Clarification Alerts");
     expect(umaAlert.alertRoleEmoji).toBe("\uD83D\uDCE3");
     expect(umaAlert.alertRoleChannelName).toBe("uma-alert-roles");
