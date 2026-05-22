@@ -37,7 +37,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `ornn-b200-index` | `/ornnb200` | `#ornnb200` | `ORNN B200 Alerts` | `🖥️` | Monitors finalized ORNN B200 Index daily chart values for GPU rental-price resolution checks. |
 | `ornn-h200-index` | `/ornnh200` | `#ornnh200` | `ORNN H200 Alerts` | `🖥️` | Monitors finalized ORNN H200 Index daily chart values for GPU rental-price resolution checks. |
 | `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Monitors the US iPhone App Store Top Paid Apps top 2 list for Polymarket resolution checks. |
-| `polymarket-clarifications` | `/umaalert` | `#uma-clarifications` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
+| `polymarket-clarifications` | `/umaclarifications` | `#uma-clarifications` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
 | `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
 | `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker and alerts only when live price crosses parsed Polymarket strikes. |

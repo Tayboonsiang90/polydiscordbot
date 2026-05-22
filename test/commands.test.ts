@@ -346,9 +346,9 @@ describe("adapter commands", () => {
       ])
     });
 
-    const umaAlertCommand = buildAdapterCommands().find((command) => command.name === "umaalert");
+    const umaAlertCommand = buildAdapterCommands().find((command) => command.name === "umaclarifications");
     expect(umaAlertCommand?.toJSON()).toMatchObject({
-      name: "umaalert",
+      name: "umaclarifications",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "check" }),
         expect.objectContaining({ name: "test" }),
