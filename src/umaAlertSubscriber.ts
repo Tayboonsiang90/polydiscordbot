@@ -44,7 +44,12 @@ export class UmaAlertSubscriber {
 
   start(): void {
     this.stopped = false;
-    this.connect();
+    try {
+      this.connect();
+    } catch (error) {
+      console.error("UMA alert WebSocket connect failed:", formatError(error));
+      this.scheduleReconnect();
+    }
   }
 
   stop(): void {
@@ -111,7 +116,12 @@ export class UmaAlertSubscriber {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      try {
+        this.connect();
+      } catch (error) {
+        console.error("UMA alert WebSocket reconnect failed:", formatError(error));
+        this.scheduleReconnect();
+      }
     }, reconnectDelayMs);
     this.reconnectTimer.unref();
   }

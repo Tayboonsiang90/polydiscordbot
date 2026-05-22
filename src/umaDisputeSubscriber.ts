@@ -43,7 +43,12 @@ export class UmaDisputeSubscriber {
 
   start(): void {
     this.stopped = false;
-    this.connect();
+    try {
+      this.connect();
+    } catch (error) {
+      console.error("UMA dispute WebSocket connect failed:", formatError(error));
+      this.scheduleReconnect();
+    }
   }
 
   stop(): void {
@@ -114,7 +119,12 @@ export class UmaDisputeSubscriber {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      try {
+        this.connect();
+      } catch (error) {
+        console.error("UMA dispute WebSocket reconnect failed:", formatError(error));
+        this.scheduleReconnect();
+      }
     }, reconnectDelayMs);
     this.reconnectTimer.unref();
   }
