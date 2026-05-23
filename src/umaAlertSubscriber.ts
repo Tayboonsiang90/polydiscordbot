@@ -6,13 +6,17 @@ import { buildEventPostMessagePayload } from "./embeds.js";
 import {
   ancillaryDataUpdatedTopic,
   buildFastPolymarketClarificationPostFromLog,
+  buildFastPolymarketPendingClarificationPostFromTransaction,
   buildPolymarketClarificationPostFromLog,
+  buildPolymarketPendingClarificationPostFromTransaction,
   getPolymarketClarificationRpcUrls,
   getPolymarketClarificationWsUrl,
+  hasSeenClarificationTx,
   parseHexQuantity,
   parsePolymarketClarificationSettings,
   polymarketBulletinBoardAddress,
-  type PolygonLog
+  type PolygonLog,
+  type PolygonPendingTransaction
 } from "./integrations/polymarketClarifications.js";
 
 const adapterId = "polymarket-clarifications";
@@ -25,7 +29,7 @@ type SubscriptionMessage = {
   method?: string;
   result?: string;
   params?: {
-    result?: PolygonLog & { removed?: boolean };
+    result?: string | (PolygonLog & { removed?: boolean }) | PolygonPendingTransaction;
   };
   error?: { message?: string };
 };
@@ -44,6 +48,7 @@ export class UmaAlertSubscriber {
   private pingTimer: NodeJS.Timeout | null = null;
   private stopped = false;
   private readonly inFlightLogIds = new Set<string>();
+  private warnedHashOnlyPending = false;
 
   constructor(
     private readonly client: Client,
@@ -98,6 +103,14 @@ export class UmaAlertSubscriber {
               topics: [ancillaryDataUpdatedTopic]
             }
           ]
+        })
+      );
+      websocket.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "eth_subscribe",
+          params: ["newPendingTransactions", true]
         })
       );
       console.log(`UMA alert WebSocket subscribe requested via ${wsUrl}`);
@@ -184,12 +197,29 @@ export class UmaAlertSubscriber {
       return;
     }
 
-    const log = message.method === "eth_subscription" ? message.params?.result : undefined;
-    if (!log || log.removed) {
+    const result = message.method === "eth_subscription" ? message.params?.result : undefined;
+    if (!result) {
       return;
     }
 
-    await this.handleLog(log);
+    if (typeof result === "string") {
+      if (!this.warnedHashOnlyPending) {
+        this.warnedHashOnlyPending = true;
+        console.warn("UMA alert pending tx subscription returned hashes only; mempool clarification alerts need full pending transactions.");
+      }
+      return;
+    }
+
+    if (isPendingTransaction(result)) {
+      await this.handlePendingTransaction(result);
+      return;
+    }
+
+    if (result.removed) {
+      return;
+    }
+
+    await this.handleLog(result);
   }
 
   private async handleLog(log: PolygonLog): Promise<void> {
@@ -237,6 +267,55 @@ export class UmaAlertSubscriber {
     }
   }
 
+  private async handlePendingTransaction(transaction: PolygonPendingTransaction): Promise<void> {
+    const pendingId = transaction.hash ? `pending:${transaction.hash.toLowerCase()}` : "";
+    if (!pendingId || this.inFlightLogIds.has(pendingId)) {
+      return;
+    }
+
+    this.inFlightLogIds.add(pendingId);
+    try {
+      const integration = this.database.getIntegrationByAdapter(this.config.discordGuildId, adapterId);
+      if (
+        !integration ||
+        hasSeenEventId(integration.settingsJson, pendingId) ||
+        integration.lastValue === pendingId
+      ) {
+        return;
+      }
+
+      const settings = parsePolymarketClarificationSettings(integration.settingsJson);
+      const post = buildFastPolymarketPendingClarificationPostFromTransaction(transaction);
+      if (!post) {
+        return;
+      }
+      if (!this.database.claimEventAlert(integration.id, post.id, post)) {
+        return;
+      }
+
+      const channel = await this.client.channels.fetch(integration.channelId);
+      if (!isSendableChannel(channel)) {
+        this.database.markEventAlertPending(integration.id, post.id);
+        throw new Error(`UMA alert channel is not sendable: ${integration.channelId}`);
+      }
+
+      let sentMessage: unknown;
+      try {
+        sentMessage = await channel.send(buildEventPostMessagePayload(integration, post));
+      } catch (error) {
+        this.database.markEventAlertPending(integration.id, post.id);
+        throw error;
+      }
+      this.database.markEventAlertSent(integration.id, post.id);
+      this.recordDeliveredPendingTransaction(integration.id, transaction, post);
+      void this.enrichSentPendingPost(sentMessage, integration.id, transaction, settings).catch((error) => {
+        console.error("UMA alert pending enrichment edit failed:", formatError(error));
+      });
+    } finally {
+      this.inFlightLogIds.delete(pendingId);
+    }
+  }
+
   private recordDeliveredLog(integrationId: number, log: PolygonLog, post: { id: string; postedAt: Date }): void {
     const integration = this.database.getIntegrationById(integrationId);
     const settings = parsePolymarketClarificationSettings(integration.settingsJson);
@@ -244,6 +323,22 @@ export class UmaAlertSubscriber {
       ...settings,
       eventSeenPostIds: addSeenEventId(settings.eventSeenPostIds, post.id),
       lastScannedBlock: Math.max(settings.lastScannedBlock ?? 0, parseHexQuantity(log.blockNumber)),
+      lastScanCompletedAt: new Date().toISOString()
+    });
+    this.database.setSettingsJson(integration.id, nextSettingsJson);
+    this.database.recordCheck(integration.id, post.id, post.postedAt);
+  }
+
+  private recordDeliveredPendingTransaction(
+    integrationId: number,
+    transaction: PolygonPendingTransaction,
+    post: { id: string; postedAt: Date }
+  ): void {
+    const integration = this.database.getIntegrationById(integrationId);
+    const settings = parsePolymarketClarificationSettings(integration.settingsJson);
+    const nextSettingsJson = JSON.stringify({
+      ...settings,
+      eventSeenPostIds: addSeenEventIds(settings.eventSeenPostIds, [post.id, transaction.hash.toLowerCase()]),
       lastScanCompletedAt: new Date().toISOString()
     });
     this.database.setSettingsJson(integration.id, nextSettingsJson);
@@ -269,6 +364,29 @@ export class UmaAlertSubscriber {
     const payload = buildEventPostMessagePayload(integration, enrichedPost);
     await sentMessage.edit({ embeds: payload.embeds, components: payload.components, allowedMentions: { parse: [] } });
   }
+
+  private async enrichSentPendingPost(
+    sentMessage: unknown,
+    integrationId: number,
+    transaction: PolygonPendingTransaction,
+    settings: ReturnType<typeof parsePolymarketClarificationSettings>
+  ): Promise<void> {
+    if (!isEditableMessage(sentMessage)) {
+      return;
+    }
+
+    const enrichedPost = await buildPolymarketPendingClarificationPostFromTransaction(
+      transaction,
+      getPolymarketClarificationRpcUrls(settings)
+    );
+    if (!enrichedPost) {
+      return;
+    }
+
+    const integration = this.database.getIntegrationById(integrationId);
+    const payload = buildEventPostMessagePayload(integration, enrichedPost);
+    await sentMessage.edit({ embeds: payload.embeds, components: payload.components, allowedMentions: { parse: [] } });
+  }
 }
 
 function parseSubscriptionMessage(data: RawData | unknown): SubscriptionMessage {
@@ -286,15 +404,36 @@ function parseSubscriptionMessage(data: RawData | unknown): SubscriptionMessage 
 
 function hasSeenEventId(settingsJson: string | null, eventId: string): boolean {
   const settings = parsePolymarketClarificationSettings(settingsJson);
-  return Array.isArray(settings.eventSeenPostIds) && settings.eventSeenPostIds.includes(eventId);
+  if (!Array.isArray(settings.eventSeenPostIds)) {
+    return false;
+  }
+
+  const transactionHash = eventId.startsWith("pending:")
+    ? eventId.slice("pending:".length)
+    : eventId.split(":")[0] ?? eventId;
+  return (
+    settings.eventSeenPostIds.some((candidate) => candidate.toLowerCase() === eventId.toLowerCase()) ||
+    hasSeenClarificationTx(settings.eventSeenPostIds, transactionHash)
+  );
 }
 
 function addSeenEventId(existing: string[] | undefined, eventId: string): string[] {
   return [eventId, ...(existing ?? []).filter((candidate) => candidate !== eventId)].slice(0, maxSeenEventIds);
 }
 
+function addSeenEventIds(existing: string[] | undefined, eventIds: string[]): string[] {
+  return [
+    ...eventIds,
+    ...(existing ?? []).filter((candidate) => !eventIds.some((eventId) => eventId.toLowerCase() === candidate.toLowerCase()))
+  ].slice(0, maxSeenEventIds);
+}
+
 function isSendableChannel(channel: unknown): channel is SendableChannel {
   return Boolean(channel && typeof channel === "object" && "send" in channel && typeof channel.send === "function");
+}
+
+function isPendingTransaction(value: unknown): value is PolygonPendingTransaction {
+  return Boolean(value && typeof value === "object" && "hash" in value && !("topics" in value));
 }
 
 function isEditableMessage(message: unknown): message is EditableMessage {

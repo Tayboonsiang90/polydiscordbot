@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ancillaryDataUpdatedTopic,
+  buildFastPolymarketPendingClarificationPostFromTransaction,
   decodeUmaCtfQuestionData,
+  decodePendingPolymarketClarificationTransaction,
   decodeUtf8AbiBytes,
   defaultPolygonRpcUrls,
   buildFastPolymarketClarificationPostFromLog,
   fetchPolymarketClarificationUpdates,
+  postUpdateSelector,
   normalizePolymarketClarificationLog,
   parsePolymarketAncillaryData,
+  polymarketBulletinBoardAddress,
+  type PolygonPendingTransaction,
   type PolygonLog
 } from "../src/integrations/polymarketClarifications.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -90,6 +95,44 @@ describe("Polymarket clarification parsing", () => {
       expect.arrayContaining([
         expect.objectContaining({ name: "Question ID", value: questionId }),
         expect.objectContaining({ name: "Block", value: String(Number.parseInt("53218ef", 16)) })
+      ])
+    );
+  });
+
+  it("decodes pending bulletin-board postUpdate transactions", () => {
+    const transaction = buildPendingUpdateTransaction("Pending clarification.");
+    const update = decodePendingPolymarketClarificationTransaction(transaction, new Date("2026-05-22T17:14:23.000Z"));
+
+    expect(update).toEqual({
+      id: `pending:${transaction.hash}`,
+      transactionHash: transaction.hash,
+      updater: creator,
+      questionId,
+      text: "Pending clarification.",
+      seenAt: new Date("2026-05-22T17:14:23.000Z")
+    });
+  });
+
+  it("builds a fast alert post directly from a pending postUpdate transaction", () => {
+    const transaction = buildPendingUpdateTransaction("Pending clarification.");
+    const post = buildFastPolymarketPendingClarificationPostFromTransaction(
+      transaction,
+      new Date("2026-05-22T17:14:23.000Z")
+    );
+
+    expect(post).toMatchObject({
+      id: `pending:${transaction.hash}`,
+      type: "Pending Polymarket clarification",
+      alertTitle: "Pending Polymarket clarification",
+      sourceLabel: "Pending tx",
+      text: "Pending clarification.",
+      postedAt: new Date("2026-05-22T17:14:23.000Z"),
+      url: `https://polygonscan.com/tx/${transaction.hash}`
+    });
+    expect(post?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Question ID", value: questionId }),
+        expect.objectContaining({ name: "Mempool status", value: "pending - not mined yet" })
       ])
     );
   });
@@ -177,6 +220,39 @@ describe("fetchPolymarketClarificationUpdates", () => {
       lastScannedBlock: 10000,
       lastScanStartedBlock: 9751
     });
+  });
+
+  it("skips mined clarification logs already alerted from the pending tx path", async () => {
+    const rpcUrl = "https://rpc.example";
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (url.toString() !== rpcUrl) {
+        throw new Error(`Unexpected fetch: ${url.toString()}`);
+      }
+
+      const body = JSON.parse(String(init?.body)) as { method: string };
+      if (body.method === "eth_blockNumber") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+      }
+      if (body.method === "eth_getLogs") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: [buildUpdateLog("Clarification issued.")] });
+      }
+
+      throw new Error(`Unexpected RPC method: ${body.method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketClarificationUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          lastScannedBlock: 980,
+          eventSeenPostIds: [`pending:${transactionHash}`]
+        })
+      } as Integration,
+      new Date("2026-05-20T00:00:00.000Z")
+    );
+
+    expect(result.posts).toHaveLength(0);
   });
 
   it("splits eth_getLogs requests when an RPC rejects the block range", async () => {
@@ -284,6 +360,19 @@ function buildUpdateLog(updateText: string): PolygonLog {
     logIndex: "0xa8",
     blockTimestamp: "0x6a0dbf9f"
   } as PolygonLog & { address: string };
+}
+
+function buildPendingUpdateTransaction(updateText: string): PolygonPendingTransaction {
+  return {
+    hash: transactionHash,
+    from: creator,
+    to: polymarketBulletinBoardAddress.toLowerCase(),
+    input: encodePostUpdateCalldata(questionId, updateText)
+  };
+}
+
+function encodePostUpdateCalldata(updateQuestionId: string, updateText: string): string {
+  return `${postUpdateSelector}${updateQuestionId.slice(2)}${word(2 * 32)}${encodeAbiBytesTail(updateText)}`;
 }
 
 function encodeQuestionDataResult(creatorAddress: string, ancillaryData: string): string {

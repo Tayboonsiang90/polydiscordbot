@@ -5,6 +5,7 @@ export const polymarketBulletinBoardAddress = "0x65070BE91477460D8A7AeEb94ef92fe
 export const polymarketBulletinBoardSourceUrl = `https://polygonscan.com/address/${polymarketBulletinBoardAddress}`;
 export const ancillaryDataUpdatedTopic =
   "0x0059e11815211969c0c4aaf3f498b52b6c2f2d14f286275d0862d70de22a836b";
+export const postUpdateSelector = "0x072d1259";
 
 export const defaultPolygonRpcUrls = [
   "https://polygon.drpc.org",
@@ -53,6 +54,14 @@ export type PolygonLog = {
   blockTimestamp?: string;
 };
 
+export type PolygonPendingTransaction = {
+  hash: string;
+  from?: string;
+  to?: string | null;
+  input?: string;
+  data?: string;
+};
+
 export type PolymarketAncillaryData = {
   title?: string;
   marketId?: string;
@@ -71,6 +80,15 @@ type GammaMarket = {
   slug?: string;
 };
 
+type PendingClarificationUpdate = {
+  id: string;
+  transactionHash: string;
+  updater?: string;
+  questionId: string;
+  text: string;
+  seenAt: Date;
+};
+
 export const polymarketClarificationsAdapter: WebsiteAdapter = {
   id: "polymarket-clarifications",
   commandName: "umaclarifications",
@@ -86,7 +104,7 @@ export const polymarketClarificationsAdapter: WebsiteAdapter = {
     return 1;
   },
   getPollIntervalReason(): string {
-    return "WebSocket primary; 1-minute HTTP backfill";
+    return "WebSocket logs + pending tx mempool primary; 1-minute HTTP backfill";
   },
   getErrorNoticeWindowMinutes(): number {
     return 60;
@@ -131,6 +149,10 @@ export async function fetchPolymarketClarificationUpdates(
   const posts: EventMonitorPost[] = [];
 
   for (const log of logs) {
+    if (hasSeenClarificationTx(settings.eventSeenPostIds, log.transactionHash)) {
+      continue;
+    }
+
     const questionId = getTopic(log, 1);
     if (!questionId) {
       continue;
@@ -230,6 +252,68 @@ export function buildFastPolymarketClarificationPostFromLog(log: PolygonLog): Ev
   return normalizePolymarketClarificationLog(log, { questionId });
 }
 
+export async function buildPolymarketPendingClarificationPostFromTransaction(
+  transaction: PolygonPendingTransaction,
+  rpcUrls: string | string[] = defaultPolygonRpcUrls,
+  seenAt = new Date()
+): Promise<EventMonitorPost | null> {
+  const update = decodePendingPolymarketClarificationTransaction(transaction, seenAt);
+  if (!update) {
+    return null;
+  }
+
+  const details = await fetchQuestionDetails(normalizeRpcUrls(rpcUrls), update.questionId).catch(() => null);
+  return normalizePolymarketPendingClarification(update, details ?? { questionId: update.questionId });
+}
+
+export function buildFastPolymarketPendingClarificationPostFromTransaction(
+  transaction: PolygonPendingTransaction,
+  seenAt = new Date()
+): EventMonitorPost | null {
+  const update = decodePendingPolymarketClarificationTransaction(transaction, seenAt);
+  return update ? normalizePolymarketPendingClarification(update, { questionId: update.questionId }) : null;
+}
+
+export function decodePendingPolymarketClarificationTransaction(
+  transaction: PolygonPendingTransaction,
+  seenAt = new Date()
+): PendingClarificationUpdate | null {
+  if (!transaction.hash || transaction.to?.toLowerCase() !== polymarketBulletinBoardAddress.toLowerCase()) {
+    return null;
+  }
+
+  const input = transaction.input ?? transaction.data ?? "";
+  if (!input.toLowerCase().startsWith(postUpdateSelector)) {
+    return null;
+  }
+
+  const hex = stripHexPrefix(input).slice(8);
+  const questionId = `0x${readWord(hex, 0)}`;
+  const updateTextOffset = wordToSafeNumber(readWord(hex, 1), "postUpdate text offset");
+  const updateBytes = decodeAbiBytesAt(hex, updateTextOffset * 2);
+
+  return {
+    id: `pending:${transaction.hash.toLowerCase()}`,
+    transactionHash: transaction.hash.toLowerCase(),
+    updater: transaction.from?.toLowerCase(),
+    questionId,
+    text: Buffer.from(updateBytes).toString("utf8").replace(/\0+$/g, "").trim(),
+    seenAt
+  };
+}
+
+export function hasSeenClarificationTx(eventSeenPostIds: string[] | undefined, transactionHash: string): boolean {
+  const normalizedHash = transactionHash.toLowerCase();
+  return (eventSeenPostIds ?? []).some((eventId) => {
+    const normalizedEventId = eventId.toLowerCase();
+    return (
+      normalizedEventId === normalizedHash ||
+      normalizedEventId === `pending:${normalizedHash}` ||
+      normalizedEventId.startsWith(`${normalizedHash}:`)
+    );
+  });
+}
+
 export function parsePolymarketAncillaryData(text: string): PolymarketAncillaryData {
   const title = text.match(/\btitle:\s*([\s\S]*?)(?:,\s*description:|$)/i)?.[1]?.trim();
   const marketId = text.match(/\bmarket_id:\s*(\d+)/i)?.[1];
@@ -298,6 +382,44 @@ function getNextFromBlock(settings: PolymarketClarificationSettings, confirmedLa
 
 function getMaxScanBlocksPerRun(settings: PolymarketClarificationSettings): number {
   return getIntegerSetting(settings.maxScanBlocksPerRun, defaultMaxScanBlocksPerRun, 1, 100_000);
+}
+
+function normalizePolymarketPendingClarification(
+  update: PendingClarificationUpdate,
+  details: QuestionDetails
+): EventMonitorPost {
+  const transactionUrl = `https://polygonscan.com/tx/${update.transactionHash}`;
+  const polymarketUrl = details.slug ? `https://polymarket.com/event/${details.slug}` : undefined;
+  const question = details.question ?? details.title;
+  const creator = details.creator ?? details.initializer ?? update.updater;
+  const fields = [
+    ...(question ? [{ name: "Question", value: question, inline: false }] : []),
+    ...(details.marketId ? [{ name: "Gamma market", value: details.marketId, inline: true }] : []),
+    { name: "Question ID", value: update.questionId, inline: false },
+    ...(creator ? [{ name: "Creator", value: creator, inline: false }] : []),
+    ...(update.updater ? [{ name: "Pending sender", value: update.updater, inline: false }] : []),
+    { name: "Mempool status", value: "pending - not mined yet", inline: false }
+  ];
+
+  return {
+    id: update.id,
+    type: "Pending Polymarket clarification",
+    alertTitle: "Pending Polymarket clarification",
+    sourceLabel: "Pending tx",
+    buttonLabel: "Open transaction",
+    mentionAlertRole: true,
+    textFieldName: "Clarification",
+    text: update.text,
+    qualifyingText: [question, update.text].filter(Boolean).join("\n"),
+    postedAt: update.seenAt,
+    url: transactionUrl,
+    polymarketUrl,
+    fields,
+    imageUrls: [],
+    imageText: "",
+    matchedTerms: [],
+    strikeTerms: []
+  };
 }
 
 async function fetchLatestBlockNumber(rpcUrls: string[]): Promise<PolygonRpcResult<number>> {
