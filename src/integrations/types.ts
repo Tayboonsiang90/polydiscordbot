@@ -90,6 +90,31 @@ export type StrikeSearchResult = {
   hits: StrikeSearchHit[];
 };
 
+export type TagFilterAction = "add" | "remove" | "list" | "clear";
+
+export type TagFilterEntry = {
+  id?: string;
+  label: string;
+  slug: string;
+};
+
+export type TagSearchResult = {
+  query: string;
+  sourceUrl: string;
+  fetchedAt: string;
+  totalResults: number;
+  shownResults: TagFilterEntry[];
+};
+
+export type TagFilterUpdateResult = {
+  action: TagFilterAction;
+  changed: boolean;
+  message: string;
+  matchedTag?: TagFilterEntry;
+  tagFilters: TagFilterEntry[];
+  settingsJson: string;
+};
+
 export type WebsiteAdapter = {
   id: string;
   commandName: string;
@@ -123,4 +148,7 @@ export type WebsiteAdapter = {
   refreshSettings?(integration: Integration, options?: { force?: boolean }): Promise<string>;
   getStrikeTerms?(integration: Integration): { strikeTerms: string[]; parsedFromUrl?: string; lastParsedAt?: string };
   searchStrikeTerm?(integration: Integration, term: string): Promise<StrikeSearchResult>;
+  searchTags?(query: string): Promise<TagSearchResult>;
+  updateTagFilters?(integration: Integration, action: TagFilterAction, tagQuery?: string): Promise<TagFilterUpdateResult>;
+  getTagFilters?(integration: Integration): TagFilterEntry[];
 };

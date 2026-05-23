@@ -4,6 +4,7 @@ import {
   decodeUmaCtfQuestionData,
   decodeUtf8AbiBytes,
   defaultPolygonRpcUrls,
+  buildFastPolymarketClarificationPostFromLog,
   fetchPolymarketClarificationUpdates,
   normalizePolymarketClarificationLog,
   parsePolymarketAncillaryData,
@@ -75,6 +76,22 @@ describe("Polymarket clarification parsing", () => {
       ])
     );
     expect(post.postedAt.getTime()).toBe(Number.parseInt("6a0dbf9f", 16) * 1_000);
+  });
+
+  it("builds a fast alert post directly from the log without market enrichment", () => {
+    const post = buildFastPolymarketClarificationPostFromLog(buildUpdateLog("Clarification issued."));
+
+    expect(post).toMatchObject({
+      id: `${transactionHash}:0xa8`,
+      text: "Clarification issued.",
+      url: `https://polygonscan.com/tx/${transactionHash}`
+    });
+    expect(post?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Question ID", value: questionId }),
+        expect.objectContaining({ name: "Block", value: String(Number.parseInt("53218ef", 16)) })
+      ])
+    );
   });
 });
 

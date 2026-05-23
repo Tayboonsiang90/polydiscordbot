@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BotDatabase } from "../src/database.js";
+import type { EventMonitorPost } from "../src/integrations/types.js";
 
 let tempDir: string | null = null;
 
@@ -180,5 +181,57 @@ describe("BotDatabase alert role metadata", () => {
 
     database.close();
   });
+
+  it("claims event alerts once and retries pending deliveries", () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "uma-clarifications",
+      adapterId: "polymarket-clarifications",
+      displayName: "UMA Clarifications",
+      sourceUrl: "https://polygonscan.com/address/0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7",
+      pollIntervalMinutes: 1
+    });
+    const post = buildEventPost("0xtx:0x1");
+
+    expect(database.claimEventAlert(integration.id, post.id, post, new Date("2026-05-21T00:00:00.000Z"))).toBe(true);
+    expect(database.claimEventAlert(integration.id, post.id, post, new Date("2026-05-21T00:00:01.000Z"))).toBe(false);
+    expect(database.claimPendingEventAlerts(integration.id, new Date("2026-05-21T00:00:30.000Z"))).toEqual([]);
+
+    database.markEventAlertPending(integration.id, post.id, new Date("2026-05-21T00:00:31.000Z"));
+    const [pending] = database.claimPendingEventAlerts(integration.id, new Date("2026-05-21T00:00:32.000Z"));
+
+    expect(pending?.eventId).toBe(post.id);
+    expect(pending?.status).toBe("sending");
+    expect(pending?.post.postedAt.toISOString()).toBe("2026-05-21T00:00:00.000Z");
+
+    database.markEventAlertSent(integration.id, post.id, new Date("2026-05-21T00:00:33.000Z"));
+    expect(database.claimPendingEventAlerts(integration.id, new Date("2026-05-21T00:10:00.000Z"))).toEqual([]);
+    expect(database.getEventAlert(integration.id, post.id)).toMatchObject({
+      eventId: post.id,
+      status: "sent",
+      sentAt: "2026-05-21T00:00:33.000Z"
+    });
+
+    database.close();
+  });
 });
+
+function buildEventPost(id: string): EventMonitorPost {
+  return {
+    id,
+    type: "Polymarket clarification",
+    alertTitle: "Polymarket clarification",
+    sourceLabel: "On-chain tx",
+    textFieldName: "Clarification",
+    text: "Clarification issued.",
+    qualifyingText: "Clarification issued.",
+    postedAt: new Date("2026-05-21T00:00:00.000Z"),
+    url: "https://polygonscan.com/tx/0xtx",
+    imageUrls: [],
+    imageText: "",
+    matchedTerms: [],
+    strikeTerms: []
+  };
+}
 

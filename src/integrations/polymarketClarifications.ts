@@ -221,6 +221,15 @@ export async function buildPolymarketClarificationPostFromLog(
   return normalizePolymarketClarificationLog(log, details ?? { questionId });
 }
 
+export function buildFastPolymarketClarificationPostFromLog(log: PolygonLog): EventMonitorPost | null {
+  const questionId = getTopic(log, 1);
+  if (!questionId) {
+    return null;
+  }
+
+  return normalizePolymarketClarificationLog(log, { questionId });
+}
+
 export function parsePolymarketAncillaryData(text: string): PolymarketAncillaryData {
   const title = text.match(/\btitle:\s*([\s\S]*?)(?:,\s*description:|$)/i)?.[1]?.trim();
   const marketId = text.match(/\bmarket_id:\s*(\d+)/i)?.[1];

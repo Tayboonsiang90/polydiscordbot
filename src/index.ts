@@ -7,6 +7,7 @@ import { IntegrationProvisioner } from "./provisioner.js";
 import { handleReactionRoleChange } from "./reactionRoles.js";
 import { UmaAlertSubscriber } from "./umaAlertSubscriber.js";
 import { UmaDisputeSubscriber } from "./umaDisputeSubscriber.js";
+import { UmaProposalSubscriber } from "./umaProposalSubscriber.js";
 
 const heartbeatIntervalMs = 10 * 60 * 1000;
 const config = loadConfig();
@@ -23,6 +24,7 @@ const client = new Client({
 let provisioner: IntegrationProvisioner | null = null;
 let umaAlertSubscriber: UmaAlertSubscriber | null = null;
 let umaDisputeSubscriber: UmaDisputeSubscriber | null = null;
+let umaProposalSubscriber: UmaProposalSubscriber | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -42,6 +44,12 @@ client.once(Events.ClientReady, (readyClient) => {
       umaDisputeSubscriber.start();
     } catch (error) {
       console.error("UMA dispute subscriber startup failed:", error);
+    }
+    try {
+      umaProposalSubscriber = new UmaProposalSubscriber(client, database, config);
+      umaProposalSubscriber.start();
+    } catch (error) {
+      console.error("UMA proposal subscriber startup failed:", error);
     }
     heartbeatTimer = setInterval(() => {
       console.log(`Heartbeat: ${readyClient.user.tag} alive at ${new Date().toISOString()}`);
@@ -104,6 +112,7 @@ process.on("SIGINT", () => {
   provisioner?.stop();
   umaAlertSubscriber?.stop();
   umaDisputeSubscriber?.stop();
+  umaProposalSubscriber?.stop();
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }

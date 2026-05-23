@@ -13,11 +13,13 @@ import {
   buildSnapshotStoredEmbed,
   buildStrikeSearchEmbed,
   buildStrikeTermsEmbed,
+  buildTagFiltersEmbed,
+  buildTagSearchEmbed,
   buildStatusEmbed
 } from "./embeds.js";
 import { getAdapter, getAdapterByCommandName, listAdapters } from "./integrations/registry.js";
 import { parseTrumpTruthSettings, upsertTrumpTruthPolymarketMarket } from "./integrations/trumpTruth.js";
-import type { Integration, WebsiteAdapter } from "./integrations/types.js";
+import type { Integration, TagFilterAction, WebsiteAdapter } from "./integrations/types.js";
 import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from "./marketEnd.js";
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
 import {
@@ -131,6 +133,50 @@ export function buildAdapterCommands() {
               .setRequired(true)
               .setMinLength(1)
               .setMaxLength(80)
+          )
+      );
+    }
+
+    if (adapter.searchTags) {
+      command.addSubcommand((subcommand) =>
+        subcommand
+          .setName("tagsearch")
+          .setDescription("Search Polymarket tags for proposal filters")
+          .addStringOption((option) =>
+            option
+              .setName("query")
+              .setDescription("Tag id, slug, or text to search")
+              .setRequired(true)
+              .setMinLength(1)
+              .setMaxLength(80)
+          )
+      );
+    }
+
+    if (adapter.updateTagFilters) {
+      command.addSubcommand((subcommand) =>
+        subcommand
+          .setName("tags")
+          .setDescription("Manage proposal alert tag filters")
+          .addStringOption((option) =>
+            option
+              .setName("action")
+              .setDescription("Tag filter action")
+              .setRequired(true)
+              .addChoices(
+                { name: "add", value: "add" },
+                { name: "remove", value: "remove" },
+                { name: "list", value: "list" },
+                { name: "clear", value: "clear" }
+              )
+          )
+          .addStringOption((option) =>
+            option
+              .setName("tag")
+              .setDescription("Tag id, slug, or label for add/remove")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(120)
           )
       );
     }
@@ -294,6 +340,41 @@ export async function handleAdapterCommand(
 
     const result = await adapter.searchStrikeTerm(updated, interaction.options.getString("term", true));
     await interaction.editReply({ embeds: [buildStrikeSearchEmbed(updated, result)] });
+    return;
+  }
+
+  if (subcommand === "tagsearch") {
+    if (!adapter.searchTags) {
+      await interaction.reply({ content: "This integration does not support tag search.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply();
+    const result = await adapter.searchTags(interaction.options.getString("query", true));
+    await interaction.editReply({ embeds: [buildTagSearchEmbed(integration, result)] });
+    return;
+  }
+
+  if (subcommand === "tags") {
+    if (!adapter.updateTagFilters) {
+      await interaction.reply({ content: "This integration does not support tag filters.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const action = interaction.options.getString("action", true) as TagFilterAction;
+    const tagQuery = interaction.options.getString("tag")?.trim();
+    if ((action === "add" || action === "remove") && !tagQuery) {
+      await interaction.reply({ content: "`add` and `remove` need a tag id, slug, or label.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply();
+    const result = await adapter.updateTagFilters(integration, action, tagQuery);
+    const updated =
+      result.changed && result.settingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, result.settingsJson)
+        : integration;
+    await interaction.editReply({ embeds: [buildTagFiltersEmbed(updated, result)] });
     return;
   }
 

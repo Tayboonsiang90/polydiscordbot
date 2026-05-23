@@ -1,6 +1,13 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
 import type { CheckResult, EventCheckResult, SnapshotResult } from "./poller.js";
-import type { EventMonitorPost, Integration, StrikeSearchResult } from "./integrations/types.js";
+import type {
+  EventMonitorPost,
+  Integration,
+  StrikeSearchResult,
+  TagFilterEntry,
+  TagFilterUpdateResult,
+  TagSearchResult
+} from "./integrations/types.js";
 import type { MarketEndReminder } from "./marketEnd.js";
 import { formatSingaporeDateTime, nowSingaporeDateTime } from "./time.js";
 
@@ -156,6 +163,30 @@ export function buildStrikeSearchEmbed(integration: Integration, result: StrikeS
       { name: "Results", value: formatStrikeSearchHits(result), inline: false },
       { name: "Search", value: result.searchUrl, inline: false },
       { name: "Links", value: formatLinks(integration), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildTagSearchEmbed(integration: Integration, result: TagSearchResult): EmbedBuilder {
+  return baseEmbed(integration, "Tag search")
+    .addFields(
+      { name: "Query", value: result.query, inline: true },
+      { name: "Matches", value: String(result.totalResults), inline: true },
+      { name: "Results", value: formatTagSearchResults(result), inline: false },
+      { name: "Source", value: result.sourceUrl, inline: false },
+      { name: "Fetched at", value: formatSingaporeDateTime(result.fetchedAt), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildTagFiltersEmbed(integration: Integration, result: TagFilterUpdateResult): EmbedBuilder {
+  return baseEmbed(integration, "Proposal tag filters")
+    .addFields(
+      { name: "Action", value: result.action, inline: true },
+      { name: "Changed", value: result.changed ? "yes" : "no", inline: true },
+      { name: "Result", value: result.message, inline: false },
+      ...(result.matchedTag ? [{ name: "Matched tag", value: formatTagFilterEntry(result.matchedTag), inline: false }] : []),
+      { name: "Current filters", value: formatTagFilterEntries(result.tagFilters), inline: false }
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 }
@@ -439,6 +470,29 @@ function formatStrikeSearchHits(result: StrikeSearchResult): string {
   return truncateEmbedValue(lines.join("\n"));
 }
 
+function formatTagSearchResults(result: TagSearchResult): string {
+  if (result.shownResults.length === 0) {
+    return "No matching tags found.";
+  }
+
+  const lines = result.shownResults.map((tag, index) => `${index + 1}. ${formatTagFilterEntry(tag)}`);
+  const remaining = result.totalResults - result.shownResults.length;
+  if (remaining > 0) {
+    lines.push(`...and ${remaining} more result(s). Refine the query to narrow the list.`);
+  }
+
+  return truncateEmbedValue(lines.join("\n"));
+}
+
+function formatTagFilterEntries(tags: TagFilterEntry[]): string {
+  return tags.length ? truncateEmbedValue(tags.map(formatTagFilterEntry).join("\n")) : "none configured";
+}
+
+function formatTagFilterEntry(tag: TagFilterEntry): string {
+  const id = tag.id ? `${tag.id} | ` : "";
+  return `${id}${tag.label} | ${tag.slug}`;
+}
+
 function formatLinks(integration: Integration): string {
   return [`Resolution: ${integration.sourceUrl}`, `Polymarket: ${formatPolymarketValue(integration)}`].join("\n");
 }
@@ -473,15 +527,23 @@ function formatSettingsFields(integration: Integration) {
   }
 
   try {
-    const settings = JSON.parse(integration.settingsJson) as { year?: unknown; month?: unknown };
+    const settings = JSON.parse(integration.settingsJson) as { year?: unknown; month?: unknown; tagFilters?: unknown };
+    const fields: Array<{ name: string; value: string; inline: boolean }> = [];
     if (typeof settings.year === "number" && typeof settings.month === "number") {
-      return [{ name: "Period", value: `${settings.year}-${String(settings.month).padStart(2, "0")}`, inline: true }];
+      fields.push({ name: "Period", value: `${settings.year}-${String(settings.month).padStart(2, "0")}`, inline: true });
     }
+    if (Array.isArray(settings.tagFilters)) {
+      const tags = settings.tagFilters
+        .map((tag) => (tag && typeof tag === "object" ? (tag as Partial<TagFilterEntry>) : null))
+        .filter((tag): tag is Partial<TagFilterEntry> => Boolean(tag?.label || tag?.slug))
+        .map((tag) => `${tag.label ?? tag.slug} (${tag.slug ?? "no slug"})`);
+      fields.push({ name: "Proposal tag filters", value: tags.length ? truncateEmbedValue(tags.join("\n")) : "none configured", inline: false });
+    }
+
+    return fields;
   } catch {
     return [];
   }
-
-  return [];
 }
 
 function formatSnapshotFields(integration: Integration) {

@@ -5,15 +5,18 @@ import {
   defaultPolygonRpcUrls,
   defaultPolygonWsUrl,
   parseHexQuantity,
+  polymarketBulletinBoardAddress,
   type PolygonLog
 } from "./polymarketClarifications.js";
 import type { AdapterValue, EventMonitorPost, EventMonitorResult, Integration, WebsiteAdapter } from "./types.js";
 
 export const optimisticOracleV1Address = "0xBb1A8db2D4350976a11cdfA60A1d43f97710Da49";
 export const optimisticOracleV2Address = "0xee3afe347d5c74317041e2618c49534daf887c24";
-export const optimisticOracleSourceUrl = `https://polygonscan.com/address/${optimisticOracleV2Address}`;
-export const optimisticOracleAddresses = [optimisticOracleV2Address, optimisticOracleV1Address];
+export const optimisticOracleV3Address = "0x2C0367a9DB231dDeBd88a94b4f6461a6e47C58B1";
+export const optimisticOracleSourceUrl = `https://polygonscan.com/address/${optimisticOracleV3Address}`;
+export const optimisticOracleAddresses = [optimisticOracleV3Address, optimisticOracleV2Address, optimisticOracleV1Address];
 export const polymarketUmaCtfAdapterAddresses = [
+  polymarketBulletinBoardAddress,
   "0x157Ce2d672854c848c9b79C49a8Cc6cc89176a49",
   "0x71392E133063CC0D16F40E1F9B60227404Bc03f7",
   "0x6A9D222616C90FcA5754cd1333cFD9b7fb6a4F74",
@@ -181,6 +184,11 @@ export async function buildPolymarketDisputePostFromLog(log: PolygonLog): Promis
 
   const market = await fetchClobMarketByQuestionId(dispute.questionId).catch(() => null);
   return normalizePolymarketDisputeEvent(dispute, market);
+}
+
+export function buildFastPolymarketDisputePostFromLog(log: PolygonLog): EventMonitorPost | null {
+  const dispute = decodeDisputePriceLog(log);
+  return dispute ? normalizePolymarketDisputeEvent(dispute, null) : null;
 }
 
 export function normalizePolymarketDisputeEvent(dispute: PolymarketDisputeEvent, market: ClobMarket | null): EventMonitorPost {

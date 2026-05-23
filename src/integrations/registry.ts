@@ -29,6 +29,7 @@ import { ornnH200IndexAdapter } from "./ornnH200Index.js";
 import { paidAppStoreAdapter } from "./paidAppStore.js";
 import { polymarketClarificationsAdapter } from "./polymarketClarifications.js";
 import { polymarketDisputesAdapter } from "./polymarketDisputes.js";
+import { polymarketProposalsAdapter } from "./polymarketProposals.js";
 import { pythNaturalGasAdapter } from "./pythNaturalGas.js";
 import { pythWtiAdapter } from "./pythWti.js";
 import { pythXagUsdAdapter } from "./pythXagUsd.js";
@@ -75,6 +76,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [paidAppStoreAdapter.id, paidAppStoreAdapter],
   [polymarketClarificationsAdapter.id, polymarketClarificationsAdapter],
   [polymarketDisputesAdapter.id, polymarketDisputesAdapter],
+  [polymarketProposalsAdapter.id, polymarketProposalsAdapter],
   [pythNaturalGasAdapter.id, pythNaturalGasAdapter],
   [pythWtiAdapter.id, pythWtiAdapter],
   [pythXagUsdAdapter.id, pythXagUsdAdapter],

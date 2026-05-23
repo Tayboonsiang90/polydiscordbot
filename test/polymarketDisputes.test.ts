@@ -1,16 +1,18 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import {
+  buildFastPolymarketDisputePostFromLog,
   decodeDisputePriceLog,
   disputePriceTopic,
   fetchPolymarketDisputeUpdates,
   optimisticOracleV1Address,
   optimisticOracleV2Address,
+  optimisticOracleV3Address,
   polymarketUmaCtfAdapterAddresses,
   polymarketUmaCtfAdapterAddressTopics,
   type PolymarketDisputeEvent
 } from "../src/integrations/polymarketDisputes.js";
 import type { Integration } from "../src/integrations/types.js";
-import type { PolygonLog } from "../src/integrations/polymarketClarifications.js";
+import { polymarketBulletinBoardAddress, type PolygonLog } from "../src/integrations/polymarketClarifications.js";
 
 const requester = polymarketUmaCtfAdapterAddresses[0];
 const proposer = "0x1111111111111111111111111111111111111111";
@@ -48,6 +50,34 @@ describe("Polymarket dispute parsing", () => {
     const log = buildDisputeLog(0n, "0x9999999999999999999999999999999999999999");
 
     expect(decodeDisputePriceLog(log)).toBeNull();
+  });
+
+  it("decodes current oracle dispute logs using the bulletin board requester", () => {
+    const event = decodeDisputePriceLog(buildDisputeLog(1_000_000_000_000_000_000n, polymarketBulletinBoardAddress, optimisticOracleV3Address));
+
+    expect(event).toMatchObject({
+      requester: polymarketBulletinBoardAddress.toLowerCase(),
+      oracleAddress: optimisticOracleV3Address,
+      proposedOutcome: "YES (1)"
+    });
+  });
+
+  it("builds a fast alert post directly from a Polymarket dispute log", () => {
+    const post = buildFastPolymarketDisputePostFromLog(buildDisputeLog(0n));
+
+    expect(post).toMatchObject({
+      id: `${transactionHash}:0x5`,
+      type: "Polymarket UMA dispute",
+      alertTitle: "Polymarket UMA dispute",
+      url: `https://polygonscan.com/tx/${transactionHash}`
+    });
+    expect(post?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Question ID" }),
+        expect.objectContaining({ name: "Proposed outcome", value: "NO (0)" }),
+        expect.objectContaining({ name: "Block", value: "87220096" })
+      ])
+    );
   });
 });
 
@@ -115,12 +145,16 @@ describe("fetchPolymarketDisputeUpdates", () => {
       rpcUrl,
       expect.objectContaining({ method: "POST", body: expect.stringContaining(optimisticOracleV1Address) })
     );
+    expect(fetchMock).toHaveBeenCalledWith(
+      rpcUrl,
+      expect.objectContaining({ method: "POST", body: expect.stringContaining(optimisticOracleV3Address) })
+    );
   });
 });
 
-function buildDisputeLog(proposedPrice: bigint, requesterAddress = requester): PolygonLog {
+function buildDisputeLog(proposedPrice: bigint, requesterAddress = requester, oracleAddress = optimisticOracleV2Address): PolygonLog {
   return {
-    address: optimisticOracleV2Address,
+    address: oracleAddress,
     topics: [disputePriceTopic, encodeAddressTopic(requesterAddress), encodeAddressTopic(proposer), encodeAddressTopic(disputer)],
     data: encodeDisputePriceData(ancillaryData, proposedPrice),
     blockNumber: "0x532df80",

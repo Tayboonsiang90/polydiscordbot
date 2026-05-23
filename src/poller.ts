@@ -37,6 +37,10 @@ export type EventCheckResult = {
   checkFields?: Array<{ name: string; value: string; inline?: boolean }>;
 };
 
+export type EventCheckOptions = {
+  queueAlerts?: boolean;
+};
+
 const maxEventSeenPostIds = 100;
 const schedulerErrorNoticeWindowMs = 10 * 60_000;
 let schedulerErrorNotice: ErrorNoticeState | undefined;
@@ -139,7 +143,11 @@ export async function checkIntegration(database: BotDatabase, integration: Integ
   };
 }
 
-export async function checkEventIntegration(database: BotDatabase, integration: Integration): Promise<EventCheckResult> {
+export async function checkEventIntegration(
+  database: BotDatabase,
+  integration: Integration,
+  options: EventCheckOptions = {}
+): Promise<EventCheckResult> {
   integration = activateQueuedPolymarket(database, integration);
   const adapter = getAdapter(integration.adapterId);
   if (!adapter.fetchEventUpdates) {
@@ -162,30 +170,42 @@ export async function checkEventIntegration(database: BotDatabase, integration: 
   const eventSelection = selectNewEventPosts(result.posts, currentIntegration.lastValue, baseSettingsJson);
   const candidatePosts =
     currentIntegration.lastValue === null && adapter.shouldAlertOnEventPost ? result.posts.slice(0, 1) : eventSelection.newPosts;
-  const eventSettingsJson = updateEventSeenPostIds(baseSettingsJson, eventSelection.nextSeenPostIds);
-  const eventStateIntegration =
-    eventSettingsJson !== activeIntegration.settingsJson
-      ? database.setSettingsJson(activeIntegration.id, eventSettingsJson)
-      : activeIntegration;
   const enrichedNewPosts = adapter.enrichEventPost
     ? await enrichEventPosts(adapter, candidatePosts, result.strikeTerms)
     : candidatePosts;
   const alertPosts = adapter.shouldAlertOnEventPost
     ? enrichedNewPosts.filter((post) => adapter.shouldAlertOnEventPost!(post))
     : enrichedNewPosts;
+  const newPosts = options.queueAlerts
+    ? claimEventAlertPosts(database, activeIntegration.id, alertPosts, result.observedAt)
+    : alertPosts;
+  const eventSettingsJson = updateEventSeenPostIds(baseSettingsJson, eventSelection.nextSeenPostIds);
+  const eventStateIntegration =
+    eventSettingsJson !== activeIntegration.settingsJson
+      ? database.setSettingsJson(activeIntegration.id, eventSettingsJson)
+      : activeIntegration;
   const updatedIntegration = latestSeenId
     ? database.recordCheck(eventStateIntegration.id, latestSeenId, result.observedAt)
     : database.recordCheck(eventStateIntegration.id, "no-posts", result.observedAt);
 
   return {
     integration: updatedIntegration,
-    newPosts: alertPosts,
+    newPosts,
     strikeTerms: result.strikeTerms,
     latestSeenId: latestSeenId ?? null,
     latestSeenUrl: result.posts[0]?.url ?? null,
     checkTitle: result.checkTitle,
     checkFields: result.checkFields
   };
+}
+
+function claimEventAlertPosts(
+  database: BotDatabase,
+  integrationId: number,
+  posts: EventMonitorPost[],
+  observedAt: Date
+): EventMonitorPost[] {
+  return posts.filter((post) => database.claimEventAlert(integrationId, post.id, post, observedAt));
 }
 
 export function selectNewEventPosts(
@@ -222,7 +242,7 @@ function getEventSeenPostIds(settingsJson: string | null): string[] {
 function updateEventSeenPostIds(settingsJson: string | null, eventSeenPostIds: string[]): string {
   return JSON.stringify({
     ...parseSettingsJson(settingsJson),
-    eventSeenPostIds
+    eventSeenPostIds: uniqueStrings(eventSeenPostIds).slice(0, maxEventSeenPostIds)
   });
 }
 
@@ -374,9 +394,10 @@ export class PollScheduler {
       try {
         const adapter = getAdapter(latest.adapterId);
         if (adapter.fetchEventUpdates) {
-          const result = await checkEventIntegration(this.database, latest);
+          await this.sendDueEventAlerts(latest.id);
+          const result = await checkEventIntegration(this.database, latest, { queueAlerts: true });
           for (const post of result.newPosts) {
-            await this.sendEventPost(latest.channelId, result.integration, post);
+            await this.sendClaimedEventPost(result.integration, post);
           }
         } else {
           const result = await checkIntegration(this.database, latest);
@@ -434,10 +455,39 @@ export class PollScheduler {
   private async sendEventPost(channelId: string, integration: Integration, post: EventMonitorPost): Promise<void> {
     const channel = await this.client.channels.fetch(channelId);
     if (!isSendableChannel(channel)) {
-      return;
+      throw new Error(`Event alert channel is not sendable for ${integration.adapterId}: ${channelId}`);
     }
 
     await channel.send(buildEventPostMessagePayload(integration, post));
+  }
+
+  private async sendDueEventAlerts(integrationId: number): Promise<void> {
+    for (const alert of this.database.claimPendingEventAlerts(integrationId)) {
+      const integration = this.database.getIntegrationById(alert.integrationId);
+      await this.sendClaimedEventPost(integration, alert.post);
+    }
+  }
+
+  private async sendClaimedEventPost(integration: Integration, post: EventMonitorPost): Promise<void> {
+    try {
+      await this.sendEventPost(integration.channelId, integration, post);
+      this.database.markEventAlertSent(integration.id, post.id);
+      this.recordEventAlertDelivered(integration.id, post);
+    } catch (error) {
+      this.database.markEventAlertPending(integration.id, post.id);
+      throw error;
+    }
+  }
+
+  private recordEventAlertDelivered(integrationId: number, post: EventMonitorPost): void {
+    const integration = this.database.getIntegrationById(integrationId);
+    if (getEventSeenPostIds(integration.settingsJson).includes(post.id)) {
+      return;
+    }
+
+    const settingsJson = updateEventSeenPostIds(integration.settingsJson, [post.id, ...getEventSeenPostIds(integration.settingsJson)]);
+    const updated = this.database.setSettingsJson(integration.id, settingsJson);
+    this.database.recordCheck(updated.id, post.id, post.postedAt);
   }
 
   private async runDueDailySnapshots(): Promise<void> {

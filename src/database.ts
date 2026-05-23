@@ -1,10 +1,24 @@
 import Database from "better-sqlite3";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
-import type { CreateIntegrationInput, Integration, IntegrationStatus } from "./integrations/types.js";
+import type { CreateIntegrationInput, EventMonitorPost, Integration, IntegrationStatus } from "./integrations/types.js";
 
 type IntegrationRow = Omit<Integration, "status"> & { status: IntegrationStatus };
 type TableInfoRow = { name: string };
+type EventAlertStatus = "pending" | "sending" | "sent";
+type EventAlertRow = {
+  integrationId: number;
+  eventId: string;
+  postJson: string;
+  status: EventAlertStatus;
+  lockedAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type EventAlert = Omit<EventAlertRow, "postJson"> & {
+  post: EventMonitorPost;
+};
 export type MarketEndMetadata = {
   integrationId: number;
   polymarketUrl: string;
@@ -175,6 +189,95 @@ export class BotDatabase {
     return this.getIntegrationById(id);
   }
 
+  claimEventAlert(integrationId: number, eventId: string, post: EventMonitorPost, now = new Date()): boolean {
+    const timestamp = now.toISOString();
+    const result = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO event_alerts
+          (integrationId, eventId, postJson, status, lockedAt, sentAt, createdAt, updatedAt)
+         VALUES
+          (?, ?, ?, 'sending', ?, null, ?, ?)`
+      )
+      .run(integrationId, eventId, serializeEventPost(post), timestamp, timestamp, timestamp);
+    return result.changes > 0;
+  }
+
+  claimPendingEventAlerts(
+    integrationId: number,
+    now = new Date(),
+    limit = 20,
+    staleAfterMs = 2 * 60_000
+  ): EventAlert[] {
+    const timestamp = now.toISOString();
+    const staleBefore = new Date(now.getTime() - staleAfterMs).toISOString();
+    const rows = this.db
+      .prepare(
+        `SELECT integrationId, eventId, postJson, status, lockedAt, sentAt, createdAt, updatedAt
+         FROM event_alerts
+         WHERE integrationId = ?
+           AND (
+             status = 'pending'
+             OR (status = 'sending' AND (lockedAt IS NULL OR lockedAt < ?))
+           )
+         ORDER BY createdAt ASC
+         LIMIT ?`
+      )
+      .all(integrationId, staleBefore, limit) as EventAlertRow[];
+    const claimed: EventAlert[] = [];
+    const claim = this.db.prepare(
+      `UPDATE event_alerts
+       SET status = 'sending', lockedAt = ?, updatedAt = ?
+       WHERE integrationId = ?
+         AND eventId = ?
+         AND status != 'sent'
+         AND (
+           status = 'pending'
+           OR (status = 'sending' AND (lockedAt IS NULL OR lockedAt < ?))
+         )`
+    );
+
+    for (const row of rows) {
+      const result = claim.run(timestamp, timestamp, row.integrationId, row.eventId, staleBefore);
+      if (result.changes > 0) {
+        claimed.push(deserializeEventAlert({ ...row, status: "sending", lockedAt: timestamp, updatedAt: timestamp }));
+      }
+    }
+
+    return claimed;
+  }
+
+  markEventAlertPending(integrationId: number, eventId: string, now = new Date()): void {
+    this.db
+      .prepare(
+        `UPDATE event_alerts
+         SET status = 'pending', lockedAt = null, updatedAt = ?
+         WHERE integrationId = ? AND eventId = ? AND status != 'sent'`
+      )
+      .run(now.toISOString(), integrationId, eventId);
+  }
+
+  markEventAlertSent(integrationId: number, eventId: string, now = new Date()): void {
+    const timestamp = now.toISOString();
+    this.db
+      .prepare(
+        `UPDATE event_alerts
+         SET status = 'sent', sentAt = ?, lockedAt = null, updatedAt = ?
+         WHERE integrationId = ? AND eventId = ?`
+      )
+      .run(timestamp, timestamp, integrationId, eventId);
+  }
+
+  getEventAlert(integrationId: number, eventId: string): EventAlert | null {
+    const row = this.db
+      .prepare(
+        `SELECT integrationId, eventId, postJson, status, lockedAt, sentAt, createdAt, updatedAt
+         FROM event_alerts
+         WHERE integrationId = ? AND eventId = ?`
+      )
+      .get(integrationId, eventId) as EventAlertRow | undefined;
+    return row ? deserializeEventAlert(row) : null;
+  }
+
   recordSnapshot(id: number, value: string, checkedAt: Date, snapshotDate: string): Integration {
     this.db
       .prepare(
@@ -297,6 +400,22 @@ export class BotDatabase {
         missingWarnedAt TEXT,
         UNIQUE(integrationId, polymarketUrl)
       );
+
+      CREATE TABLE IF NOT EXISTS event_alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        integrationId INTEGER NOT NULL,
+        eventId TEXT NOT NULL,
+        postJson TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'sending', 'sent')),
+        lockedAt TEXT,
+        sentAt TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        UNIQUE(integrationId, eventId)
+      );
+
+      CREATE INDEX IF NOT EXISTS event_alerts_pending_idx
+        ON event_alerts (integrationId, status, lockedAt, createdAt);
     `);
 
     if (!this.hasColumn("integrations", "polymarketUrl")) {
@@ -378,4 +497,27 @@ function keepFirstTwoLines(value: string | null): string | null {
   }
 
   return value.split(/\r?\n/).slice(0, 2).join("\n");
+}
+
+function serializeEventPost(post: EventMonitorPost): string {
+  return JSON.stringify({
+    ...post,
+    postedAt: post.postedAt.toISOString()
+  });
+}
+
+function deserializeEventAlert(row: EventAlertRow): EventAlert {
+  const { postJson, ...alert } = row;
+  const post = JSON.parse(row.postJson) as Omit<EventMonitorPost, "postedAt"> & { postedAt: string };
+  return {
+    ...alert,
+    post: {
+      ...post,
+      postedAt: new Date(post.postedAt),
+      imageUrls: Array.isArray(post.imageUrls) ? post.imageUrls : [],
+      matchedTerms: Array.isArray(post.matchedTerms) ? post.matchedTerms : [],
+      strikeTerms: Array.isArray(post.strikeTerms) ? post.strikeTerms : [],
+      imageText: typeof post.imageText === "string" ? post.imageText : ""
+    }
+  };
 }

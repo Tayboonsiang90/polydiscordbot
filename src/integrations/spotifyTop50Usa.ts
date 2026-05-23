@@ -3,6 +3,8 @@ import { fetchWithTimeout } from "../http.js";
 
 const sourceUrl = "https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp";
 const playlistUri = "spotify:playlist:37i9dQZEVXbLRQDuF5jeBp";
+const spotifyFetchAttempts = 3;
+const spotifyRetryDelaysMs = [1_000, 3_000];
 
 type SpotifyInitialState = {
   entities?: {
@@ -62,24 +64,36 @@ export async function fetchSpotifyTop50Value(
   chartName: string,
   unit: string
 ): Promise<AdapterValue> {
-  const response = await fetchWithTimeout(chartUrl, {
-    headers: {
-      "user-agent": "Mozilla/5.0"
-    }
-  });
+  for (let attempt = 1; attempt <= spotifyFetchAttempts; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(chartUrl, {
+        headers: {
+          "user-agent": "Mozilla/5.0"
+        }
+      });
 
-  if (!response.ok) {
-    throw new Error(`Spotify returned HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Spotify returned HTTP ${response.status}`);
+      }
+
+      const html = await response.text();
+      const value = extractSpotifyTop50NumberOne(html, targetPlaylistUri, chartName);
+      return {
+        value,
+        rawValue: value,
+        unit,
+        observedAt: new Date()
+      };
+    } catch (error) {
+      if (attempt === spotifyFetchAttempts || !isRetryableSpotifyError(error)) {
+        throw new Error(`${chartName} temporarily unavailable after ${attempt} attempt(s)`);
+      }
+
+      await delay(spotifyRetryDelaysMs[attempt - 1] ?? 1_000);
+    }
   }
 
-  const html = await response.text();
-  const value = extractSpotifyTop50NumberOne(html, targetPlaylistUri, chartName);
-  return {
-    value,
-    rawValue: value,
-    unit,
-    observedAt: new Date()
-  };
+  throw new Error(`${chartName} temporarily unavailable after ${spotifyFetchAttempts} attempt(s)`);
 }
 
 export const spotifyTop50UsaAdapter: WebsiteAdapter = {
@@ -105,7 +119,24 @@ function extractInitialState(html: string): SpotifyInitialState {
   return JSON.parse(Buffer.from(match[1], "base64").toString("utf8")) as SpotifyInitialState;
 }
 
+function isRetryableSpotifyError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return true;
+  }
+
+  return (
+    /Spotify returned HTTP 5\d\d/.test(error.message) ||
+    error.message.includes("fetch failed") ||
+    error.message.includes("Could not find Spotify initial state") ||
+    error.message.includes("Could not find the #1 track")
+  );
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 

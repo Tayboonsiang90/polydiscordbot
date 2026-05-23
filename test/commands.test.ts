@@ -366,6 +366,18 @@ describe("adapter commands", () => {
       ])
     });
 
+    const umaProposalCommand = buildAdapterCommands().find((command) => command.name === "umaproposals");
+    expect(umaProposalCommand?.toJSON()).toMatchObject({
+      name: "umaproposals",
+      options: expect.arrayContaining([
+        expect.objectContaining({ name: "check" }),
+        expect.objectContaining({ name: "tagsearch" }),
+        expect.objectContaining({ name: "tags" }),
+        expect.objectContaining({ name: "test" }),
+        expect.objectContaining({ name: "polymarket" })
+      ])
+    });
+
     const ngPriceCommand = buildAdapterCommands().find((command) => command.name === "ngprice");
     expect(ngPriceCommand?.toJSON()).toMatchObject({
       name: "ngprice",

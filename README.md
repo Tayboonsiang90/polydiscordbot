@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, UMA Clarification Alerts, Kaito Polymarket Mindshare, MrBeast YouTube Subscribers, MrBeast YouTube Views, NBS Press Releases, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, UMA Clarification Alerts, UMA Proposal Alerts, Kaito Polymarket Mindshare, MrBeast YouTube Subscribers, MrBeast YouTube Views, NBS Press Releases, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -39,6 +39,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Monitors the US iPhone App Store Top Paid Apps top 2 list for Polymarket resolution checks. |
 | `polymarket-clarifications` | `/umaclarifications` | `#uma-clarifications` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
 | `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
+| `polymarket-proposals` | `/umaproposals` | `#uma-proposals` | `UMA Proposal Alerts` | `📨` | Alerts when Polymarket UMA resolution proposals open on-chain for configured Polymarket tags. |
 | `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker and alerts only when live price crosses parsed Polymarket strikes. |
 | `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed and alerts only when live price crosses parsed Polymarket strikes. |
@@ -51,7 +52,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `tsa-passengers` | `/tsa` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
 | `usgs-earthquakes` | `/earthquake` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Monitors the latest USGS 5.5+ earthquake in the May 4-May 10 market window. |
 | `white-house-full-lid` | `/fulllid` | `#fulllid` | `White House Lid Alerts` | `🧢` | Monitors Roll Call and Forth for the first daily White House full lid and labels whether it was before 6:30 PM ET. |
-| `hk-precip` | `/hkprecip` | `#hkprecip` | `HKO Hong Kong Precip Alerts` | `☔` | Monitors HKO Hong Kong monthly total rainfall from Daily Extract for Polymarket resolution checks. |
+| `hk-precip` | `/hkprecip` | `#hkprecip` | `HKO Hong Kong Precip Alerts` | `☔` | Monitors HKO Hong Kong monthly rainfall, using Yesterday's Weather as an alpha add-on before Daily Extract catches up. |
 | `kaito-polymarket-mindshare` | `/kaitomindshare` | `#kaitomindshare` | `Kaito Mindshare Alerts` | `🧠` | Monitors finalized Kaito Info Markets Historical Data rows for Polymarket mindshare. |
 | `kma-seoul-precip` | `/koreaprecip` | `#koreaprecip` | `KMA Seoul Precip Alerts` | `☔` | Monitors KMA Seoul monthly precipitation for Polymarket resolution checks. |
 | `mrbeast-subscribers` | `/mrbeastsubs` | `#mrbeastsubs` | `MrBeast Subs Alerts` | `👥` | Tracks MrBeast YouTube channel subscribers, dailyized rate, and Polymarket target projections. |
@@ -65,7 +66,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
 - One adapter creates one monitor channel, one slash-command group, one alert role, and one reaction-role selector.
-- Shared commands are generated in `src/commands.ts`: `status`, `check`, `test`, `last`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, and searchable strike adapters get `search`.
+- Shared commands are generated in `src/commands.ts`: `status`, `check`, `test`, `last`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`.
 - Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
 - Polling and alert sends live in `src/poller.ts`; reaction-role add/remove logic lives in `src/reactionRoles.ts`.
@@ -159,6 +160,16 @@ Trump Truth and NYT Front Page also support:
 The `strikes` command force-refreshes Gamma-derived strike terms and then displays the currently active unresolved terms.
 The Trump Truth `search` command refreshes settings, searches the Trump Truth archive for a word or phrase inside the active weekly market's ET timeframe, and returns matching posts plus the source search URL.
 
+UMA Proposal Alerts also supports:
+
+- `/umaproposals tagsearch query:sports`
+- `/umaproposals tags action:add tag:1`
+- `/umaproposals tags action:list`
+- `/umaproposals tags action:remove tag:sports`
+- `/umaproposals tags action:clear`
+
+Proposal alerts are off until at least one Polymarket tag filter is configured. The bot watches UMA `ProposePrice` logs first, then enriches each proposal with Polymarket CLOB market metadata and only alerts when the market tags exactly match a configured tag label or slug.
+
 App Store integrations have one extra command:
 
 - `/freeappstore snapshot`
@@ -168,7 +179,7 @@ The Free App Store and Paid App Store integrations run a separate daily snapshot
 
 ## Alert Roles
 
-The bot creates `#market-alert-roles` and posts grouped reaction selectors for market integration roles. It creates `#uma-alert-roles` for the global UMA clarification alert role. React to an alert emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing user reactions while adding missing bot reactions. If duplicate adapter emojis land in the same selector message, the provisioner assigns a fallback emoji for that message and preserves the stored emoji mapping on later refreshes.
+The bot creates `#market-alert-roles` and posts grouped reaction selectors for market integration roles. It creates `#uma-alert-roles` for UMA clarification, proposal, and dispute alert roles. React to an alert emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing user reactions while adding missing bot reactions. If duplicate adapter emojis land in the same selector message, the provisioner assigns a fallback emoji for that message and preserves the stored emoji mapping on later refreshes.
 
 The Current Integrations table is the source of truth for each adapter's role name and emoji. Normal value-change alerts, daily snapshots, and market-end reminders mention the adapter alert role. Event-post integrations can be quieter: Trump Truth posts every new post but only mentions the role when a strike is detected, while NYT Front Page only posts alerts for strike matches.
 
@@ -203,13 +214,15 @@ The Current Integrations table is the source of truth for each adapter's role na
 - MrBeast views monitors the YouTube channel About metadata total view count and compares it to Gamma-parsed billion-view market targets for dailyized rate and projection output.
 - ORNN B200 and H200 monitor the dashboard's GPU index-history API and use the second latest point as finalized because daily values finalize after the following day's point is published.
 - UMA Clarification Alerts subscribes to `AncillaryDataUpdated` events from Polymarket's UMA bulletin-board contract on Polygon over WebSocket, defaults to PublicNode's free Polygon Bor WebSocket, and uses dRPC, PublicNode, Tenderly's public gateway, and 1RPC for 1-minute HTTP backfill. It can be pointed at another provider with `POLYGON_WS_URL`, `POLYGON_RPC_URL`, or comma-separated `POLYGON_RPC_URLS`.
-- UMA Dispute Alerts subscribes to UMA OptimisticOracle `DisputePrice` events on Polygon, filters requester addresses to known Polymarket UMA CTF Adapter deployments, and uses 1-minute HTTP backfill plus CLOB `markets-by-question-id` enrichment.
+- UMA Dispute Alerts subscribes to UMA OptimisticOracle `DisputePrice` events on Polygon, watches current and legacy oracle contracts, filters requester addresses to Polymarket UMA requester contracts including the bulletin board adapter, and uses 1-minute HTTP backfill plus CLOB `markets-by-question-id` enrichment.
+- UMA Proposal Alerts subscribes to UMA OptimisticOracle `ProposePrice` events on Polygon, watches current and legacy oracle contracts, filters requester addresses to Polymarket UMA requester contracts including the bulletin board adapter, enriches each proposal through CLOB `markets-by-question-id`, and alerts only when the returned market tags match configured `/umaproposals tags` filters.
 - Pyth Natural Gas, WTI, XAGUSD, and XAUUSD parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.
 - AWS monitors the public AWS Health Dashboard history events JSON and treats status code `3` as the disrupted severity classification.
 - CDC fertility monitors the natality dashboard CSV for the 2026 Q1 general fertility rate row.
 - Cloudflare monitors the official Statuspage incidents API and returns a stable no-critical value unless a Critical/red incident appears.
 - Discord monitors the official Statuspage incidents API and filters Critical/red incidents to the 2026 May 31 market window.
 - USGS earthquakes monitors the official USGS event API for the latest 5.5+ earthquake in the May 4-May 10 market window.
+- HKO Hong Kong precipitation uses Daily Extract as the official total, then adds the text-only Yesterday's Weather rainfall only when that report is newer than the latest Daily Extract day.
 - White House Full Lid monitors Roll Call's Factba.se calendar and Forth's WH pool page for today's ET full lid; it polls every minute during 8:00 AM-8:30 PM ET and hourly off-hours.
 - Register new adapters in `src/integrations/registry.ts`.
 - Give each adapter a unique `commandName` for its slash command.

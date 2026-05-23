@@ -3,18 +3,16 @@ import WebSocket, { type RawData } from "ws";
 import type { BotConfig } from "./config.js";
 import type { BotDatabase } from "./database.js";
 import { buildEventPostMessagePayload } from "./embeds.js";
-import {
-  buildFastPolymarketDisputePostFromLog,
-  buildPolymarketDisputePostFromLog,
-  disputePriceTopic,
-  getPolymarketDisputeWsUrl,
-  optimisticOracleAddresses,
-  parsePolymarketDisputeSettings,
-  polymarketUmaCtfAdapterAddressTopics
-} from "./integrations/polymarketDisputes.js";
 import { parseHexQuantity, type PolygonLog } from "./integrations/polymarketClarifications.js";
+import {
+  buildPolymarketProposalPostFromLog,
+  getPolymarketProposalWsUrl,
+  parsePolymarketProposalSettings,
+  proposePriceTopic
+} from "./integrations/polymarketProposals.js";
+import { optimisticOracleAddresses, polymarketUmaCtfAdapterAddressTopics } from "./integrations/polymarketDisputes.js";
 
-const adapterId = "polymarket-disputes";
+const adapterId = "polymarket-proposals";
 const maxSeenEventIds = 100;
 const reconnectDelayMs = 5_000;
 const websocketPingIntervalMs = 30_000;
@@ -33,11 +31,7 @@ type SendableChannel = {
   send(content: unknown): Promise<unknown>;
 };
 
-type EditableMessage = {
-  edit(content: unknown): Promise<unknown>;
-};
-
-export class UmaDisputeSubscriber {
+export class UmaProposalSubscriber {
   private websocket: WebSocket | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private pingTimer: NodeJS.Timeout | null = null;
@@ -55,7 +49,7 @@ export class UmaDisputeSubscriber {
     try {
       this.connect();
     } catch (error) {
-      console.error("UMA dispute WebSocket connect failed:", formatError(error));
+      console.error("UMA proposal WebSocket connect failed:", formatError(error));
       this.scheduleReconnect();
     }
   }
@@ -77,8 +71,8 @@ export class UmaDisputeSubscriber {
     }
 
     const integration = this.database.getIntegrationByAdapter(this.config.discordGuildId, adapterId);
-    const settings = parsePolymarketDisputeSettings(integration?.settingsJson ?? null);
-    const wsUrl = getPolymarketDisputeWsUrl(settings);
+    const settings = parsePolymarketProposalSettings(integration?.settingsJson ?? null);
+    const wsUrl = getPolymarketProposalWsUrl(settings);
     const websocket = new WebSocket(wsUrl);
     const connectedAtMs = Date.now();
     this.websocket = websocket;
@@ -96,24 +90,24 @@ export class UmaDisputeSubscriber {
               "logs",
               {
                 address: oracleAddress,
-                topics: [disputePriceTopic, polymarketUmaCtfAdapterAddressTopics]
+                topics: [proposePriceTopic, polymarketUmaCtfAdapterAddressTopics]
               }
             ]
           })
         );
         requestId += 1;
       }
-      console.log(`UMA dispute WebSocket subscribe requested via ${wsUrl}`);
+      console.log(`UMA proposal WebSocket subscribe requested via ${wsUrl}`);
     });
 
     websocket.on("message", (data) => {
       void this.handleMessage(data).catch((error) => {
-        console.error("UMA dispute WebSocket message failed:", formatError(error));
+        console.error("UMA proposal WebSocket message failed:", formatError(error));
       });
     });
 
     websocket.on("error", (error) => {
-      console.error(`UMA dispute WebSocket error from ${wsUrl}: ${formatError(error)}`);
+      console.error(`UMA proposal WebSocket error from ${wsUrl}: ${formatError(error)}`);
     });
 
     websocket.on("close", (code, reason) => {
@@ -123,7 +117,7 @@ export class UmaDisputeSubscriber {
       }
       if (!this.stopped) {
         console.warn(
-          `UMA dispute WebSocket closed after ${Math.round((Date.now() - connectedAtMs) / 1_000)}s ` +
+          `UMA proposal WebSocket closed after ${Math.round((Date.now() - connectedAtMs) / 1_000)}s ` +
             `(code ${code}${formatCloseReason(reason)}); reconnecting`
         );
       }
@@ -141,7 +135,7 @@ export class UmaDisputeSubscriber {
       try {
         websocket.ping();
       } catch (error) {
-        console.error("UMA dispute WebSocket ping failed:", formatError(error));
+        console.error("UMA proposal WebSocket ping failed:", formatError(error));
         websocket.terminate();
       }
     }, websocketPingIntervalMs);
@@ -167,7 +161,7 @@ export class UmaDisputeSubscriber {
       try {
         this.connect();
       } catch (error) {
-        console.error("UMA dispute WebSocket reconnect failed:", formatError(error));
+        console.error("UMA proposal WebSocket reconnect failed:", formatError(error));
         this.scheduleReconnect();
       }
     }, reconnectDelayMs);
@@ -177,13 +171,13 @@ export class UmaDisputeSubscriber {
   private async handleMessage(data: unknown): Promise<void> {
     const message = parseSubscriptionMessage(data);
     if (message.error) {
-      console.error(`UMA dispute WebSocket subscription error: ${message.error.message ?? "unknown error"}`);
+      console.error(`UMA proposal WebSocket subscription error: ${message.error.message ?? "unknown error"}`);
       this.websocket?.close();
       return;
     }
 
     if (message.result && message.id !== undefined) {
-      console.log(`UMA dispute WebSocket subscription confirmed: ${message.result}`);
+      console.log(`UMA proposal WebSocket subscription confirmed: ${message.result}`);
       return;
     }
 
@@ -208,7 +202,7 @@ export class UmaDisputeSubscriber {
         return;
       }
 
-      const post = buildFastPolymarketDisputePostFromLog(log);
+      const post = await buildPolymarketProposalPostFromLog(log, integration);
       if (!post) {
         return;
       }
@@ -219,21 +213,17 @@ export class UmaDisputeSubscriber {
       const channel = await this.client.channels.fetch(integration.channelId);
       if (!isSendableChannel(channel)) {
         this.database.markEventAlertPending(integration.id, post.id);
-        throw new Error(`UMA dispute channel is not sendable: ${integration.channelId}`);
+        throw new Error(`UMA proposal channel is not sendable: ${integration.channelId}`);
       }
 
-      let sentMessage: unknown;
       try {
-        sentMessage = await channel.send(buildEventPostMessagePayload(integration, post));
+        await channel.send(buildEventPostMessagePayload(integration, post));
       } catch (error) {
         this.database.markEventAlertPending(integration.id, post.id);
         throw error;
       }
       this.database.markEventAlertSent(integration.id, post.id);
       this.recordDeliveredLog(integration.id, log, post);
-      void this.enrichSentPost(sentMessage, integration.id, log).catch((error) => {
-        console.error("UMA dispute enrichment edit failed:", formatError(error));
-      });
     } finally {
       this.inFlightLogIds.delete(logId);
     }
@@ -241,7 +231,7 @@ export class UmaDisputeSubscriber {
 
   private recordDeliveredLog(integrationId: number, log: PolygonLog, post: { id: string; postedAt: Date }): void {
     const integration = this.database.getIntegrationById(integrationId);
-    const settings = parsePolymarketDisputeSettings(integration.settingsJson);
+    const settings = parsePolymarketProposalSettings(integration.settingsJson);
     const nextSettingsJson = JSON.stringify({
       ...settings,
       eventSeenPostIds: addSeenEventId(settings.eventSeenPostIds, post.id),
@@ -250,21 +240,6 @@ export class UmaDisputeSubscriber {
     });
     this.database.setSettingsJson(integration.id, nextSettingsJson);
     this.database.recordCheck(integration.id, post.id, post.postedAt);
-  }
-
-  private async enrichSentPost(sentMessage: unknown, integrationId: number, log: PolygonLog): Promise<void> {
-    if (!isEditableMessage(sentMessage)) {
-      return;
-    }
-
-    const enrichedPost = await buildPolymarketDisputePostFromLog(log);
-    if (!enrichedPost) {
-      return;
-    }
-
-    const integration = this.database.getIntegrationById(integrationId);
-    const payload = buildEventPostMessagePayload(integration, enrichedPost);
-    await sentMessage.edit({ embeds: payload.embeds, components: payload.components, allowedMentions: { parse: [] } });
   }
 }
 
@@ -282,7 +257,7 @@ function parseSubscriptionMessage(data: RawData | unknown): SubscriptionMessage 
 }
 
 function hasSeenEventId(settingsJson: string | null, eventId: string): boolean {
-  const settings = parsePolymarketDisputeSettings(settingsJson);
+  const settings = parsePolymarketProposalSettings(settingsJson);
   return Array.isArray(settings.eventSeenPostIds) && settings.eventSeenPostIds.includes(eventId);
 }
 
@@ -292,10 +267,6 @@ function addSeenEventId(existing: string[] | undefined, eventId: string): string
 
 function isSendableChannel(channel: unknown): channel is SendableChannel {
   return Boolean(channel && typeof channel === "object" && "send" in channel && typeof channel.send === "function");
-}
-
-function isEditableMessage(message: unknown): message is EditableMessage {
-  return Boolean(message && typeof message === "object" && "edit" in message && typeof message.edit === "function");
 }
 
 function formatError(error: unknown): string {

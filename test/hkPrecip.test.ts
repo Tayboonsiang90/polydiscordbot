@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildHkPrecipitationAlphaValue,
+  extractHkoYesterdayRainfall,
   extractHkPrecipitationValue,
+  extractHkPrecipitationOfficialValue,
   getHkPrecipSettings,
+  hkPrecipShouldAlertOnChange,
   isValidHkPrecipPeriod
 } from "../src/integrations/hkPrecip.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -64,6 +68,45 @@ describe("HKO Hong Kong precipitation adapter", () => {
     );
 
     expect(value).toBe("Trace mm (2026-05)");
+  });
+
+  it("adds yesterday report rainfall when Daily Extract has not caught up", () => {
+    const official = extractHkPrecipitationOfficialValue(
+      {
+        stn: {
+          data: [
+            {
+              month: 5,
+              dayData: [
+                ["20", "1008.1", "30.7", "28.0", "25.9", "25.0", "84", "88", "  3.2"],
+                ["Mean/Total", "1011.0", "27.7", "25.3", "23.8", "22.2", "83", "84", "147.9"]
+              ]
+            }
+          ]
+        }
+      },
+      { year: 2026, month: 5 }
+    );
+    const yesterday = extractHkoYesterdayRainfall(`
+      <span>Bulletin issued at 00:15 HKT 22/May/2026</span>
+      <pre>Rainfall                                    66.1 mm</pre>
+    `);
+
+    expect(buildHkPrecipitationAlphaValue(official, yesterday, { year: 2026, month: 5 })).toContain(
+      "Current total: 214.0 mm (2026-05)"
+    );
+  });
+
+  it("does not alert when only HK alpha metadata changes", () => {
+    expect(
+      hkPrecipShouldAlertOnChange(
+        "Current total: 214.0 mm (2026-05)\nData status: alpha daily report added",
+        "Current total: 214.0 mm (2026-05)\nData status: official daily extract"
+      )
+    ).toBe(false);
+    expect(hkPrecipShouldAlertOnChange("Current total: 214.0 mm (2026-05)", "Current total: 215.0 mm (2026-05)")).toBe(
+      true
+    );
   });
 
   it("reads stored year and month settings", () => {
