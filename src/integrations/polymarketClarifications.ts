@@ -8,10 +8,12 @@ export const ancillaryDataUpdatedTopic =
 export const postUpdateSelector = "0x072d1259";
 
 export const defaultPolygonRpcUrls = [
+  "https://polygon-pokt.nodies.app",
+  "https://polygon.api.onfinality.io/public",
   "https://polygon.drpc.org",
   "https://polygon-bor-rpc.publicnode.com",
   "https://gateway.tenderly.co/public/polygon",
-  "https://1rpc.io/matic"
+  "https://rpc-mainnet.matic.quiknode.pro"
 ];
 export const defaultPolygonRpcUrl = defaultPolygonRpcUrls[0];
 export const defaultPolygonWsUrl = "wss://polygon-bor-rpc.publicnode.com";
