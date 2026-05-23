@@ -470,13 +470,21 @@ export class PollScheduler {
 
   private async sendClaimedEventPost(integration: Integration, post: EventMonitorPost): Promise<void> {
     try {
-      await this.sendEventPost(integration.channelId, integration, post);
+      for (const channelId of this.resolveEventPostChannelIds(integration, post)) {
+        await this.sendEventPost(channelId, integration, post);
+      }
       this.database.markEventAlertSent(integration.id, post.id);
       this.recordEventAlertDelivered(integration.id, post);
     } catch (error) {
       this.database.markEventAlertPending(integration.id, post.id);
       throw error;
     }
+  }
+
+  private resolveEventPostChannelIds(integration: Integration, post: EventMonitorPost): string[] {
+    const adapter = getAdapter(integration.adapterId);
+    const channelIds = uniqueStrings(adapter.resolveEventPostChannelIds?.(integration, post) ?? []).filter(Boolean);
+    return channelIds.length ? channelIds : [integration.channelId];
   }
 
   private recordEventAlertDelivered(integrationId: number, post: EventMonitorPost): void {

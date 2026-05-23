@@ -40,6 +40,8 @@ const maxTagSearchResults = 20;
 const maxGammaTagPages = 120;
 const gammaTagPageSize = 100;
 const gammaTagCacheMs = 10 * 60_000;
+const proposalTagChannelPrefix = "uma-proposals-";
+const matchedTagsFieldName = "Matched tags";
 
 type JsonRpcResponse<T> = {
   result?: T;
@@ -71,7 +73,12 @@ type TagCache = {
 
 type ProposalTagMatch = {
   matchedMarketTags: string[];
-  matchedFilters: TagFilterEntry[];
+  matchedFilters: ProposalTagFilterEntry[];
+};
+
+export type ProposalTagFilterEntry = TagFilterEntry & {
+  channelId?: string;
+  channelName?: string;
 };
 
 export type PolymarketProposalSettings = {
@@ -84,7 +91,7 @@ export type PolymarketProposalSettings = {
   confirmations?: number;
   initialLookbackBlocks?: number;
   maxScanBlocksPerRun?: number;
-  tagFilters?: TagFilterEntry[];
+  tagFilters?: ProposalTagFilterEntry[];
 };
 
 export type PolymarketProposalEvent = {
@@ -152,6 +159,9 @@ export const polymarketProposalsAdapter: WebsiteAdapter = {
   },
   getTagFilters(integration: Integration): TagFilterEntry[] {
     return getPolymarketProposalTagFilters(integration);
+  },
+  resolveEventPostChannelIds(integration: Integration, post: EventMonitorPost): string[] {
+    return resolvePolymarketProposalChannelIds(integration, post);
   }
 };
 
@@ -313,7 +323,7 @@ export function normalizePolymarketProposalEvent(
     ...(question ? [{ name: "Question", value: question, inline: false }] : []),
     ...(market?.condition_id ? [{ name: "Condition ID", value: market.condition_id, inline: false }] : []),
     { name: "Question ID", value: proposal.questionId, inline: false },
-    { name: "Matched tags", value: matchedTags, inline: false },
+    { name: matchedTagsFieldName, value: matchedTags, inline: false },
     ...(market?.tags?.length ? [{ name: "Market tags", value: market.tags.join(", "), inline: false }] : []),
     { name: "Proposed outcome", value: proposal.proposedOutcome, inline: true },
     { name: "Requester adapter", value: proposal.requester, inline: false },
@@ -359,8 +369,55 @@ export function parsePolymarketProposalSettings(settingsJson: string | null): Po
   }
 }
 
-export function getPolymarketProposalTagFilters(integration: Integration): TagFilterEntry[] {
+export function getPolymarketProposalTagFilters(integration: Integration): ProposalTagFilterEntry[] {
   return getTagFiltersFromSettings(parsePolymarketProposalSettings(integration.settingsJson));
+}
+
+export function getPolymarketProposalTagFiltersFromSettingsJson(settingsJson: string | null): ProposalTagFilterEntry[] {
+  return getTagFiltersFromSettings(parsePolymarketProposalSettings(settingsJson));
+}
+
+export function getPolymarketProposalTagChannelName(tag: TagFilterEntry): string {
+  const slug = normalizeTagText(tag.slug || tag.label) || "tag";
+  const channelName = `${proposalTagChannelPrefix}${slug}`.slice(0, 100).replace(/-+$/g, "");
+  return channelName || `${proposalTagChannelPrefix}tag`;
+}
+
+export function getPolymarketProposalStoredTagFilter(
+  settingsJson: string | null,
+  tag: TagFilterEntry
+): ProposalTagFilterEntry | null {
+  return getPolymarketProposalTagFiltersFromSettingsJson(settingsJson).find((candidate) => sameTagFilter(candidate, tag)) ?? null;
+}
+
+export function setPolymarketProposalTagChannel(
+  settingsJson: string | null,
+  tag: TagFilterEntry,
+  channelId: string,
+  channelName: string
+): string {
+  const settings = parsePolymarketProposalSettings(settingsJson);
+  const tagFilters = getTagFiltersFromSettings(settings);
+  const nextFilters = tagFilters.map((candidate) =>
+    sameTagFilter(candidate, tag)
+      ? { ...candidate, channelId: channelId.trim(), channelName: channelName.trim() }
+      : candidate
+  );
+
+  return JSON.stringify({ ...settings, tagFilters: nextFilters });
+}
+
+export function resolvePolymarketProposalChannelIds(integration: Integration, post: EventMonitorPost): string[] {
+  const matchedTagKeys = getPostMatchedTagKeys(post);
+  if (!matchedTagKeys.size) {
+    return [];
+  }
+
+  const channelIds = getPolymarketProposalTagFilters(integration)
+    .filter((tag) => tag.channelId && hasMatchedTagKey(matchedTagKeys, tag))
+    .map((tag) => tag.channelId!)
+    .filter(Boolean);
+  return uniqueStrings(channelIds);
 }
 
 export async function searchPolymarketProposalTags(query: string): Promise<TagSearchResult> {
@@ -677,12 +734,12 @@ async function polygonRpcOne<T>(rpcUrl: string, method: string, params: unknown[
   return payload.result;
 }
 
-function findProposalTagMatch(marketTags: string[], tagFilters: TagFilterEntry[]): ProposalTagMatch | null {
+function findProposalTagMatch(marketTags: string[], tagFilters: ProposalTagFilterEntry[]): ProposalTagMatch | null {
   if (!marketTags.length || !tagFilters.length) {
     return null;
   }
 
-  const normalizedFilters = new Map<string, TagFilterEntry[]>();
+  const normalizedFilters = new Map<string, ProposalTagFilterEntry[]>();
   for (const filter of tagFilters) {
     for (const key of uniqueStrings([normalizeTagText(filter.label), normalizeTagText(filter.slug)])) {
       const existing = normalizedFilters.get(key) ?? [];
@@ -692,7 +749,7 @@ function findProposalTagMatch(marketTags: string[], tagFilters: TagFilterEntry[]
   }
 
   const matchedMarketTags: string[] = [];
-  const matchedFilters: TagFilterEntry[] = [];
+  const matchedFilters: ProposalTagFilterEntry[] = [];
   for (const marketTag of marketTags) {
     const filters = normalizedFilters.get(normalizeTagText(marketTag));
     if (!filters?.length) {
@@ -706,6 +763,20 @@ function findProposalTagMatch(marketTags: string[], tagFilters: TagFilterEntry[]
   return matchedMarketTags.length
     ? { matchedMarketTags: uniqueStrings(matchedMarketTags), matchedFilters: uniqueTagFilters(matchedFilters) }
     : null;
+}
+
+function getPostMatchedTagKeys(post: EventMonitorPost): Set<string> {
+  const value = post.fields?.find((field) => field.name === matchedTagsFieldName)?.value ?? "";
+  return new Set(
+    value
+      .split(",")
+      .map((tag) => normalizeTagText(tag))
+      .filter(Boolean)
+  );
+}
+
+function hasMatchedTagKey(matchedTagKeys: Set<string>, tag: TagFilterEntry): boolean {
+  return matchedTagKeys.has(normalizeTagText(tag.label)) || matchedTagKeys.has(normalizeTagText(tag.slug));
 }
 
 function getNextFromBlock(settings: PolymarketProposalSettings, confirmedLatestBlock: number): number {
@@ -734,9 +805,9 @@ function formatWatchedAdapterAddresses(): string {
   return `${visible.join("\n")}${suffix}`;
 }
 
-function formatConfiguredTagFilters(tagFilters: TagFilterEntry[]): string {
+function formatConfiguredTagFilters(tagFilters: ProposalTagFilterEntry[]): string {
   return tagFilters.length
-    ? tagFilters.map((tag) => `${tag.label} (${tag.slug})`).join("\n")
+    ? tagFilters.map((tag) => `${tag.label} (${tag.slug})${tag.channelName ? ` -> #${tag.channelName}` : ""}`).join("\n")
     : "none - use `/umaproposals tags action:add tag:<id-or-slug>`";
 }
 
@@ -877,16 +948,16 @@ function isInvalidBlockRangeError(error: unknown): boolean {
   return message.includes("block range") && (message.includes("invalid") || message.includes("too large"));
 }
 
-function getTagFiltersFromSettings(settings: PolymarketProposalSettings): TagFilterEntry[] {
+function getTagFiltersFromSettings(settings: PolymarketProposalSettings): ProposalTagFilterEntry[] {
   return uniqueTagFilters(Array.isArray(settings.tagFilters) ? settings.tagFilters.map(sanitizeTagFilter).filter(isTagFilterEntry) : []);
 }
 
-function sanitizeTagFilter(value: unknown): TagFilterEntry | null {
+function sanitizeTagFilter(value: unknown): ProposalTagFilterEntry | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
-  const tag = value as Partial<TagFilterEntry>;
+  const tag = value as Partial<ProposalTagFilterEntry>;
   const label = typeof tag.label === "string" ? tag.label.trim() : "";
   const slug = typeof tag.slug === "string" ? normalizeTagText(tag.slug) : normalizeTagText(label);
   if (!label || !slug) {
@@ -895,6 +966,8 @@ function sanitizeTagFilter(value: unknown): TagFilterEntry | null {
 
   return {
     ...(typeof tag.id === "string" && tag.id.trim() ? { id: tag.id.trim() } : {}),
+    ...(typeof tag.channelId === "string" && tag.channelId.trim() ? { channelId: tag.channelId.trim() } : {}),
+    ...(typeof tag.channelName === "string" && tag.channelName.trim() ? { channelName: tag.channelName.trim() } : {}),
     label,
     slug
   };
@@ -923,8 +996,8 @@ function isTagFilterEntry(value: TagFilterEntry | null): value is TagFilterEntry
   return Boolean(value);
 }
 
-function uniqueTagFilters(tags: TagFilterEntry[]): TagFilterEntry[] {
-  const byKey = new Map<string, TagFilterEntry>();
+function uniqueTagFilters<T extends TagFilterEntry>(tags: T[]): T[] {
+  const byKey = new Map<string, T>();
   for (const tag of tags) {
     byKey.set(tagFilterKey(tag), tag);
   }

@@ -1,5 +1,6 @@
 ﻿import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction, type TextChannel } from "discord.js";
 import type { BotDatabase } from "./database.js";
+import type { Guild } from "discord.js";
 import {
   buildClearEmbed,
   buildCheckEmbed,
@@ -18,8 +19,15 @@ import {
   buildStatusEmbed
 } from "./embeds.js";
 import { getAdapter, getAdapterByCommandName, listAdapters } from "./integrations/registry.js";
+import {
+  getPolymarketProposalStoredTagFilter,
+  getPolymarketProposalTagChannelName,
+  getPolymarketProposalTagFiltersFromSettingsJson,
+  setPolymarketProposalTagChannel,
+  type ProposalTagFilterEntry
+} from "./integrations/polymarketProposals.js";
 import { parseTrumpTruthSettings, upsertTrumpTruthPolymarketMarket } from "./integrations/trumpTruth.js";
-import type { Integration, TagFilterAction, WebsiteAdapter } from "./integrations/types.js";
+import type { Integration, TagFilterAction, TagFilterEntry, TagFilterUpdateResult, WebsiteAdapter } from "./integrations/types.js";
 import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from "./marketEnd.js";
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
 import {
@@ -369,9 +377,13 @@ export async function handleAdapterCommand(
     }
 
     await interaction.deferReply();
-    const result = await adapter.updateTagFilters(integration, action, tagQuery);
+    let result = await adapter.updateTagFilters(integration, action, tagQuery);
+    if (adapter.id === "polymarket-proposals") {
+      result = await syncPolymarketProposalTagChannels(interaction.guild, integration, result);
+    }
+
     const updated =
-      result.changed && result.settingsJson !== integration.settingsJson
+      result.settingsJson !== integration.settingsJson
         ? database.setSettingsJson(integration.id, result.settingsJson)
         : integration;
     await interaction.editReply({ embeds: [buildTagFiltersEmbed(updated, result)] });
@@ -579,6 +591,122 @@ function buildStatusReplyEmbed(integration: Integration) {
     effectiveIntervalMinutes: getEffectivePollIntervalMinutes(integration),
     reason: getPollIntervalReason(integration)
   });
+}
+
+async function syncPolymarketProposalTagChannels(
+  guild: Guild,
+  previousIntegration: Integration,
+  result: TagFilterUpdateResult
+): Promise<TagFilterUpdateResult> {
+  let settingsJson = result.settingsJson;
+  const notes: string[] = [];
+
+  if (result.action === "remove" && result.changed && result.matchedTag) {
+    const deleted = await deletePolymarketProposalTagChannel(guild, previousIntegration.settingsJson, result.matchedTag);
+    if (deleted) {
+      notes.push(deleted);
+    }
+  }
+
+  if (result.action === "clear" && result.changed) {
+    for (const tag of getPolymarketProposalTagFiltersFromSettingsJson(previousIntegration.settingsJson)) {
+      const deleted = await deletePolymarketProposalTagChannel(guild, previousIntegration.settingsJson, tag);
+      if (deleted) {
+        notes.push(deleted);
+      }
+    }
+  }
+
+  if (result.action === "add" || result.action === "list") {
+    for (const tag of getPolymarketProposalTagFiltersFromSettingsJson(settingsJson)) {
+      const synced = await ensurePolymarketProposalTagChannel(guild, previousIntegration, settingsJson, tag);
+      settingsJson = synced.settingsJson;
+      if (synced.note) {
+        notes.push(synced.note);
+      }
+    }
+  }
+
+  return {
+    ...result,
+    message: notes.length ? `${result.message}\n${notes.join("\n")}` : result.message,
+    tagFilters: getPolymarketProposalTagFiltersFromSettingsJson(settingsJson),
+    settingsJson
+  };
+}
+
+async function ensurePolymarketProposalTagChannel(
+  guild: Guild,
+  integration: Integration,
+  settingsJson: string,
+  tag: TagFilterEntry
+): Promise<{ settingsJson: string; note?: string }> {
+  const stored: ProposalTagFilterEntry = getPolymarketProposalStoredTagFilter(settingsJson, tag) ?? tag;
+  const channelName = getPolymarketProposalTagChannelName(tag);
+  let channel = stored.channelId ? await fetchTextChannelById(guild, stored.channelId) : null;
+  let note: string | undefined;
+
+  if (channel && channel.name !== channelName) {
+    channel = await channel.setName(channelName, `Sync UMA proposal channel for ${tag.label}`);
+    note = `Renamed proposal channel to #${channel.name}.`;
+  }
+
+  if (!channel) {
+    channel = findTextChannelByName(guild, channelName) ?? null;
+    if (channel) {
+      note = `Linked existing proposal channel #${channel.name}.`;
+    }
+  }
+
+  if (!channel) {
+    channel = await guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      topic: `UMA proposal alerts for Polymarket tag: ${tag.label} (${tag.slug})`,
+      parent: getIntegrationChannelParentId(guild, integration)
+    });
+    note = `Created proposal channel #${channel.name}.`;
+  }
+
+  const nextSettingsJson =
+    channel.id === stored.channelId && channel.name === stored.channelName
+      ? settingsJson
+      : setPolymarketProposalTagChannel(settingsJson, tag, channel.id, channel.name);
+  return { settingsJson: nextSettingsJson, note };
+}
+
+async function deletePolymarketProposalTagChannel(
+  guild: Guild,
+  settingsJson: string | null,
+  tag: TagFilterEntry
+): Promise<string | null> {
+  const stored: ProposalTagFilterEntry = getPolymarketProposalStoredTagFilter(settingsJson, tag) ?? tag;
+  const expectedName = stored.channelName ?? getPolymarketProposalTagChannelName(tag);
+  const channel =
+    (stored.channelId ? await fetchTextChannelById(guild, stored.channelId) : null) ??
+    findTextChannelByName(guild, expectedName);
+  if (!channel) {
+    return null;
+  }
+
+  await channel.delete(`Removed UMA proposal tag filter: ${tag.label}`);
+  return `Deleted proposal channel #${channel.name}.`;
+}
+
+async function fetchTextChannelById(guild: Guild, channelId: string): Promise<TextChannel | null> {
+  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  return channel?.type === ChannelType.GuildText ? channel : null;
+}
+
+function findTextChannelByName(guild: Guild, channelName: string): TextChannel | undefined {
+  return guild.channels.cache.find((channel) => channel.type === ChannelType.GuildText && channel.name === channelName) as
+    | TextChannel
+    | undefined;
+}
+
+function getIntegrationChannelParentId(guild: Guild, integration: Integration): string | undefined {
+  const channel = guild.channels.cache.get(integration.channelId);
+  return channel?.type === ChannelType.GuildText ? channel.parentId ?? undefined : undefined;
 }
 
 async function buildIntegrationSummaryRows(database: BotDatabase, integrations: Integration[]) {

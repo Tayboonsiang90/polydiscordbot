@@ -2,6 +2,13 @@ import { ChannelType, type Client, type Guild, type Message, type Role, type Tex
 import type { BotConfig } from "./config.js";
 import type { BotDatabase } from "./database.js";
 import { buildGroupedRoleSelectorEmbed, buildSetupEmbed, type GroupedRoleSelectorEntry } from "./embeds.js";
+import {
+  getPolymarketProposalStoredTagFilter,
+  getPolymarketProposalTagChannelName,
+  getPolymarketProposalTagFiltersFromSettingsJson,
+  setPolymarketProposalTagChannel,
+  type ProposalTagFilterEntry
+} from "./integrations/polymarketProposals.js";
 import { listAdapters } from "./integrations/registry.js";
 import type { Integration, WebsiteAdapter } from "./integrations/types.js";
 
@@ -78,6 +85,7 @@ export class IntegrationProvisioner {
       if (currentIntegration.channelId !== channel.id) {
         currentIntegration = this.database.updateIntegrationChannel(currentIntegration.id, channel.id);
       }
+      currentIntegration = await this.provisionAdapterOwnedChannels(guild, adapter, currentIntegration, channel);
       await findOrCreateRole(guild, currentIntegration.alertRoleId, adapter.alertRoleName);
       return;
     }
@@ -95,6 +103,24 @@ export class IntegrationProvisioner {
 
     await channel.send({ embeds: [buildSetupEmbed(integration, adapter.commandName)] });
     await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
+  }
+
+  private async provisionAdapterOwnedChannels(
+    guild: Guild,
+    adapter: WebsiteAdapter,
+    integration: Integration,
+    baseChannel: TextChannel
+  ): Promise<Integration> {
+    if (adapter.id !== "polymarket-proposals") {
+      return integration;
+    }
+
+    let settingsJson = integration.settingsJson ?? JSON.stringify({});
+    for (const tag of getPolymarketProposalTagFiltersFromSettingsJson(settingsJson)) {
+      settingsJson = await findOrCreateProposalTagChannel(guild, settingsJson, tag, baseChannel.parentId ?? undefined);
+    }
+
+    return settingsJson !== integration.settingsJson ? this.database.setSettingsJson(integration.id, settingsJson) : integration;
   }
 
   private async provisionAlertRoleSelectors(guild: Guild): Promise<void> {
@@ -176,6 +202,38 @@ async function createIntegrationChannel(guild: Guild, adapter: WebsiteAdapter): 
     type: ChannelType.GuildText,
     topic: `Polymarket resolution monitor: ${adapter.displayName} | ${adapter.sourceUrl}`
   });
+}
+
+async function findOrCreateProposalTagChannel(
+  guild: Guild,
+  settingsJson: string,
+  tag: ProposalTagFilterEntry,
+  parentId?: string
+): Promise<string> {
+  const stored = getPolymarketProposalStoredTagFilter(settingsJson, tag) ?? tag;
+  const channelName = getPolymarketProposalTagChannelName(tag);
+  let channel = stored.channelId ? asTextChannel(await guild.channels.fetch(stored.channelId).catch(() => null)) : null;
+
+  if (channel && channel.name !== channelName) {
+    channel = await channel.setName(channelName, `Sync UMA proposal channel for ${tag.label}`);
+  }
+
+  if (!channel) {
+    channel = findTextChannelByName(guild, channelName);
+  }
+
+  if (!channel) {
+    channel = await guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      topic: `UMA proposal alerts for Polymarket tag: ${tag.label} (${tag.slug})`,
+      parent: parentId
+    });
+  }
+
+  return channel.id === stored.channelId && channel.name === stored.channelName
+    ? settingsJson
+    : setPolymarketProposalTagChannel(settingsJson, tag, channel.id, channel.name);
 }
 
 async function findOrCreateRole(guild: Guild, roleId: string | null, roleName: string): Promise<Role> {

@@ -490,7 +490,8 @@ function formatTagFilterEntries(tags: TagFilterEntry[]): string {
 
 function formatTagFilterEntry(tag: TagFilterEntry): string {
   const id = tag.id ? `${tag.id} | ` : "";
-  return `${id}${tag.label} | ${tag.slug}`;
+  const channelName = "channelName" in tag && typeof tag.channelName === "string" ? ` | #${tag.channelName}` : "";
+  return `${id}${tag.label} | ${tag.slug}${channelName}`;
 }
 
 function formatLinks(integration: Integration): string {

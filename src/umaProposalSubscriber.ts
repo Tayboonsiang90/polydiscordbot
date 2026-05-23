@@ -8,9 +8,11 @@ import {
   buildPolymarketProposalPostFromLog,
   getPolymarketProposalWsUrl,
   parsePolymarketProposalSettings,
-  proposePriceTopic
+  proposePriceTopic,
+  resolvePolymarketProposalChannelIds
 } from "./integrations/polymarketProposals.js";
 import { optimisticOracleAddresses, polymarketUmaCtfAdapterAddressTopics } from "./integrations/polymarketDisputes.js";
+import type { EventMonitorPost, Integration } from "./integrations/types.js";
 
 const adapterId = "polymarket-proposals";
 const maxSeenEventIds = 100;
@@ -210,14 +212,15 @@ export class UmaProposalSubscriber {
         return;
       }
 
-      const channel = await this.client.channels.fetch(integration.channelId);
-      if (!isSendableChannel(channel)) {
-        this.database.markEventAlertPending(integration.id, post.id);
-        throw new Error(`UMA proposal channel is not sendable: ${integration.channelId}`);
-      }
-
       try {
-        await channel.send(buildEventPostMessagePayload(integration, post));
+        for (const channelId of resolveProposalAlertChannelIds(integration, post)) {
+          const channel = await this.client.channels.fetch(channelId);
+          if (!isSendableChannel(channel)) {
+            throw new Error(`UMA proposal channel is not sendable: ${channelId}`);
+          }
+
+          await channel.send(buildEventPostMessagePayload(integration, post));
+        }
       } catch (error) {
         this.database.markEventAlertPending(integration.id, post.id);
         throw error;
@@ -263,6 +266,11 @@ function hasSeenEventId(settingsJson: string | null, eventId: string): boolean {
 
 function addSeenEventId(existing: string[] | undefined, eventId: string): string[] {
   return [eventId, ...(existing ?? []).filter((candidate) => candidate !== eventId)].slice(0, maxSeenEventIds);
+}
+
+function resolveProposalAlertChannelIds(integration: Integration, post: EventMonitorPost): string[] {
+  const channelIds = resolvePolymarketProposalChannelIds(integration, post);
+  return channelIds.length ? channelIds : [integration.channelId];
 }
 
 function isSendableChannel(channel: unknown): channel is SendableChannel {

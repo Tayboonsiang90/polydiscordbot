@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   decodeProposePriceLog,
   fetchPolymarketProposalUpdates,
+  getPolymarketProposalTagChannelName,
+  getPolymarketProposalTagFiltersFromSettingsJson,
   proposePriceTopic,
+  resolvePolymarketProposalChannelIds,
+  setPolymarketProposalTagChannel,
   searchPolymarketProposalTags,
   testOnlyPolymarketProposalHelpers,
   updatePolymarketProposalTagFilters,
@@ -15,7 +19,7 @@ import {
   polymarketUmaCtfAdapterAddressTopics
 } from "../src/integrations/polymarketDisputes.js";
 import type { PolygonLog } from "../src/integrations/polymarketClarifications.js";
-import type { Integration } from "../src/integrations/types.js";
+import type { EventMonitorPost, Integration } from "../src/integrations/types.js";
 
 const requester = polymarketUmaCtfAdapterAddresses[0];
 const proposer = "0x1111111111111111111111111111111111111111";
@@ -218,6 +222,37 @@ describe("proposal tag filters", () => {
 
     expect(removed.changed).toBe(true);
     expect(removed.tagFilters).toEqual([]);
+  });
+
+  it("builds stable Discord channel names for proposal tags", () => {
+    expect(getPolymarketProposalTagChannelName({ id: "1", label: "Politics / Elections", slug: "politics-elections" })).toBe(
+      "uma-proposals-politics-elections"
+    );
+  });
+
+  it("stores proposal tag channel metadata in settings JSON", () => {
+    const settingsJson = JSON.stringify({ tagFilters: [{ id: "1", label: "Sports", slug: "sports" }] });
+    const updated = setPolymarketProposalTagChannel(settingsJson, { id: "1", label: "Sports", slug: "sports" }, "channel-1", "uma-proposals-sports");
+
+    expect(getPolymarketProposalTagFiltersFromSettingsJson(updated)).toEqual([
+      { id: "1", label: "Sports", slug: "sports", channelId: "channel-1", channelName: "uma-proposals-sports" }
+    ]);
+  });
+
+  it("routes proposal posts to matching configured tag channels", () => {
+    const integration = {
+      settingsJson: JSON.stringify({
+        tagFilters: [
+          { id: "1", label: "Sports", slug: "sports", channelId: "sports-channel", channelName: "uma-proposals-sports" },
+          { id: "2", label: "Crypto", slug: "crypto", channelId: "crypto-channel", channelName: "uma-proposals-crypto" }
+        ]
+      })
+    } as Integration;
+    const post = {
+      fields: [{ name: "Matched tags", value: "Sports", inline: false }]
+    } as EventMonitorPost;
+
+    expect(resolvePolymarketProposalChannelIds(integration, post)).toEqual(["sports-channel"]);
   });
 });
 

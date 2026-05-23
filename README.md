@@ -5,7 +5,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 ## Current Scope
 
 - Discord slash commands only.
-- One channel per website integration.
+- One base channel per website integration, with adapter-owned extra channels only where explicitly documented.
 - Local SQLite persistence.
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
@@ -65,7 +65,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
-- One adapter creates one monitor channel, one slash-command group, one alert role, and one reaction-role selector.
+- One adapter normally creates one monitor channel, one slash-command group, one alert role, and one reaction-role selector. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters.
 - Shared commands are generated in `src/commands.ts`: `status`, `check`, `test`, `last`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`.
 - Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
@@ -168,7 +168,7 @@ UMA Proposal Alerts also supports:
 - `/umaproposals tags action:remove tag:sports`
 - `/umaproposals tags action:clear`
 
-Proposal alerts are off until at least one Polymarket tag filter is configured. The bot watches UMA `ProposePrice` logs first, then enriches each proposal with Polymarket CLOB market metadata and only alerts when the market tags exactly match a configured tag label or slug.
+Proposal alerts are off until at least one Polymarket tag filter is configured. The bot watches UMA `ProposePrice` logs first, then enriches each proposal with Polymarket CLOB market metadata and only alerts when the market tags exactly match a configured tag label or slug. Adding a tag creates a dedicated channel named `#uma-proposals-<tag-slug>`, removing a tag deletes that tag channel, and matching alerts are sent to the tag-specific channel instead of the base `#uma-proposals` command channel.
 
 App Store integrations have one extra command:
 

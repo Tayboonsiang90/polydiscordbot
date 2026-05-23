@@ -145,6 +145,7 @@ export type WebsiteAdapter = {
   fetchEventUpdates?(integration: Integration): Promise<EventMonitorResult>;
   enrichEventPost?(post: EventMonitorPost, strikeTerms: string[]): Promise<EventMonitorPost>;
   shouldAlertOnEventPost?(post: EventMonitorPost): boolean;
+  resolveEventPostChannelIds?(integration: Integration, post: EventMonitorPost): string[];
   refreshSettings?(integration: Integration, options?: { force?: boolean }): Promise<string>;
   getStrikeTerms?(integration: Integration): { strikeTerms: string[]; parsedFromUrl?: string; lastParsedAt?: string };
   searchStrikeTerm?(integration: Integration, term: string): Promise<StrikeSearchResult>;
