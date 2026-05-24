@@ -70,7 +70,7 @@ describe("Polymarket clarification parsing", () => {
       textFieldName: "Clarification",
       text: "We are aware of the dispute on this market.",
       url: `https://polygonscan.com/tx/${transactionHash}`,
-      polymarketUrl: "https://polymarket.com/event/trump-kiss-by-may-31"
+      polymarketUrl: "https://polymarket.com/market/trump-kiss-by-may-31"
     });
     expect(post.fields).toEqual(
       expect.arrayContaining([
@@ -178,7 +178,7 @@ describe("fetchPolymarketClarificationUpdates", () => {
     );
 
     expect(result.posts).toHaveLength(1);
-    expect(result.posts[0].polymarketUrl).toBe("https://polymarket.com/event/trump-kiss-by-may-31");
+    expect(result.posts[0].polymarketUrl).toBe("https://polymarket.com/market/trump-kiss-by-may-31");
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
       lastScannedBlock: 1000,

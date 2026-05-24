@@ -193,7 +193,7 @@ export function buildFastPolymarketDisputePostFromLog(log: PolygonLog): EventMon
 
 export function normalizePolymarketDisputeEvent(dispute: PolymarketDisputeEvent, market: ClobMarket | null): EventMonitorPost {
   const transactionUrl = `https://polygonscan.com/tx/${dispute.transactionHash}`;
-  const polymarketUrl = market?.market_slug ? `https://polymarket.com/event/${market.market_slug}` : undefined;
+  const polymarketUrl = market?.market_slug ? `https://polymarket.com/market/${market.market_slug}` : undefined;
   const question = market?.question;
   const text = [
     question ? `Dispute opened for: ${question}` : "A Polymarket UMA resolution proposal was disputed.",

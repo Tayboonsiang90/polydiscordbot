@@ -126,7 +126,7 @@ describe("fetchPolymarketDisputeUpdates", () => {
       type: "Polymarket UMA dispute",
       alertTitle: "Polymarket UMA dispute",
       textFieldName: "Dispute",
-      polymarketUrl: "https://polymarket.com/event/trump-kiss-by-may-31"
+      polymarketUrl: "https://polymarket.com/market/trump-kiss-by-may-31"
     });
     expect(result.posts[0].fields).toEqual(
       expect.arrayContaining([

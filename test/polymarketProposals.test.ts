@@ -112,7 +112,7 @@ describe("fetchPolymarketProposalUpdates", () => {
       type: "Polymarket UMA proposal",
       alertTitle: "Polymarket UMA proposal",
       textFieldName: "Proposal",
-      polymarketUrl: "https://polymarket.com/event/lakers-win"
+      polymarketUrl: "https://polymarket.com/market/lakers-win"
     });
     expect(result.posts[0].fields).toEqual(
       expect.arrayContaining([

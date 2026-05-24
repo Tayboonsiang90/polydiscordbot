@@ -200,7 +200,7 @@ export function normalizePolymarketClarificationLog(log: PolygonLog, details: Qu
   const logIndex = parseHexQuantity(log.logIndex);
   const blockTimestamp = log.blockTimestamp ? parseHexQuantity(log.blockTimestamp) : null;
   const transactionUrl = `https://polygonscan.com/tx/${log.transactionHash}`;
-  const polymarketUrl = details.slug ? `https://polymarket.com/event/${details.slug}` : undefined;
+  const polymarketUrl = details.slug ? `https://polymarket.com/market/${details.slug}` : undefined;
   const question = details.question ?? details.title;
   const creator = details.creator ?? details.initializer ?? owner;
   const fields = [
@@ -391,7 +391,7 @@ function normalizePolymarketPendingClarification(
   details: QuestionDetails
 ): EventMonitorPost {
   const transactionUrl = `https://polygonscan.com/tx/${update.transactionHash}`;
-  const polymarketUrl = details.slug ? `https://polymarket.com/event/${details.slug}` : undefined;
+  const polymarketUrl = details.slug ? `https://polymarket.com/market/${details.slug}` : undefined;
   const question = details.question ?? details.title;
   const creator = details.creator ?? details.initializer ?? update.updater;
   const fields = [

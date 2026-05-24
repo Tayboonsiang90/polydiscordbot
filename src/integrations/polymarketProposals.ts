@@ -311,7 +311,7 @@ export function normalizePolymarketProposalEvent(
   tagMatch: ProposalTagMatch
 ): EventMonitorPost {
   const transactionUrl = `https://polygonscan.com/tx/${proposal.transactionHash}`;
-  const polymarketUrl = market?.market_slug ? `https://polymarket.com/event/${market.market_slug}` : undefined;
+  const polymarketUrl = market?.market_slug ? `https://polymarket.com/market/${market.market_slug}` : undefined;
   const question = market?.question;
   const matchedTags = tagMatch.matchedMarketTags.join(", ");
   const text = [
