@@ -58,6 +58,7 @@ export type EventMonitorPost = {
   postedAt: Date;
   url: string;
   polymarketUrl?: string;
+  summaryFields?: Array<{ name: string; value: string; inline?: boolean }>;
   fields?: Array<{ name: string; value: string; inline?: boolean }>;
   imageUrls: string[];
   imageText: string;

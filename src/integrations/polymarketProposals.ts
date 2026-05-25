@@ -320,19 +320,28 @@ export function normalizePolymarketProposalEvent(
     `Matched tags: ${matchedTags}`
   ].join("\n");
   const fields = [
-    ...(question ? [{ name: "Question", value: question, inline: false }] : []),
-    ...(market?.condition_id ? [{ name: "Condition ID", value: market.condition_id, inline: false }] : []),
-    { name: "Question ID", value: proposal.questionId, inline: false },
     { name: matchedTagsFieldName, value: matchedTags, inline: false },
     ...(market?.tags?.length ? [{ name: "Market tags", value: market.tags.join(", "), inline: false }] : []),
-    { name: "Proposed outcome", value: proposal.proposedOutcome, inline: true },
+    ...(market?.condition_id ? [{ name: "Condition ID", value: market.condition_id, inline: false }] : []),
+    { name: "Question ID", value: proposal.questionId, inline: false },
     { name: "Requester adapter", value: proposal.requester, inline: false },
     { name: "Proposer", value: proposal.proposer, inline: false },
     { name: "Oracle", value: proposal.oracleAddress, inline: false },
     { name: "Request timestamp", value: new Date(proposal.requestTimestamp * 1_000).toISOString(), inline: false },
     { name: "Proposal expiration", value: new Date(proposal.expirationTimestamp * 1_000).toISOString(), inline: false },
-    { name: "Currency", value: proposal.currency, inline: false },
     { name: "Block", value: String(proposal.blockNumber), inline: true }
+  ];
+  const summaryFields = [
+    ...(question
+      ? [
+          {
+            name: "Question",
+            value: [question, polymarketUrl ? `Polymarket: ${polymarketUrl}` : undefined].filter(Boolean).join("\n"),
+            inline: false
+          }
+        ]
+      : []),
+    { name: "Proposed outcome", value: proposal.proposedOutcome, inline: false }
   ];
 
   return {
@@ -348,6 +357,7 @@ export function normalizePolymarketProposalEvent(
     postedAt: proposal.blockTimestamp === undefined ? new Date() : new Date(proposal.blockTimestamp * 1_000),
     url: transactionUrl,
     polymarketUrl,
+    summaryFields,
     fields,
     imageUrls: [],
     imageText: "",

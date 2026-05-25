@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildEventPostEmbed } from "../src/embeds.js";
 import {
   decodeProposePriceLog,
   fetchPolymarketProposalUpdates,
@@ -116,12 +117,24 @@ describe("fetchPolymarketProposalUpdates", () => {
     });
     expect(result.posts[0].fields).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Question", value: "Lakers win?" }),
         expect.objectContaining({ name: "Matched tags", value: "Sports" }),
-        expect.objectContaining({ name: "Proposed outcome", value: "NO (0)" }),
         expect.objectContaining({ name: "Proposer", value: proposer })
       ])
     );
+    expect(result.posts[0].summaryFields).toEqual([
+      {
+        name: "Question",
+        value: "Lakers win?\nPolymarket: https://polymarket.com/market/lakers-win",
+        inline: false
+      },
+      { name: "Proposed outcome", value: "NO (0)", inline: false }
+    ]);
+    expect(result.posts[0].fields?.some((field) => field.name === "Currency")).toBe(false);
+    expect(result.posts[0].fields?.some((field) => field.name === "Proposed outcome")).toBe(false);
+    expect(buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields?.slice(0, 2)).toEqual([
+      { name: "Question", value: "Lakers win?\nPolymarket: https://polymarket.com/market/lakers-win", inline: false },
+      { name: "Proposed outcome", value: "NO (0)", inline: false }
+    ]);
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
       lastScannedBlock: 1000,
@@ -255,6 +268,33 @@ describe("proposal tag filters", () => {
     expect(resolvePolymarketProposalChannelIds(integration, post)).toEqual(["sports-channel"]);
   });
 });
+
+function buildIntegration(): Integration {
+  return {
+    id: 1,
+    guildId: "guild",
+    channelId: "channel",
+    adapterId: "polymarket-proposals",
+    displayName: "UMA Proposal Alerts",
+    sourceUrl: "https://polygonscan.com/address/test",
+    polymarketUrl: null,
+    alertRoleId: null,
+    roleMessageId: null,
+    roleChannelId: null,
+    roleEmoji: null,
+    settingsJson: null,
+    pollIntervalMinutes: 1,
+    status: "active",
+    lastValue: null,
+    lastCheckedAt: null,
+    lastChangedAt: null,
+    snapshotValue: null,
+    snapshotCheckedAt: null,
+    snapshotDate: null,
+    createdAt: "2026-05-21T00:00:00.000Z",
+    updatedAt: "2026-05-21T00:00:00.000Z"
+  };
+}
 
 function buildProposalLog(proposedPrice: bigint, requesterAddress = requester): PolygonLog {
   return {

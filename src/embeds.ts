@@ -260,6 +260,11 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
   const sourceLabel = post.sourceLabel ?? "Truth Social";
   const eventFields = [
     ...(hasStrike ? [{ name: "STRIKE HIT", value: formatMatchedStrikeTerms(post.matchedTerms), inline: false }] : []),
+    ...(post.summaryFields ?? []).map((field) => ({
+      name: field.name,
+      value: truncateEmbedValue(field.value),
+      inline: field.inline ?? false
+    })),
     { name: "Event type", value: post.type, inline: true },
     { name: "Posted at", value: formatSingaporeDateTime(post.postedAt), inline: false },
     { name: sourceLabel, value: post.url, inline: false },
