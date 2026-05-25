@@ -4,6 +4,7 @@ import type {
   EventMonitorPost,
   Integration,
   StrikeSearchResult,
+  TagBlocklistUpdateResult,
   TagFilterEntry,
   TagFilterUpdateResult,
   TagSearchResult
@@ -191,6 +192,19 @@ export function buildTagFiltersEmbed(integration: Integration, result: TagFilter
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 }
 
+export function buildTagBlocklistEmbed(integration: Integration, result: TagBlocklistUpdateResult): EmbedBuilder {
+  return baseEmbed(integration, "Proposal tag exclusions")
+    .addFields(
+      { name: "Action", value: result.action, inline: true },
+      { name: "Changed", value: result.changed ? "yes" : "no", inline: true },
+      { name: "Subscription tag", value: formatTagFilterEntry(result.subscriptionTag), inline: false },
+      { name: "Result", value: result.message, inline: false },
+      ...(result.blockedTag ? [{ name: "Blocked tag", value: formatTagFilterEntry(result.blockedTag), inline: false }] : []),
+      { name: "Current exclusions", value: formatTagFilterEntries(result.blockedTags), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
 export function buildPolymarketUpdatedEmbed(integration: Integration): EmbedBuilder {
   return baseEmbed(integration, "Polymarket URL updated")
     .addFields(
@@ -260,14 +274,19 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
   const sourceLabel = post.sourceLabel ?? "Truth Social";
   const eventFields = [
     ...(hasStrike ? [{ name: "STRIKE HIT", value: formatMatchedStrikeTerms(post.matchedTerms), inline: false }] : []),
+    ...formatPrioritySummaryFields(post),
     ...(post.summaryFields ?? []).map((field) => ({
       name: field.name,
       value: truncateEmbedValue(field.value),
       inline: field.inline ?? false
     })),
-    { name: "Event type", value: post.type, inline: true },
-    { name: "Posted at", value: formatSingaporeDateTime(post.postedAt), inline: false },
-    { name: sourceLabel, value: post.url, inline: false },
+    ...(post.hideDefaultEventFields
+      ? []
+      : [
+          { name: "Event type", value: post.type, inline: true },
+          { name: "Posted at", value: formatSingaporeDateTime(post.postedAt), inline: false },
+          { name: sourceLabel, value: post.url, inline: false }
+        ]),
     ...(post.fields ?? []).map((field) => ({
       name: field.name,
       value: truncateEmbedValue(field.value),
@@ -285,15 +304,21 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
       : []),
     ...(post.strikeTerms.length ? [{ name: "Strike list", value: formatStrikeTerms(post.strikeTerms), inline: false }] : []),
     ...(post.imageText ? [{ name: "Image text", value: formatValue(post.imageText), inline: false }] : []),
-    { name: post.textFieldName ?? "Post text", value: formatValue(post.text || "(no text)"), inline: false },
-    {
-      name: "Links",
-      value: [
-        `Original: ${post.url}`,
-        `Polymarket: ${post.polymarketUrl ?? formatPolymarketValue(integration)}`
-      ].join("\n"),
-      inline: false
-    }
+    ...(post.hideTextField
+      ? []
+      : [{ name: post.textFieldName ?? "Post text", value: formatValue(post.text || "(no text)"), inline: false }]),
+    ...(post.hideLinksField
+      ? []
+      : [
+          {
+            name: "Links",
+            value: [
+              `Original: ${post.url}`,
+              `Polymarket: ${post.polymarketUrl ?? formatPolymarketValue(integration)}`
+            ].join("\n"),
+            inline: false
+          }
+        ])
   ];
   const embeds = [
     baseEmbed(integration, title)
@@ -317,6 +342,41 @@ export function buildEventPostMessagePayload(integration: Integration, post: Eve
     components: [buildEventSourceLinkRow(post.url, post.buttonLabel)],
     allowedMentions: content && integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
   };
+}
+
+function formatPrioritySummaryFields(post: EventMonitorPost): Array<{ name: string; value: string; inline: boolean }> {
+  const summary = post.prioritySummary;
+  if (!summary) {
+    return [];
+  }
+
+  return [
+    ...(summary.question
+      ? [
+          {
+            name: "Question",
+            value: formatPriorityValue(summary.question, summary.questionUrl),
+            inline: false
+          }
+        ]
+      : []),
+    ...(summary.proposedOutcome ? [{ name: "Proposed outcome", value: `**${summary.proposedOutcome}**`, inline: false }] : []),
+    { name: "Posted at (SGT)", value: formatSingaporeDateTime(post.postedAt), inline: true },
+    ...(summary.proposalExpirationAt
+      ? [{ name: "Proposal expiration (SGT)", value: formatSingaporeDateTime(summary.proposalExpirationAt), inline: true }]
+      : []),
+    { name: "Posted at (ET)", value: formatEasternDateTime(post.postedAt), inline: true },
+    ...(summary.proposalExpirationAt
+      ? [{ name: "Proposal expiration (ET)", value: formatEasternDateTime(new Date(summary.proposalExpirationAt)), inline: true }]
+      : []),
+    ...(summary.marketTags?.length
+      ? [{ name: "Market tags", value: formatMarketTags(summary.marketTags, summary.matchedTags ?? []), inline: false }]
+      : []),
+    ...(summary.proposer ? [{ name: "Proposer", value: summary.proposer, inline: false }] : []),
+    ...(summary.disputer ? [{ name: "Disputer", value: summary.disputer, inline: false }] : []),
+    ...(summary.clarification ? [{ name: "Clarification", value: summary.clarification, inline: false }] : []),
+    ...(summary.creator ? [{ name: "Creator", value: summary.creator, inline: false }] : [])
+  ].map((field) => ({ ...field, value: truncateEmbedValue(field.value) }));
 }
 
 export function buildSnapshotCapturedEmbed(result: SnapshotResult): EmbedBuilder {
@@ -496,7 +556,29 @@ function formatTagFilterEntries(tags: TagFilterEntry[]): string {
 function formatTagFilterEntry(tag: TagFilterEntry): string {
   const id = tag.id ? `${tag.id} | ` : "";
   const channelName = "channelName" in tag && typeof tag.channelName === "string" ? ` | #${tag.channelName}` : "";
-  return `${id}${tag.label} | ${tag.slug}${channelName}`;
+  const maybeTagWithExclusions = tag as TagFilterEntry & { excludedTags?: TagFilterEntry[] };
+  const excludedTags =
+    Array.isArray(maybeTagWithExclusions.excludedTags) && maybeTagWithExclusions.excludedTags.length
+      ? ` | excludes ${maybeTagWithExclusions.excludedTags.map((blockedTag) => blockedTag.label ?? blockedTag.slug).join(", ")}`
+      : "";
+  return `${id}${tag.label} | ${tag.slug}${channelName}${excludedTags}`;
+}
+
+function formatPriorityValue(label: string, url?: string): string {
+  return url ? `**${formatMarkdownLink(label, url)}**` : `**${label}**`;
+}
+
+function formatMarkdownLink(label: string, url: string): string {
+  return `[${label.replace(/\\/g, "\\\\").replace(/\]/g, "\\]")}](${url})`;
+}
+
+function formatMarketTags(marketTags: string[], matchedTags: string[]): string {
+  const matched = new Set(matchedTags.map(normalizeTagText));
+  return marketTags.map((tag) => (matched.has(normalizeTagText(tag)) ? `**${tag}**` : tag)).join(", ");
+}
+
+function normalizeTagText(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function formatLinks(integration: Integration): string {

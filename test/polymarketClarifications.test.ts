@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildEventPostEmbed } from "../src/embeds.js";
 import {
   ancillaryDataUpdatedTopic,
   buildFastPolymarketPendingClarificationPostFromTransaction,
@@ -74,12 +75,32 @@ describe("Polymarket clarification parsing", () => {
     });
     expect(post.fields).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Question", value: "Trump kiss by May 31?" }),
         expect.objectContaining({ name: "Gamma market", value: "2261347" }),
         expect.objectContaining({ name: "Question ID", value: questionId }),
-        expect.objectContaining({ name: "Creator", value: creator })
+        expect.objectContaining({ name: "Block", value: String(Number.parseInt("53218ef", 16)) })
       ])
     );
+    expect(post.prioritySummary).toMatchObject({
+      question: "Trump kiss by May 31?",
+      questionUrl: "https://polymarket.com/market/trump-kiss-by-may-31",
+      creator,
+      clarification: "We are aware of the dispute on this market."
+    });
+    const embedFields = buildEventPostEmbed(buildIntegration(), post)[0].data.fields ?? [];
+    expect(embedFields.slice(0, 6).map((field) => field.name)).toEqual([
+      "Question",
+      "Posted at (SGT)",
+      "Posted at (ET)",
+      "Clarification",
+      "Creator",
+      "Event type"
+    ]);
+    expect(embedFields[0]).toEqual({
+      name: "Question",
+      value: "**[Trump kiss by May 31?](https://polymarket.com/market/trump-kiss-by-may-31)**",
+      inline: false
+    });
+    expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Links" })]));
     expect(post.postedAt.getTime()).toBe(Number.parseInt("6a0dbf9f", 16) * 1_000);
   });
 
@@ -360,6 +381,33 @@ function buildUpdateLog(updateText: string): PolygonLog {
     logIndex: "0xa8",
     blockTimestamp: "0x6a0dbf9f"
   } as PolygonLog & { address: string };
+}
+
+function buildIntegration(): Integration {
+  return {
+    id: 1,
+    guildId: "guild",
+    channelId: "channel",
+    adapterId: "polymarket-clarifications",
+    displayName: "UMA Clarifications",
+    sourceUrl: "https://polygonscan.com/address/test",
+    polymarketUrl: null,
+    alertRoleId: null,
+    roleMessageId: null,
+    roleChannelId: null,
+    roleEmoji: null,
+    settingsJson: null,
+    pollIntervalMinutes: 1,
+    status: "active",
+    lastValue: null,
+    lastCheckedAt: null,
+    lastChangedAt: null,
+    snapshotValue: null,
+    snapshotCheckedAt: null,
+    snapshotDate: null,
+    createdAt: "2026-05-21T00:00:00.000Z",
+    updatedAt: "2026-05-21T00:00:00.000Z"
+  };
 }
 
 function buildPendingUpdateTransaction(updateText: string): PolygonPendingTransaction {

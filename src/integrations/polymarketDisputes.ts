@@ -79,6 +79,7 @@ type ClobMarket = {
   question?: string;
   market_slug?: string;
   condition_id?: string;
+  tags?: string[];
 };
 
 export const polymarketDisputesAdapter: WebsiteAdapter = {
@@ -200,13 +201,11 @@ export function normalizePolymarketDisputeEvent(dispute: PolymarketDisputeEvent,
     `Proposed outcome: ${dispute.proposedOutcome}`
   ].join("\n");
   const fields = [
-    ...(question ? [{ name: "Question", value: question, inline: false }] : []),
+    { name: "Event type", value: "Polymarket UMA dispute", inline: true },
+    { name: "On-chain tx", value: transactionUrl, inline: false },
     ...(market?.condition_id ? [{ name: "Condition ID", value: market.condition_id, inline: false }] : []),
     { name: "Question ID", value: dispute.questionId, inline: false },
-    { name: "Proposed outcome", value: dispute.proposedOutcome, inline: true },
     { name: "Requester adapter", value: dispute.requester, inline: false },
-    { name: "Proposer", value: dispute.proposer, inline: false },
-    { name: "Disputer", value: dispute.disputer, inline: false },
     { name: "Oracle", value: dispute.oracleAddress, inline: false },
     { name: "Request timestamp", value: new Date(dispute.requestTimestamp * 1_000).toISOString(), inline: false },
     { name: "Block", value: String(dispute.blockNumber), inline: true }
@@ -225,6 +224,17 @@ export function normalizePolymarketDisputeEvent(dispute: PolymarketDisputeEvent,
     postedAt: dispute.blockTimestamp === undefined ? new Date() : new Date(dispute.blockTimestamp * 1_000),
     url: transactionUrl,
     polymarketUrl,
+    prioritySummary: {
+      question,
+      questionUrl: polymarketUrl,
+      proposedOutcome: dispute.proposedOutcome,
+      marketTags: market?.tags,
+      proposer: dispute.proposer,
+      disputer: dispute.disputer
+    },
+    hideDefaultEventFields: true,
+    hideLinksField: true,
+    hideTextField: true,
     fields,
     imageUrls: [],
     imageText: "",
@@ -363,7 +373,16 @@ async function fetchClobMarketByQuestionId(questionId: string): Promise<ClobMark
   }
 
   const payload = (await response.json()) as ClobMarket;
-  return payload && typeof payload === "object" ? payload : null;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  return {
+    question: typeof payload.question === "string" ? payload.question : undefined,
+    market_slug: typeof payload.market_slug === "string" ? payload.market_slug : undefined,
+    condition_id: typeof payload.condition_id === "string" ? payload.condition_id : undefined,
+    tags: Array.isArray(payload.tags) ? payload.tags.filter((tag): tag is string => typeof tag === "string") : []
+  };
 }
 
 async function polygonRpc<T>(

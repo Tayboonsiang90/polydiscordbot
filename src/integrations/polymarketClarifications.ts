@@ -75,11 +75,13 @@ type QuestionDetails = PolymarketAncillaryData & {
   creator?: string;
   question?: string;
   slug?: string;
+  tags?: string[];
 };
 
 type GammaMarket = {
   question?: string;
   slug?: string;
+  tags?: unknown;
 };
 
 type PendingClarificationUpdate = {
@@ -204,10 +206,10 @@ export function normalizePolymarketClarificationLog(log: PolygonLog, details: Qu
   const question = details.question ?? details.title;
   const creator = details.creator ?? details.initializer ?? owner;
   const fields = [
-    ...(question ? [{ name: "Question", value: question, inline: false }] : []),
+    { name: "Event type", value: "Polymarket clarification", inline: true },
+    { name: "On-chain tx", value: transactionUrl, inline: false },
     ...(details.marketId ? [{ name: "Gamma market", value: details.marketId, inline: true }] : []),
     { name: "Question ID", value: questionId, inline: false },
-    { name: "Creator", value: creator, inline: false },
     { name: "Block", value: String(blockNumber), inline: true }
   ];
 
@@ -224,6 +226,16 @@ export function normalizePolymarketClarificationLog(log: PolygonLog, details: Qu
     postedAt: blockTimestamp === null ? new Date() : new Date(blockTimestamp * 1_000),
     url: transactionUrl,
     polymarketUrl,
+    prioritySummary: {
+      question,
+      questionUrl: polymarketUrl,
+      marketTags: details.tags,
+      creator,
+      clarification: updateText
+    },
+    hideDefaultEventFields: true,
+    hideLinksField: true,
+    hideTextField: true,
     fields,
     imageUrls: [],
     imageText: "",
@@ -395,10 +407,10 @@ function normalizePolymarketPendingClarification(
   const question = details.question ?? details.title;
   const creator = details.creator ?? details.initializer ?? update.updater;
   const fields = [
-    ...(question ? [{ name: "Question", value: question, inline: false }] : []),
+    { name: "Event type", value: "Pending Polymarket clarification", inline: true },
+    { name: "Pending tx", value: transactionUrl, inline: false },
     ...(details.marketId ? [{ name: "Gamma market", value: details.marketId, inline: true }] : []),
     { name: "Question ID", value: update.questionId, inline: false },
-    ...(creator ? [{ name: "Creator", value: creator, inline: false }] : []),
     ...(update.updater ? [{ name: "Pending sender", value: update.updater, inline: false }] : []),
     { name: "Mempool status", value: "pending - not mined yet", inline: false }
   ];
@@ -416,6 +428,16 @@ function normalizePolymarketPendingClarification(
     postedAt: update.seenAt,
     url: transactionUrl,
     polymarketUrl,
+    prioritySummary: {
+      question,
+      questionUrl: polymarketUrl,
+      marketTags: details.tags,
+      creator,
+      clarification: update.text
+    },
+    hideDefaultEventFields: true,
+    hideLinksField: true,
+    hideTextField: true,
     fields,
     imageUrls: [],
     imageText: "",
@@ -501,7 +523,8 @@ async function fetchQuestionDetails(
     ...parsed,
     creator: questionData.creator,
     question: gammaMarket?.question ?? parsed.title,
-    slug: gammaMarket?.slug
+    slug: gammaMarket?.slug,
+    tags: extractGammaMarketTags(gammaMarket)
   };
 }
 
@@ -515,6 +538,26 @@ async function fetchGammaMarket(marketId: string): Promise<GammaMarket | null> {
 
   const payload = (await response.json()) as GammaMarket;
   return payload && typeof payload === "object" ? payload : null;
+}
+
+function extractGammaMarketTags(market: GammaMarket | null): string[] | undefined {
+  if (!Array.isArray(market?.tags)) {
+    return undefined;
+  }
+
+  const tags = market.tags
+    .map((tag) => {
+      if (typeof tag === "string") {
+        return tag;
+      }
+      if (tag && typeof tag === "object") {
+        const candidate = tag as { label?: unknown; slug?: unknown };
+        return typeof candidate.label === "string" ? candidate.label : typeof candidate.slug === "string" ? candidate.slug : null;
+      }
+      return null;
+    })
+    .filter((tag): tag is string => Boolean(tag));
+  return tags.length ? tags : undefined;
 }
 
 async function polygonRpc<T>(

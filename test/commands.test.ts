@@ -373,6 +373,7 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "check" }),
         expect.objectContaining({ name: "tagsearch" }),
         expect.objectContaining({ name: "tags" }),
+        expect.objectContaining({ name: "tagblocks" }),
         expect.objectContaining({ name: "test" }),
         expect.objectContaining({ name: "polymarket" })
       ])

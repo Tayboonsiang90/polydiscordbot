@@ -20,6 +20,7 @@ import type {
   Integration,
   TagFilterAction,
   TagFilterEntry,
+  TagBlocklistUpdateResult,
   TagFilterUpdateResult,
   TagSearchResult,
   WebsiteAdapter
@@ -79,6 +80,7 @@ type ProposalTagMatch = {
 export type ProposalTagFilterEntry = TagFilterEntry & {
   channelId?: string;
   channelName?: string;
+  excludedTags?: TagFilterEntry[];
 };
 
 export type PolymarketProposalSettings = {
@@ -156,6 +158,14 @@ export const polymarketProposalsAdapter: WebsiteAdapter = {
     tagQuery?: string
   ): Promise<TagFilterUpdateResult> {
     return updatePolymarketProposalTagFilters(integration, action, tagQuery);
+  },
+  async updateTagBlocklist(
+    integration: Integration,
+    subscriptionTagQuery: string | undefined,
+    action: TagFilterAction,
+    blockedTagQuery?: string
+  ): Promise<TagBlocklistUpdateResult> {
+    return updatePolymarketProposalTagBlocklist(integration, subscriptionTagQuery, action, blockedTagQuery);
   },
   getTagFilters(integration: Integration): TagFilterEntry[] {
     return getPolymarketProposalTagFilters(integration);
@@ -320,28 +330,15 @@ export function normalizePolymarketProposalEvent(
     `Matched tags: ${matchedTags}`
   ].join("\n");
   const fields = [
+    { name: "Event type", value: "Polymarket UMA proposal", inline: true },
+    { name: "On-chain tx", value: transactionUrl, inline: false },
     { name: matchedTagsFieldName, value: matchedTags, inline: false },
-    ...(market?.tags?.length ? [{ name: "Market tags", value: market.tags.join(", "), inline: false }] : []),
     ...(market?.condition_id ? [{ name: "Condition ID", value: market.condition_id, inline: false }] : []),
     { name: "Question ID", value: proposal.questionId, inline: false },
     { name: "Requester adapter", value: proposal.requester, inline: false },
-    { name: "Proposer", value: proposal.proposer, inline: false },
     { name: "Oracle", value: proposal.oracleAddress, inline: false },
     { name: "Request timestamp", value: new Date(proposal.requestTimestamp * 1_000).toISOString(), inline: false },
-    { name: "Proposal expiration", value: new Date(proposal.expirationTimestamp * 1_000).toISOString(), inline: false },
     { name: "Block", value: String(proposal.blockNumber), inline: true }
-  ];
-  const summaryFields = [
-    ...(question
-      ? [
-          {
-            name: "Question",
-            value: [question, polymarketUrl ? `Polymarket: ${polymarketUrl}` : undefined].filter(Boolean).join("\n"),
-            inline: false
-          }
-        ]
-      : []),
-    { name: "Proposed outcome", value: proposal.proposedOutcome, inline: false }
   ];
 
   return {
@@ -357,7 +354,18 @@ export function normalizePolymarketProposalEvent(
     postedAt: proposal.blockTimestamp === undefined ? new Date() : new Date(proposal.blockTimestamp * 1_000),
     url: transactionUrl,
     polymarketUrl,
-    summaryFields,
+    prioritySummary: {
+      question,
+      questionUrl: polymarketUrl,
+      proposedOutcome: proposal.proposedOutcome,
+      proposalExpirationAt: new Date(proposal.expirationTimestamp * 1_000).toISOString(),
+      marketTags: market?.tags,
+      matchedTags: tagMatch.matchedMarketTags,
+      proposer: proposal.proposer
+    },
+    hideDefaultEventFields: true,
+    hideLinksField: true,
+    hideTextField: true,
     fields,
     imageUrls: [],
     imageText: "",
@@ -400,6 +408,13 @@ export function getPolymarketProposalStoredTagFilter(
   return getPolymarketProposalTagFiltersFromSettingsJson(settingsJson).find((candidate) => sameTagFilter(candidate, tag)) ?? null;
 }
 
+export function getPolymarketProposalTagFilterByChannelId(
+  integration: Integration,
+  channelId: string
+): ProposalTagFilterEntry | null {
+  return getPolymarketProposalTagFilters(integration).find((tag) => tag.channelId === channelId) ?? null;
+}
+
 export function setPolymarketProposalTagChannel(
   settingsJson: string | null,
   tag: TagFilterEntry,
@@ -423,8 +438,9 @@ export function resolvePolymarketProposalChannelIds(integration: Integration, po
     return [];
   }
 
+  const marketTagKeys = getPostMarketTagKeys(post);
   const channelIds = getPolymarketProposalTagFilters(integration)
-    .filter((tag) => tag.channelId && hasMatchedTagKey(matchedTagKeys, tag))
+    .filter((tag) => tag.channelId && hasMatchedTagKey(matchedTagKeys, tag) && !isTagExcludedByMarketTagKeys(tag, marketTagKeys))
     .map((tag) => tag.channelId!)
     .filter(Boolean);
   return uniqueStrings(channelIds);
@@ -515,6 +531,93 @@ export async function updatePolymarketProposalTagFilters(
   }
 
   throw new Error(`Unsupported tag filter action: ${action}`);
+}
+
+export async function updatePolymarketProposalTagBlocklist(
+  integration: Integration,
+  subscriptionTagQuery: string | undefined,
+  action: TagFilterAction,
+  blockedTagQuery?: string
+): Promise<TagBlocklistUpdateResult> {
+  const settings = parsePolymarketProposalSettings(integration.settingsJson);
+  const tagFilters = getTagFiltersFromSettings(settings);
+  const subscriptionIndex = subscriptionTagQuery ? findLocalTagIndex(tagFilters, subscriptionTagQuery) : -1;
+  if (subscriptionIndex < 0) {
+    throw new Error("Run this in a proposal tag channel or provide a configured proposal tag.");
+  }
+
+  const subscriptionTag = tagFilters[subscriptionIndex];
+  const blockedTags = subscriptionTag.excludedTags ?? [];
+
+  if (action === "list") {
+    return {
+      action,
+      changed: false,
+      message: blockedTags.length
+        ? `${subscriptionTag.label} excludes ${blockedTags.length} tag(s).`
+        : `${subscriptionTag.label} has no excluded tags.`,
+      subscriptionTag,
+      blockedTags,
+      settingsJson: integration.settingsJson ?? JSON.stringify({ ...settings, tagFilters })
+    };
+  }
+
+  if (action === "clear") {
+    const nextFilters = replaceTagFilter(tagFilters, subscriptionTag, { ...subscriptionTag, excludedTags: [] });
+    return {
+      action,
+      changed: blockedTags.length > 0,
+      message: blockedTags.length ? `Cleared excluded tags for ${subscriptionTag.label}.` : `${subscriptionTag.label} had no excluded tags.`,
+      subscriptionTag: nextFilters[subscriptionIndex],
+      blockedTags: [],
+      settingsJson: JSON.stringify({ ...settings, tagFilters: nextFilters })
+    };
+  }
+
+  if (!blockedTagQuery?.trim()) {
+    throw new Error(`${action} requires a tag id, slug, or label to exclude`);
+  }
+
+  const blockedTag = action === "remove"
+    ? (blockedTags[findLocalTagIndex(blockedTags, blockedTagQuery)] ?? await resolvePolymarketTag(blockedTagQuery))
+    : await resolvePolymarketTag(blockedTagQuery);
+  if (sameTagFilter(subscriptionTag, blockedTag)) {
+    throw new Error(`Cannot exclude ${blockedTag.label} from itself.`);
+  }
+
+  if (action === "remove") {
+    const nextBlockedTags = blockedTags.filter((tag) => !sameTagFilter(tag, blockedTag));
+    const changed = nextBlockedTags.length !== blockedTags.length;
+    const nextFilters = replaceTagFilter(tagFilters, subscriptionTag, { ...subscriptionTag, excludedTags: nextBlockedTags });
+    return {
+      action,
+      changed,
+      message: changed ? `${subscriptionTag.label} will no longer exclude ${blockedTag.label}.` : `${subscriptionTag.label} was not excluding ${blockedTag.label}.`,
+      subscriptionTag: nextFilters[subscriptionIndex],
+      blockedTag,
+      blockedTags: nextBlockedTags,
+      settingsJson: JSON.stringify({ ...settings, tagFilters: nextFilters })
+    };
+  }
+
+  if (action === "add") {
+    const exists = blockedTags.some((tag) => sameTagFilter(tag, blockedTag));
+    const nextBlockedTags = exists ? blockedTags : [...blockedTags, blockedTag].sort(compareTagFilters);
+    const nextFilters = replaceTagFilter(tagFilters, subscriptionTag, { ...subscriptionTag, excludedTags: nextBlockedTags });
+    return {
+      action,
+      changed: !exists,
+      message: exists
+        ? `${subscriptionTag.label} already excludes ${blockedTag.label}.`
+        : `${subscriptionTag.label} will exclude markets that also have ${blockedTag.label}.`,
+      subscriptionTag: nextFilters[subscriptionIndex],
+      blockedTag,
+      blockedTags: nextBlockedTags,
+      settingsJson: JSON.stringify({ ...settings, tagFilters: nextFilters })
+    };
+  }
+
+  throw new Error(`Unsupported tag blocklist action: ${action}`);
 }
 
 export function getPolymarketProposalRpcUrls(settings: PolymarketProposalSettings = {}): string[] {
@@ -749,6 +852,7 @@ function findProposalTagMatch(marketTags: string[], tagFilters: ProposalTagFilte
     return null;
   }
 
+  const marketTagKeys = new Set(marketTags.map(normalizeTagText));
   const normalizedFilters = new Map<string, ProposalTagFilterEntry[]>();
   for (const filter of tagFilters) {
     for (const key of uniqueStrings([normalizeTagText(filter.label), normalizeTagText(filter.slug)])) {
@@ -761,7 +865,9 @@ function findProposalTagMatch(marketTags: string[], tagFilters: ProposalTagFilte
   const matchedMarketTags: string[] = [];
   const matchedFilters: ProposalTagFilterEntry[] = [];
   for (const marketTag of marketTags) {
-    const filters = normalizedFilters.get(normalizeTagText(marketTag));
+    const filters = (normalizedFilters.get(normalizeTagText(marketTag)) ?? []).filter(
+      (filter) => !isTagExcludedByMarketTagKeys(filter, marketTagKeys)
+    );
     if (!filters?.length) {
       continue;
     }
@@ -776,17 +882,31 @@ function findProposalTagMatch(marketTags: string[], tagFilters: ProposalTagFilte
 }
 
 function getPostMatchedTagKeys(post: EventMonitorPost): Set<string> {
+  const summaryMatchedTags = post.prioritySummary?.matchedTags ?? [];
   const value = post.fields?.find((field) => field.name === matchedTagsFieldName)?.value ?? "";
   return new Set(
-    value
-      .split(",")
+    [...summaryMatchedTags, ...value.split(",")]
       .map((tag) => normalizeTagText(tag))
+      .filter(Boolean)
+  );
+}
+
+function getPostMarketTagKeys(post: EventMonitorPost): Set<string> {
+  const summaryMarketTags = post.prioritySummary?.marketTags ?? [];
+  const value = post.fields?.find((field) => field.name === "Market tags")?.value ?? "";
+  return new Set(
+    [...summaryMarketTags, ...value.split(",")]
+      .map((tag) => normalizeTagText(tag.replace(/\*/g, "")))
       .filter(Boolean)
   );
 }
 
 function hasMatchedTagKey(matchedTagKeys: Set<string>, tag: TagFilterEntry): boolean {
   return matchedTagKeys.has(normalizeTagText(tag.label)) || matchedTagKeys.has(normalizeTagText(tag.slug));
+}
+
+function isTagExcludedByMarketTagKeys(tag: ProposalTagFilterEntry, marketTagKeys: Set<string>): boolean {
+  return (tag.excludedTags ?? []).some((excludedTag) => hasMatchedTagKey(marketTagKeys, excludedTag));
 }
 
 function getNextFromBlock(settings: PolymarketProposalSettings, confirmedLatestBlock: number): number {
@@ -817,7 +937,16 @@ function formatWatchedAdapterAddresses(): string {
 
 function formatConfiguredTagFilters(tagFilters: ProposalTagFilterEntry[]): string {
   return tagFilters.length
-    ? tagFilters.map((tag) => `${tag.label} (${tag.slug})${tag.channelName ? ` -> #${tag.channelName}` : ""}`).join("\n")
+    ? tagFilters
+        .map((tag) =>
+          [
+            `${tag.label} (${tag.slug})${tag.channelName ? ` -> #${tag.channelName}` : ""}`,
+            tag.excludedTags?.length ? `excludes: ${tag.excludedTags.map((blockedTag) => blockedTag.label).join(", ")}` : ""
+          ]
+            .filter(Boolean)
+            .join(" | ")
+        )
+        .join("\n")
     : "none - use `/umaproposals tags action:add tag:<id-or-slug>`";
 }
 
@@ -963,11 +1092,30 @@ function getTagFiltersFromSettings(settings: PolymarketProposalSettings): Propos
 }
 
 function sanitizeTagFilter(value: unknown): ProposalTagFilterEntry | null {
-  if (!value || typeof value !== "object") {
+  const base = sanitizeBaseTagFilter(value);
+  if (!base) {
     return null;
   }
 
   const tag = value as Partial<ProposalTagFilterEntry>;
+  const excludedTags = Array.isArray(tag.excludedTags)
+    ? uniqueTagFilters(tag.excludedTags.map(sanitizeBaseTagFilter).filter(isTagFilterEntry)).sort(compareTagFilters)
+    : [];
+
+  return {
+    ...base,
+    ...(typeof tag.channelId === "string" && tag.channelId.trim() ? { channelId: tag.channelId.trim() } : {}),
+    ...(typeof tag.channelName === "string" && tag.channelName.trim() ? { channelName: tag.channelName.trim() } : {}),
+    ...(excludedTags.length ? { excludedTags } : {})
+  };
+}
+
+function sanitizeBaseTagFilter(value: unknown): TagFilterEntry | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const tag = value as Partial<TagFilterEntry>;
   const label = typeof tag.label === "string" ? tag.label.trim() : "";
   const slug = typeof tag.slug === "string" ? normalizeTagText(tag.slug) : normalizeTagText(label);
   if (!label || !slug) {
@@ -976,8 +1124,6 @@ function sanitizeTagFilter(value: unknown): ProposalTagFilterEntry | null {
 
   return {
     ...(typeof tag.id === "string" && tag.id.trim() ? { id: tag.id.trim() } : {}),
-    ...(typeof tag.channelId === "string" && tag.channelId.trim() ? { channelId: tag.channelId.trim() } : {}),
-    ...(typeof tag.channelName === "string" && tag.channelName.trim() ? { channelName: tag.channelName.trim() } : {}),
     label,
     slug
   };
@@ -1012,6 +1158,14 @@ function uniqueTagFilters<T extends TagFilterEntry>(tags: T[]): T[] {
     byKey.set(tagFilterKey(tag), tag);
   }
   return [...byKey.values()];
+}
+
+function replaceTagFilter(
+  tagFilters: ProposalTagFilterEntry[],
+  existingTag: TagFilterEntry,
+  replacement: ProposalTagFilterEntry
+): ProposalTagFilterEntry[] {
+  return tagFilters.map((tag) => (sameTagFilter(tag, existingTag) ? replacement : tag));
 }
 
 function compareTagFilters(left: TagFilterEntry, right: TagFilterEntry): number {

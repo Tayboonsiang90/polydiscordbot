@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
+import { buildEventPostEmbed } from "../src/embeds.js";
 import {
   buildFastPolymarketDisputePostFromLog,
   decodeDisputePriceLog,
@@ -74,10 +75,14 @@ describe("Polymarket dispute parsing", () => {
     expect(post?.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Question ID" }),
-        expect.objectContaining({ name: "Proposed outcome", value: "NO (0)" }),
         expect.objectContaining({ name: "Block", value: "87220096" })
       ])
     );
+    expect(post?.prioritySummary).toMatchObject({
+      proposedOutcome: "NO (0)",
+      proposer,
+      disputer
+    });
   });
 });
 
@@ -106,7 +111,8 @@ describe("fetchPolymarketDisputeUpdates", () => {
         return jsonResponse({
           question: "Trump kiss by May 31?",
           market_slug: "trump-kiss-by-may-31",
-          condition_id: "0xcondition"
+          condition_id: "0xcondition",
+          tags: ["Politics", "Trump"]
         });
       }
 
@@ -130,11 +136,37 @@ describe("fetchPolymarketDisputeUpdates", () => {
     });
     expect(result.posts[0].fields).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Question", value: "Trump kiss by May 31?" }),
-        expect.objectContaining({ name: "Proposed outcome", value: "NO (0)" }),
-        expect.objectContaining({ name: "Disputer", value: disputer })
+        expect.objectContaining({ name: "On-chain tx", value: `https://polygonscan.com/tx/${transactionHash}` }),
+        expect.objectContaining({ name: "Condition ID", value: "0xcondition" }),
+        expect.objectContaining({ name: "Question ID" })
       ])
     );
+    expect(result.posts[0].prioritySummary).toMatchObject({
+      question: "Trump kiss by May 31?",
+      questionUrl: "https://polymarket.com/market/trump-kiss-by-may-31",
+      proposedOutcome: "NO (0)",
+      marketTags: ["Politics", "Trump"],
+      proposer,
+      disputer
+    });
+    const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
+    expect(embedFields.slice(0, 8).map((field) => field.name)).toEqual([
+      "Question",
+      "Proposed outcome",
+      "Posted at (SGT)",
+      "Posted at (ET)",
+      "Market tags",
+      "Proposer",
+      "Disputer",
+      "Event type"
+    ]);
+    expect(embedFields[0]).toEqual({
+      name: "Question",
+      value: "**[Trump kiss by May 31?](https://polymarket.com/market/trump-kiss-by-may-31)**",
+      inline: false
+    });
+    expect(embedFields[1]).toEqual({ name: "Proposed outcome", value: "**NO (0)**", inline: false });
+    expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Links" })]));
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
       lastScannedBlock: 1000,
@@ -151,6 +183,33 @@ describe("fetchPolymarketDisputeUpdates", () => {
     );
   });
 });
+
+function buildIntegration(): Integration {
+  return {
+    id: 1,
+    guildId: "guild",
+    channelId: "channel",
+    adapterId: "polymarket-disputes",
+    displayName: "UMA Dispute Alerts",
+    sourceUrl: "https://polygonscan.com/address/test",
+    polymarketUrl: null,
+    alertRoleId: null,
+    roleMessageId: null,
+    roleChannelId: null,
+    roleEmoji: null,
+    settingsJson: null,
+    pollIntervalMinutes: 1,
+    status: "active",
+    lastValue: null,
+    lastCheckedAt: null,
+    lastChangedAt: null,
+    snapshotValue: null,
+    snapshotCheckedAt: null,
+    snapshotDate: null,
+    createdAt: "2026-05-21T00:00:00.000Z",
+    updatedAt: "2026-05-21T00:00:00.000Z"
+  };
+}
 
 function buildDisputeLog(proposedPrice: bigint, requesterAddress = requester, oracleAddress = optimisticOracleV2Address): PolygonLog {
   return {

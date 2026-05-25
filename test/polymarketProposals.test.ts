@@ -10,6 +10,7 @@ import {
   setPolymarketProposalTagChannel,
   searchPolymarketProposalTags,
   testOnlyPolymarketProposalHelpers,
+  updatePolymarketProposalTagBlocklist,
   updatePolymarketProposalTagFilters,
   type PolymarketProposalEvent
 } from "../src/integrations/polymarketProposals.js";
@@ -118,23 +119,39 @@ describe("fetchPolymarketProposalUpdates", () => {
     expect(result.posts[0].fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Matched tags", value: "Sports" }),
-        expect.objectContaining({ name: "Proposer", value: proposer })
+        expect.objectContaining({ name: "On-chain tx", value: `https://polygonscan.com/tx/${transactionHash}` })
       ])
     );
-    expect(result.posts[0].summaryFields).toEqual([
-      {
-        name: "Question",
-        value: "Lakers win?\nPolymarket: https://polymarket.com/market/lakers-win",
-        inline: false
-      },
-      { name: "Proposed outcome", value: "NO (0)", inline: false }
-    ]);
+    expect(result.posts[0].prioritySummary).toMatchObject({
+      question: "Lakers win?",
+      questionUrl: "https://polymarket.com/market/lakers-win",
+      proposedOutcome: "NO (0)",
+      marketTags: ["Sports", "NBA"],
+      matchedTags: ["Sports"],
+      proposer
+    });
     expect(result.posts[0].fields?.some((field) => field.name === "Currency")).toBe(false);
     expect(result.posts[0].fields?.some((field) => field.name === "Proposed outcome")).toBe(false);
-    expect(buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields?.slice(0, 2)).toEqual([
-      { name: "Question", value: "Lakers win?\nPolymarket: https://polymarket.com/market/lakers-win", inline: false },
-      { name: "Proposed outcome", value: "NO (0)", inline: false }
+    const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
+    expect(embedFields.slice(0, 9).map((field) => field.name)).toEqual([
+      "Question",
+      "Proposed outcome",
+      "Posted at (SGT)",
+      "Proposal expiration (SGT)",
+      "Posted at (ET)",
+      "Proposal expiration (ET)",
+      "Market tags",
+      "Proposer",
+      "Event type"
     ]);
+    expect(embedFields[0]).toEqual({
+      name: "Question",
+      value: "**[Lakers win?](https://polymarket.com/market/lakers-win)**",
+      inline: false
+    });
+    expect(embedFields[1]).toEqual({ name: "Proposed outcome", value: "**NO (0)**", inline: false });
+    expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Market tags", value: "**Sports**, NBA" })]));
+    expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Links" })]));
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
       lastScannedBlock: 1000,
@@ -183,6 +200,60 @@ describe("fetchPolymarketProposalUpdates", () => {
         expect.objectContaining({ name: "Configured proposal tags", value: expect.stringContaining("none") })
       ])
     );
+  });
+
+  it("does not alert a subscribed tag when the market also has that subscription's excluded tag", async () => {
+    const rpcUrl = "https://rpc.example";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        const target = url.toString();
+        if (target === rpcUrl) {
+          const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, unknown>> };
+          if (body.method === "eth_blockNumber") {
+            return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+          }
+          if (body.method === "eth_getLogs") {
+            return jsonResponse({
+              jsonrpc: "2.0",
+              id: 1,
+              result: body.params[0].address === optimisticOracleV2Address ? [buildProposalLog(0n)] : []
+            });
+          }
+        }
+
+        if (target.startsWith("https://clob.polymarket.com/markets-by-question-id/")) {
+          return jsonResponse({
+            question: "Trump mention?",
+            market_slug: "trump-mention",
+            condition_id: "0xcondition",
+            tags: ["Politics", "Mentions"]
+          });
+        }
+
+        throw new Error(`Unexpected fetch: ${target}`);
+      })
+    );
+
+    const result = await fetchPolymarketProposalUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          lastScannedBlock: 980,
+          tagFilters: [
+            {
+              id: "1",
+              label: "Politics",
+              slug: "politics",
+              excludedTags: [{ id: "3", label: "Mentions", slug: "mentions" }]
+            }
+          ]
+        })
+      } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(result.posts).toHaveLength(0);
   });
 });
 
@@ -266,6 +337,71 @@ describe("proposal tag filters", () => {
     } as EventMonitorPost;
 
     expect(resolvePolymarketProposalChannelIds(integration, post)).toEqual(["sports-channel"]);
+  });
+
+  it("stores per-subscription excluded proposal tags", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const target = url.toString();
+        if (target === "https://gamma-api.polymarket.com/tags/slug/mentions") {
+          return jsonResponse({ id: "3", label: "Mentions", slug: "mentions" });
+        }
+
+        throw new Error(`Unexpected fetch: ${target}`);
+      })
+    );
+
+    const result = await updatePolymarketProposalTagBlocklist(
+      {
+        settingsJson: JSON.stringify({
+          tagFilters: [{ id: "1", label: "Politics", slug: "politics", channelId: "politics-channel", channelName: "uma-proposals-politics" }]
+        })
+      } as Integration,
+      "politics",
+      "add",
+      "mentions"
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.blockedTags).toEqual([{ id: "3", label: "Mentions", slug: "mentions" }]);
+    expect(getPolymarketProposalTagFiltersFromSettingsJson(result.settingsJson)).toEqual([
+      {
+        id: "1",
+        label: "Politics",
+        slug: "politics",
+        channelId: "politics-channel",
+        channelName: "uma-proposals-politics",
+        excludedTags: [{ id: "3", label: "Mentions", slug: "mentions" }]
+      }
+    ]);
+  });
+
+  it("does not route a proposal to a tag channel when that subscription excludes another market tag", () => {
+    const integration = {
+      settingsJson: JSON.stringify({
+        tagFilters: [
+          {
+            id: "1",
+            label: "Politics",
+            slug: "politics",
+            channelId: "politics-channel",
+            channelName: "uma-proposals-politics",
+            excludedTags: [{ id: "3", label: "Mentions", slug: "mentions" }]
+          },
+          { id: "2", label: "Trump", slug: "trump", channelId: "trump-channel", channelName: "uma-proposals-trump" }
+        ]
+      })
+    } as Integration;
+    const post = {
+      prioritySummary: {
+        marketTags: ["Politics", "Mentions", "Trump"],
+        matchedTags: ["Politics", "Trump"]
+      },
+      fields: []
+    } as unknown as EventMonitorPost;
+
+    expect(resolvePolymarketProposalChannelIds(integration, post)).toEqual(["trump-channel"]);
   });
 });
 

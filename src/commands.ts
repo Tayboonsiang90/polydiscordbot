@@ -14,12 +14,14 @@ import {
   buildSnapshotStoredEmbed,
   buildStrikeSearchEmbed,
   buildStrikeTermsEmbed,
+  buildTagBlocklistEmbed,
   buildTagFiltersEmbed,
   buildTagSearchEmbed,
   buildStatusEmbed
 } from "./embeds.js";
 import { getAdapter, getAdapterByCommandName, listAdapters } from "./integrations/registry.js";
 import {
+  getPolymarketProposalTagFilterByChannelId,
   getPolymarketProposalStoredTagFilter,
   getPolymarketProposalTagChannelName,
   getPolymarketProposalTagFiltersFromSettingsJson,
@@ -189,6 +191,42 @@ export function buildAdapterCommands() {
       );
     }
 
+    if (adapter.updateTagBlocklist) {
+      command.addSubcommand((subcommand) =>
+        subcommand
+          .setName("tagblocks")
+          .setDescription("Exclude market tags from one proposal tag channel")
+          .addStringOption((option) =>
+            option
+              .setName("action")
+              .setDescription("Blocklist action")
+              .setRequired(true)
+              .addChoices(
+                { name: "add", value: "add" },
+                { name: "remove", value: "remove" },
+                { name: "list", value: "list" },
+                { name: "clear", value: "clear" }
+              )
+          )
+          .addStringOption((option) =>
+            option
+              .setName("blocked")
+              .setDescription("Tag to exclude from this proposal channel")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(120)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("tag")
+              .setDescription("Configured proposal tag; optional inside its tag channel")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(120)
+          )
+      );
+    }
+
     return command;
   });
 }
@@ -271,7 +309,16 @@ export async function handleAdapterCommand(
   }
 
   const adapter = getAdapterByCommandName(interaction.commandName);
-  const integration = database.getIntegrationByChannel(interaction.guild.id, interaction.channel.id);
+  let integration = database.getIntegrationByChannel(interaction.guild.id, interaction.channel.id);
+  let proposalChannelTag: TagFilterEntry | null = null;
+
+  if (!integration && adapter.id === "polymarket-proposals") {
+    const baseIntegration = database.getIntegrationByAdapter(interaction.guild.id, adapter.id);
+    proposalChannelTag = baseIntegration ? getPolymarketProposalTagFilterByChannelId(baseIntegration, interaction.channel.id) : null;
+    if (baseIntegration && proposalChannelTag) {
+      integration = baseIntegration;
+    }
+  }
 
   if (!integration || integration.adapterId !== adapter.id) {
     await interaction.reply({
@@ -282,6 +329,13 @@ export async function handleAdapterCommand(
   }
 
   const subcommand = interaction.options.getSubcommand();
+  if (proposalChannelTag && subcommand !== "tagblocks") {
+    await interaction.reply({
+      content: `Use this command in #${adapter.defaultChannelName}. This tag channel only supports /${adapter.commandName} tagblocks.`,
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
 
   if (subcommand === "status") {
     await interaction.reply({ embeds: [buildStatusReplyEmbed(integration)] });
@@ -387,6 +441,37 @@ export async function handleAdapterCommand(
         ? database.setSettingsJson(integration.id, result.settingsJson)
         : integration;
     await interaction.editReply({ embeds: [buildTagFiltersEmbed(updated, result)] });
+    return;
+  }
+
+  if (subcommand === "tagblocks") {
+    if (!adapter.updateTagBlocklist) {
+      await interaction.reply({ content: "This integration does not support tag blocklists.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const action = interaction.options.getString("action", true) as TagFilterAction;
+    const subscriptionTagQuery = interaction.options.getString("tag")?.trim() ?? proposalChannelTag?.slug;
+    const blockedTagQuery = interaction.options.getString("blocked")?.trim();
+    if (!subscriptionTagQuery) {
+      await interaction.reply({
+        content: "Run this in a proposal tag channel, or provide the configured proposal tag with `tag:`.",
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+    if ((action === "add" || action === "remove") && !blockedTagQuery) {
+      await interaction.reply({ content: "`add` and `remove` need a blocked tag id, slug, or label.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply();
+    const result = await adapter.updateTagBlocklist(integration, subscriptionTagQuery, action, blockedTagQuery);
+    const updated =
+      result.settingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, result.settingsJson)
+        : integration;
+    await interaction.editReply({ embeds: [buildTagBlocklistEmbed(updated, result)] });
     return;
   }
 

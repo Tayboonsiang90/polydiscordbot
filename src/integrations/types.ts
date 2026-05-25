@@ -59,11 +59,28 @@ export type EventMonitorPost = {
   url: string;
   polymarketUrl?: string;
   summaryFields?: Array<{ name: string; value: string; inline?: boolean }>;
+  prioritySummary?: EventPostPrioritySummary;
+  hideDefaultEventFields?: boolean;
+  hideLinksField?: boolean;
+  hideTextField?: boolean;
   fields?: Array<{ name: string; value: string; inline?: boolean }>;
   imageUrls: string[];
   imageText: string;
   matchedTerms: string[];
   strikeTerms: string[];
+};
+
+export type EventPostPrioritySummary = {
+  question?: string;
+  questionUrl?: string;
+  proposedOutcome?: string;
+  proposalExpirationAt?: string;
+  marketTags?: string[];
+  matchedTags?: string[];
+  proposer?: string;
+  disputer?: string;
+  creator?: string;
+  clarification?: string;
 };
 
 export type EventMonitorResult = {
@@ -116,6 +133,16 @@ export type TagFilterUpdateResult = {
   settingsJson: string;
 };
 
+export type TagBlocklistUpdateResult = {
+  action: TagFilterAction;
+  changed: boolean;
+  message: string;
+  subscriptionTag: TagFilterEntry;
+  blockedTag?: TagFilterEntry;
+  blockedTags: TagFilterEntry[];
+  settingsJson: string;
+};
+
 export type WebsiteAdapter = {
   id: string;
   commandName: string;
@@ -152,5 +179,11 @@ export type WebsiteAdapter = {
   searchStrikeTerm?(integration: Integration, term: string): Promise<StrikeSearchResult>;
   searchTags?(query: string): Promise<TagSearchResult>;
   updateTagFilters?(integration: Integration, action: TagFilterAction, tagQuery?: string): Promise<TagFilterUpdateResult>;
+  updateTagBlocklist?(
+    integration: Integration,
+    subscriptionTagQuery: string | undefined,
+    action: TagFilterAction,
+    blockedTagQuery?: string
+  ): Promise<TagBlocklistUpdateResult>;
   getTagFilters?(integration: Integration): TagFilterEntry[];
 };
