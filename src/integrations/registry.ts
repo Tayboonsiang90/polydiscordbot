@@ -9,6 +9,7 @@ import { blsCpiReleasesAdapter } from "./blsCpiReleases.js";
 import { bonbastUsdIrrAdapter } from "./bonbast.js";
 import { cdcFertilityRateAdapter } from "./cdcFertilityRate.js";
 import { cdcMeaslesAdapter } from "./cdcMeasles.js";
+import { claudeCodeCommitsAdapter } from "./claudeCodeCommits.js";
 import { cloudflareCriticalAdapter } from "./cloudflareCritical.js";
 import { discordCriticalAdapter } from "./discordCritical.js";
 import { eiaCrudeSprAdapter } from "./eiaCrudeSpr.js";
@@ -63,6 +64,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [bonbastUsdIrrAdapter.id, bonbastUsdIrrAdapter],
   [cdcFertilityRateAdapter.id, cdcFertilityRateAdapter],
   [cdcMeaslesAdapter.id, cdcMeaslesAdapter],
+  [claudeCodeCommitsAdapter.id, claudeCodeCommitsAdapter],
   [cloudflareCriticalAdapter.id, cloudflareCriticalAdapter],
   [discordCriticalAdapter.id, discordCriticalAdapter],
   [eiaCrudeSprAdapter.id, eiaCrudeSprAdapter],

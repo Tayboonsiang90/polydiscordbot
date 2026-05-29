@@ -13,6 +13,7 @@ const expectedCommandIds = [
   ["bonbast", "bonbast-usd-irr"],
   ["fertility", "cdc-fertility-rate"],
   ["measles", "cdc-measles"],
+  ["claudecommits", "claude-code-commits"],
   ["cloudflare", "cloudflare-critical-incidents"],
   ["discord", "discord-critical-incidents"],
   ["eia", "eia-crude-spr"],
@@ -94,6 +95,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("nycprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("seattleprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
+    expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("nytfront").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();
     expect(getAdapterByCommandName("umaproposals").updateTagFilters).toBeDefined();
@@ -102,6 +104,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("trumpschedule").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T13:00:00.000Z"))).toBe(15);
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
+    expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
   });
 });
