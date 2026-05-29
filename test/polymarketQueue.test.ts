@@ -66,6 +66,18 @@ describe("Polymarket URL queue", () => {
     });
   });
 
+  it("parses single-date daily market slugs", () => {
+    expect(
+      parsePolymarketDateRangeWindow(
+        "https://polymarket.com/event/what-will-be-said-on-the-next-all-in-podcast-may-29",
+        new Date("2026-05-29T12:00:00.000Z")
+      )
+    ).toEqual({
+      startAt: "2026-05-29T04:00:00.000Z",
+      endAt: "2026-05-30T03:59:00.000Z"
+    });
+  });
+
   it("keeps a future market queued without replacing the currently active market", () => {
     const queue = upsertPolymarketQueueUrl(
       integration,

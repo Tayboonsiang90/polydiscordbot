@@ -62,11 +62,15 @@ export function parsePolymarketDateRangeWindow(url: string, now = new Date()): {
     }
   }
 
-  for (let index = 0; index < parts.length - 2; index += 1) {
+  for (let index = 0; index < parts.length - 1; index += 1) {
     const startMonth = monthNumber(parts[index]);
     const startDay = parseDay(parts[index + 1]);
     if (!startMonth || !startDay) {
       continue;
+    }
+
+    if (index + 2 >= parts.length) {
+      return buildEasternWindow(year, startMonth, startDay, startMonth, startDay);
     }
 
     const sameMonthEndDay = parseDay(parts[index + 2]);
