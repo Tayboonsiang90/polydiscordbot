@@ -196,6 +196,10 @@ export type WebsiteAdapter = {
   getPollIntervalReason?(integration: Integration, now?: Date): string;
   getErrorNoticeWindowMinutes?(integration: Integration): number;
   shouldAlertOnChange?(previousValue: string | null, currentValue: string): boolean;
+  upsertPolymarketMarket?(
+    integration: Integration,
+    url: string
+  ): { settingsJson: string | null; activeUrl: string | null } | Promise<{ settingsJson: string | null; activeUrl: string | null }>;
   fetchCurrentValue(integration?: Integration): Promise<AdapterValue>;
   fetchEventUpdates?(integration: Integration): Promise<EventMonitorResult>;
   enrichEventPost?(post: EventMonitorPost, strikeTerms: string[]): Promise<EventMonitorPost>;

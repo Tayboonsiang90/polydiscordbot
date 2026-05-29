@@ -640,6 +640,21 @@ export async function handleAdapterCommand(
       return;
     }
 
+    if (adapter.upsertPolymarketMarket) {
+      await interaction.deferReply();
+      const queue = await adapter.upsertPolymarketMarket(integration, polymarketUrl);
+      let updated =
+        queue.settingsJson && queue.settingsJson !== integration.settingsJson
+          ? database.setSettingsJson(integration.id, queue.settingsJson)
+          : integration;
+      if (queue.activeUrl !== updated.polymarketUrl) {
+        updated = database.setPolymarketUrl(updated.id, queue.activeUrl);
+      }
+
+      await interaction.editReply({ embeds: [buildPolymarketUpdatedEmbed(updated)] });
+      return;
+    }
+
     const queue = upsertPolymarketQueueUrl(integration, polymarketUrl);
     let updated =
       queue.settingsJson && queue.settingsJson !== integration.settingsJson

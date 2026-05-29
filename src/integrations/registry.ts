@@ -54,6 +54,7 @@ import type { WebsiteAdapter } from "./types.js";
 import { usgsEarthquakesAdapter } from "./usgsEarthquakes.js";
 import { whiteHouseAliensNycAdapter } from "./whiteHouseAliensNyc.js";
 import { whiteHouseFullLidAdapter } from "./whiteHouseFullLid.js";
+import { whiteHouseTweetsAdapter } from "./whiteHouseTweets.js";
 
 const adapters = new Map<string, WebsiteAdapter>([
   [aaaRegularGasAdapter.id, aaaRegularGasAdapter],
@@ -111,7 +112,8 @@ const adapters = new Map<string, WebsiteAdapter>([
   [tsaPassengersAdapter.id, tsaPassengersAdapter],
   [usgsEarthquakesAdapter.id, usgsEarthquakesAdapter],
   [whiteHouseAliensNycAdapter.id, whiteHouseAliensNycAdapter],
-  [whiteHouseFullLidAdapter.id, whiteHouseFullLidAdapter]
+  [whiteHouseFullLidAdapter.id, whiteHouseFullLidAdapter],
+  [whiteHouseTweetsAdapter.id, whiteHouseTweetsAdapter]
 ]);
 
 export function getAdapter(adapterId: string): WebsiteAdapter {

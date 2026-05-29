@@ -57,7 +57,8 @@ const expectedCommandIds = [
   ["tsa", "tsa-passengers"],
   ["earthquake", "usgs-earthquakes"],
   ["aliennyc", "white-house-aliens-nyc"],
-  ["fulllid", "white-house-full-lid"]
+  ["fulllid", "white-house-full-lid"],
+  ["whitehousetweets", "white-house-tweets"]
 ] as const;
 
 describe("adapter registry", () => {
@@ -115,5 +116,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
+    expect(getAdapterByCommandName("whitehousetweets").getPollIntervalMinutes?.({} as never)).toBe(5);
+    expect(getAdapterByCommandName("whitehousetweets").upsertPolymarketMarket).toBeDefined();
   });
 });
