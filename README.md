@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Alien Arrests NYC, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Alien Arrests NYC, White House Full Lid, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -66,6 +66,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `met-office-london-precip` | `/londonprecip` | `#londonprecip` | `Met Office London Precip Alerts` | `☔` | Monitors Met Office Heathrow station rain mm, with Infoclimat daily cumulative alpha before the Met Office monthly row appears. |
 | `mrbeast-subscribers` | `/mrbeastsubs` | `#mrbeastsubs` | `MrBeast Subs Alerts` | `👥` | Tracks MrBeast YouTube channel subscribers, dailyized rate, and Polymarket target projections. |
 | `mrbeast-views` | `/mrbeastviews` | `#mrbeastviews` | `MrBeast Views Alerts` | `👀` | Tracks MrBeast YouTube channel total views, dailyized rate, and Polymarket target projections. |
+| `nasa-gistemp-temperature` | `/gistemp` | `#gistemp` | `NASA GISTEMP Alerts` | `🌡️` | Monitors NASA GISTEMP Global Land-Ocean Temperature Index monthly anomaly cells. |
 | `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
 | `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
 | `ncei-tornadoes` | `/tornadoes` | `#tornadoes` | `NCEI Tornado Alerts` | `🌪️` | Monitors NCEI U.S. Tornadoes monthly time-series counts and auto-discovers monthly tornado markets. |
@@ -145,6 +146,7 @@ Month/year integrations also support:
 - `/hkprecip period year:2026 month:5`
 - `/koreaprecip period year:2026 month:5`
 - `/londonprecip period year:2026 month:5`
+- `/gistemp period year:2026 month:6`
 - `/nycprecip period year:2026 month:5`
 - `/seattleprecip period year:2026 month:5`
 

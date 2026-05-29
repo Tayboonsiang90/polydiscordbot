@@ -31,6 +31,7 @@ const expectedCommandIds = [
   ["mrbeastsubs", "mrbeast-subscribers"],
   ["mrbeastviews", "mrbeast-views"],
   ["nbs", "nbs-press-release"],
+  ["gistemp", "nasa-gistemp-temperature"],
   ["tornadoes", "ncei-tornadoes"],
   ["nycprecip", "noaa-nyc-precip"],
   ["seattleprecip", "noaa-seattle-precip"],
@@ -91,6 +92,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("nycprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("seattleprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("claudedown").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("gistemp").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("hkprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("koreaprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("londonprecip").refreshSettings).toBeDefined();
