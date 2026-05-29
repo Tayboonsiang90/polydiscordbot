@@ -6,9 +6,11 @@ import {
   formatPolymarketLine,
   normalizePolymarketUrl
 } from "../src/commands.js";
+import { listAdapters } from "../src/integrations/registry.js";
 import { buildAlertMessagePayload } from "../src/poller.js";
 import {
   buildCheckEmbed,
+  buildClearErrorsEmbed,
   buildEventPostMessagePayload,
   buildGroupedRoleSelectorEmbed,
   buildIntegrationSummaryEmbeds,
@@ -50,452 +52,52 @@ describe("adapter commands", () => {
       name: "bot",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "summarize" }),
+        expect.objectContaining({ name: "clearerrors" }),
         expect.objectContaining({ name: "clearroles" })
       ])
     });
   });
 
-  it("registers last and polymarket as adapter subcommands", () => {
-    const aaaCommand = buildAdapterCommands().find((command) => command.name === "aaa");
-    const allInCommand = buildAdapterCommands().find((command) => command.name === "allin");
-    const basedRevenueCommand = buildAdapterCommands().find((command) => command.name === "basedrevenue");
-    const bonbastCommand = buildAdapterCommands().find((command) => command.name === "bonbast");
-    const beaCommand = buildAdapterCommands().find((command) => command.name === "bea");
-    const blsCpiCommand = buildAdapterCommands().find((command) => command.name === "blscpi");
+  it("registers shared and adapter-specific subcommands from adapter capabilities", () => {
+    type CommandJson = { name: string; description?: string; options?: Array<{ name: string }> };
+    const commandByName = new Map(
+      buildAdapterCommands().map((command) => [command.name, command.toJSON() as CommandJson])
+    );
+    const sharedSubcommands = ["status", "check", "test", "last", "clear", "polymarket", "interval", "enddate", "pause", "resume"];
 
-    expect(aaaCommand?.toJSON()).toMatchObject({
-      name: "aaa",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
+    for (const adapter of listAdapters()) {
+      const command = commandByName.get(adapter.commandName);
+      const options = command?.options ?? [];
 
-    expect(allInCommand?.toJSON()).toMatchObject({
-      name: "allin",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
+      expect(command).toMatchObject({
+        name: adapter.commandName,
+        description: `Manage ${adapter.displayName}`
+      });
+      for (const subcommandName of sharedSubcommands) {
+        expect(options).toEqual(expect.arrayContaining([expect.objectContaining({ name: subcommandName })]));
+      }
 
-    const arenaAiCommand = buildAdapterCommands().find((command) => command.name === "arenaai");
-    expect(arenaAiCommand?.toJSON()).toMatchObject({
-      name: "arenaai",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    expect(basedRevenueCommand?.toJSON()).toMatchObject({
-      name: "basedrevenue",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const awsCommand = buildAdapterCommands().find((command) => command.name === "aws");
-    expect(awsCommand?.toJSON()).toMatchObject({
-      name: "aws",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    expect(beaCommand?.toJSON()).toMatchObject({
-      name: "bea",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    expect(blsCpiCommand?.toJSON()).toMatchObject({
-      name: "blscpi",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    expect(bonbastCommand?.toJSON()).toMatchObject({
-      name: "bonbast",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "last" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "clear" }),
-        expect.objectContaining({ name: "enddate" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const cloudflareCommand = buildAdapterCommands().find((command) => command.name === "cloudflare");
-    expect(cloudflareCommand?.toJSON()).toMatchObject({
-      name: "cloudflare",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const fertilityCommand = buildAdapterCommands().find((command) => command.name === "fertility");
-    expect(fertilityCommand?.toJSON()).toMatchObject({
-      name: "fertility",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const measlesCommand = buildAdapterCommands().find((command) => command.name === "measles");
-    expect(measlesCommand?.toJSON()).toMatchObject({
-      name: "measles",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const discordCommand = buildAdapterCommands().find((command) => command.name === "discord");
-    expect(discordCommand?.toJSON()).toMatchObject({
-      name: "discord",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const eiaCommand = buildAdapterCommands().find((command) => command.name === "eia");
-    expect(eiaCommand?.toJSON()).toMatchObject({
-      name: "eia",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const fdicCommand = buildAdapterCommands().find((command) => command.name === "fdic");
-    expect(fdicCommand?.toJSON()).toMatchObject({
-      name: "fdic",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const eggsCommand = buildAdapterCommands().find((command) => command.name === "eggs");
-    expect(eggsCommand?.toJSON()).toMatchObject({
-      name: "eggs",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const beefCommand = buildAdapterCommands().find((command) => command.name === "beef");
-    expect(beefCommand?.toJSON()).toMatchObject({
-      name: "beef",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const freeAppStoreCommand = buildAdapterCommands().find((command) => command.name === "freeappstore");
-    expect(freeAppStoreCommand?.toJSON()).toMatchObject({
-      name: "freeappstore",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "snapshot" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const fullLidCommand = buildAdapterCommands().find((command) => command.name === "fulllid");
-    expect(fullLidCommand?.toJSON()).toMatchObject({
-      name: "fulllid",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const paidAppStoreCommand = buildAdapterCommands().find((command) => command.name === "paidappstore");
-    expect(paidAppStoreCommand?.toJSON()).toMatchObject({
-      name: "paidappstore",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "snapshot" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const kmaCommand = buildAdapterCommands().find((command) => command.name === "koreaprecip");
-    expect(kmaCommand?.toJSON()).toMatchObject({
-      name: "koreaprecip",
-      options: expect.arrayContaining([expect.objectContaining({ name: "period" })])
-    });
-
-    const mrBeastCommand = buildAdapterCommands().find((command) => command.name === "mrbeastviews");
-    expect(mrBeastCommand?.toJSON()).toMatchObject({
-      name: "mrbeastviews",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const mrBeastSubsCommand = buildAdapterCommands().find((command) => command.name === "mrbeastsubs");
-    expect(mrBeastSubsCommand?.toJSON()).toMatchObject({
-      name: "mrbeastsubs",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const hkPrecipCommand = buildAdapterCommands().find((command) => command.name === "hkprecip");
-    expect(hkPrecipCommand?.toJSON()).toMatchObject({
-      name: "hkprecip",
-      options: expect.arrayContaining([expect.objectContaining({ name: "period" })])
-    });
-
-    const kaitoMindshareCommand = buildAdapterCommands().find((command) => command.name === "kaitomindshare");
-    expect(kaitoMindshareCommand?.toJSON()).toMatchObject({
-      name: "kaitomindshare",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const noaaNycCommand = buildAdapterCommands().find((command) => command.name === "nycprecip");
-    expect(noaaNycCommand?.toJSON()).toMatchObject({
-      name: "nycprecip",
-      options: expect.arrayContaining([expect.objectContaining({ name: "period" })])
-    });
-
-    const nbsCommand = buildAdapterCommands().find((command) => command.name === "nbs");
-    expect(nbsCommand?.toJSON()).toMatchObject({
-      name: "nbs",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const noaaSeattleCommand = buildAdapterCommands().find((command) => command.name === "seattleprecip");
-    expect(noaaSeattleCommand?.toJSON()).toMatchObject({
-      name: "seattleprecip",
-      options: expect.arrayContaining([expect.objectContaining({ name: "period" })])
-    });
-
-    const nytFrontCommand = buildAdapterCommands().find((command) => command.name === "nytfront");
-    expect(nytFrontCommand?.toJSON()).toMatchObject({
-      name: "nytfront",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "strikes" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const ornnB200Command = buildAdapterCommands().find((command) => command.name === "ornnb200");
-    expect(ornnB200Command?.toJSON()).toMatchObject({
-      name: "ornnb200",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const ornnH200Command = buildAdapterCommands().find((command) => command.name === "ornnh200");
-    expect(ornnH200Command?.toJSON()).toMatchObject({
-      name: "ornnh200",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const umaAlertCommand = buildAdapterCommands().find((command) => command.name === "umaclarifications");
-    expect(umaAlertCommand?.toJSON()).toMatchObject({
-      name: "umaclarifications",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-    expect(umaAlertCommand?.toJSON().options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "addresses" })]));
-
-    const umaDisputeCommand = buildAdapterCommands().find((command) => command.name === "umadispute");
-    expect(umaDisputeCommand?.toJSON()).toMatchObject({
-      name: "umadispute",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "addresses" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const umaProposalCommand = buildAdapterCommands().find((command) => command.name === "umaproposals");
-    expect(umaProposalCommand?.toJSON()).toMatchObject({
-      name: "umaproposals",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "tagsearch" }),
-        expect.objectContaining({ name: "tags" }),
-        expect.objectContaining({ name: "tagblocks" }),
-        expect.objectContaining({ name: "addresses" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const ngPriceCommand = buildAdapterCommands().find((command) => command.name === "ngprice");
-    expect(ngPriceCommand?.toJSON()).toMatchObject({
-      name: "ngprice",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const wtiCommand = buildAdapterCommands().find((command) => command.name === "wti");
-    expect(wtiCommand?.toJSON()).toMatchObject({
-      name: "wti",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const xagusdCommand = buildAdapterCommands().find((command) => command.name === "xagusd");
-    expect(xagusdCommand?.toJSON()).toMatchObject({
-      name: "xagusd",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const xauusdCommand = buildAdapterCommands().find((command) => command.name === "xauusd");
-    expect(xauusdCommand?.toJSON()).toMatchObject({
-      name: "xauusd",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const spotifyUsaCommand = buildAdapterCommands().find((command) => command.name === "spotifyusa");
-    expect(spotifyUsaCommand?.toJSON()).toMatchObject({
-      name: "spotifyusa",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const spotifyGlobalCommand = buildAdapterCommands().find((command) => command.name === "spotifyglobal");
-    expect(spotifyGlobalCommand?.toJSON()).toMatchObject({
-      name: "spotifyglobal",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const strategyBtcCommand = buildAdapterCommands().find((command) => command.name === "strategybtc");
-    expect(strategyBtcCommand?.toJSON()).toMatchObject({
-      name: "strategybtc",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const teslaCommand = buildAdapterCommands().find((command) => command.name === "tesla");
-    expect(teslaCommand?.toJSON()).toMatchObject({
-      name: "tesla",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const trumpTruthCommand = buildAdapterCommands().find((command) => command.name === "trumptruth");
-    expect(trumpTruthCommand?.toJSON()).toMatchObject({
-      name: "trumptruth",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "search" }),
-        expect.objectContaining({ name: "strikes" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-
-    const tsaCommand = buildAdapterCommands().find((command) => command.name === "tsa");
-    expect(tsaCommand?.toJSON()).toMatchObject({
-      name: "tsa",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
-    expect(tsaCommand?.toJSON().options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "analysis" })]));
-
-    const earthquakeCommand = buildAdapterCommands().find((command) => command.name === "earthquake");
-    expect(earthquakeCommand?.toJSON()).toMatchObject({
-      name: "earthquake",
-      options: expect.arrayContaining([
-        expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "test" }),
-        expect.objectContaining({ name: "polymarket" })
-      ])
-    });
+      const optionalSubcommands: Array<[unknown, string]> = [
+        [adapter.supportsPeriod, "period"],
+        [adapter.dailySnapshot, "snapshot"],
+        [adapter.supportsStrikes, "strikes"],
+        [adapter.searchStrikeTerm, "search"],
+        [adapter.searchTags, "tagsearch"],
+        [adapter.updateTagFilters, "tags"],
+        [adapter.updateTagBlocklist, "tagblocks"],
+        [adapter.updateAddressLabels, "addresses"]
+      ];
+      for (const [enabled, subcommandName] of optionalSubcommands) {
+        const matcher = expect.arrayContaining([expect.objectContaining({ name: subcommandName })]);
+        if (enabled) {
+          expect(options).toEqual(matcher);
+        } else {
+          expect(options).not.toEqual(matcher);
+        }
+      }
+      expect(options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "analysis" })]));
+    }
   });
-
   it("formats the last stored value with retrieval time", () => {
     const embed = buildLastEmbed(checkedIntegration).toJSON();
 
@@ -594,6 +196,26 @@ describe("adapter commands", () => {
           name: "🪙 Strategy Bitcoin Purchases",
           value: "Role: <@&role-2>\nCommand: `/strategybtc`"
         })
+      ])
+    );
+  });
+
+  it("formats check-failed cleanup summaries", () => {
+    const embed = buildClearErrorsEmbed({
+      scannedChannels: 12,
+      deletedMessages: 40,
+      keptMessages: 8,
+      skippedChannels: 1,
+      failedDeletes: 0,
+      keepLatest: true
+    }).toJSON();
+
+    expect(embed.title).toBe("Check-failed message cleanup");
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Deleted old errors", value: "40" }),
+        expect.objectContaining({ name: "Kept latest errors", value: "8" }),
+        expect.objectContaining({ name: "Mode", value: "Kept the newest Check failed message per channel." })
       ])
     );
   });

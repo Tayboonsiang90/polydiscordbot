@@ -1,5 +1,6 @@
 import type { Integration } from "./integrations/types.js";
 import { getPolymarketSlug, parseManualEasternDateTime } from "./marketEnd.js";
+import { parseSettingsJson } from "./settingsJson.js";
 
 export type PolymarketQueueMarket = {
   url: string;
@@ -49,6 +50,18 @@ export function parsePolymarketDateRangeWindow(url: string, now = new Date()): {
 
   const parts = slug.split("-").map((part) => part.toLowerCase());
   const year = getEasternYear(now);
+  if (parts.includes("this") && parts.includes("quarter")) {
+    return buildQuarterWindow(year, getEasternQuarter(now));
+  }
+
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const quarter = parseQuarter(parts[index]);
+    const quarterYear = parseYear(parts[index + 1]);
+    if (quarter && quarterYear) {
+      return buildQuarterWindow(quarterYear, quarter);
+    }
+  }
+
   for (let index = 0; index < parts.length - 2; index += 1) {
     const startMonth = monthNumber(parts[index]);
     const startDay = parseDay(parts[index + 1]);
@@ -69,6 +82,13 @@ export function parsePolymarketDateRangeWindow(url: string, now = new Date()): {
   }
 
   return null;
+}
+
+function buildQuarterWindow(year: number, quarter: number): { startAt: string; endAt: string } | null {
+  const startMonth = (quarter - 1) * 3 + 1;
+  const endMonth = startMonth + 2;
+  const endDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate();
+  return buildEasternWindow(year, startMonth, 1, endMonth, endDay);
 }
 
 function resolvePolymarketQueue(settings: Record<string, unknown>, currentUrl: string | null, now: Date): PolymarketQueueResolution {
@@ -184,16 +204,7 @@ function sortMarkets(markets: PolymarketQueueMarket[]): PolymarketQueueMarket[] 
 }
 
 function parseSettings(settingsJson: string | null): Record<string, unknown> {
-  if (!settingsJson) {
-    return {};
-  }
-
-  try {
-    const settings = JSON.parse(settingsJson) as unknown;
-    return settings && typeof settings === "object" ? (settings as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
+  return parseSettingsJson(settingsJson);
 }
 
 function buildEasternWindow(
@@ -255,8 +266,26 @@ function parseDay(value: string | undefined): number | null {
   return day >= 1 && day <= 31 ? day : null;
 }
 
+function parseQuarter(value: string | undefined): number | null {
+  const match = value?.match(/^q([1-4])$/);
+  return match ? Number(match[1]) : null;
+}
+
+function parseYear(value: string | undefined): number | null {
+  if (!value || !/^20\d{2}$/.test(value)) {
+    return null;
+  }
+
+  return Number(value);
+}
+
 function getEasternYear(date: Date): number {
   return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric" }).format(date));
+}
+
+function getEasternQuarter(date: Date): number {
+  const month = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "numeric" }).format(date));
+  return Math.floor((month - 1) / 3) + 1;
 }
 
 function padNumber(value: number): string {

@@ -5,6 +5,7 @@ import type {
   AddressProfileStatus,
   EventMonitorPost
 } from "./integrations/types.js";
+import { parseSettingsJson } from "./settingsJson.js";
 
 const addressPattern = /^0x[0-9a-fA-F]{40}$/;
 const polymarketTradesApiUrl = "https://data-api.polymarket.com/trades";
@@ -204,19 +205,6 @@ function sanitizeAddressLabel(value: unknown): AddressLabelEntry | null {
   const address = normalizeAddress(entry.address);
   const label = typeof entry.label === "string" ? normalizeLabel(entry.label) : "";
   return address && label ? { address, label } : null;
-}
-
-function parseSettingsJson(settingsJson: string | null): Record<string, unknown> {
-  if (!settingsJson) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(settingsJson) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
 }
 
 function normalizeAddressOrThrow(address: string | undefined): string {

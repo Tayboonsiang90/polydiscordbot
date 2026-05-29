@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from "./http.js";
 import type { BotDatabase } from "./database.js";
 import type { Integration } from "./integrations/types.js";
+import { parseSettingsJson } from "./settingsJson.js";
 
 export type MarketEndReminderKey = "24h" | "12h" | "1h" | "end";
 
@@ -286,17 +287,4 @@ function normalizeQueuedMarkets(value: unknown): Array<{ url: string; endAt: str
     const market = item as { url?: unknown; endAt?: unknown };
     return typeof market.url === "string" ? [{ url: market.url, endAt: typeof market.endAt === "string" ? market.endAt : null }] : [];
   });
-}
-
-function parseSettingsJson(settingsJson: string | null): Record<string, unknown> {
-  if (!settingsJson) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(settingsJson) as unknown;
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
 }

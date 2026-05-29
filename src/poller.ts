@@ -8,10 +8,21 @@ import {
   buildMarketEndReminderEmbed,
   buildSnapshotCapturedEmbed
 } from "./embeds.js";
+import {
+  defaultRepeatedErrorNoticeWindowMs,
+  formatErrorMessage,
+  formatSchedulerNetworkError,
+  getErrorNoticeDecision,
+  isTransientNetworkError,
+  type ErrorNoticeState
+} from "./errorNotices.js";
 import { getAdapter } from "./integrations/registry.js";
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "./integrations/types.js";
 import { getDueMarketEndReminders, getStoredOrFetchPolymarketEndDate, type MarketEndReminder } from "./marketEnd.js";
 import { resolveIntegrationPolymarketQueue } from "./polymarketQueue.js";
+import { mergeSettingsJson, parseSettingsJson } from "./settingsJson.js";
+
+export { formatSchedulerNetworkError, getErrorNoticeDecision } from "./errorNotices.js";
 
 export type CheckResult = {
   integration: Integration;
@@ -45,14 +56,6 @@ const maxEventSeenPostIds = 100;
 const schedulerErrorNoticeWindowMs = 10 * 60_000;
 let schedulerErrorNotice: ErrorNoticeState | undefined;
 
-export type ErrorNoticeState = {
-  signature: string;
-  sentAtMs: number;
-  suppressedCount: number;
-};
-
-const repeatedErrorNoticeWindowMs = 30 * 60_000;
-
 export function buildAlertMessagePayload(result: CheckResult) {
   return {
     content: result.integration.alertRoleId ? `<@&${result.integration.alertRoleId}>` : undefined,
@@ -79,40 +82,6 @@ export function buildMarketEndReminderMessagePayload(integration: Integration, r
 
 export function hasValueChanged(previousValue: string | null, currentValue: string): boolean {
   return previousValue !== null && previousValue !== currentValue;
-}
-
-export function getErrorNoticeDecision(
-  existing: ErrorNoticeState | undefined,
-  message: string,
-  nowMs: number,
-  windowMs = repeatedErrorNoticeWindowMs
-): { shouldSend: boolean; message: string; nextState: ErrorNoticeState } {
-  if (!existing || existing.signature !== message) {
-    return {
-      shouldSend: true,
-      message,
-      nextState: { signature: message, sentAtMs: nowMs, suppressedCount: 0 }
-    };
-  }
-
-  if (nowMs - existing.sentAtMs < windowMs) {
-    return {
-      shouldSend: false,
-      message,
-      nextState: { ...existing, suppressedCount: existing.suppressedCount + 1 }
-    };
-  }
-
-  const suppressedSummary =
-    existing.suppressedCount > 0
-      ? `\n\nSuppressed ${existing.suppressedCount} repeated error(s) in the previous ${Math.round(windowMs / 60_000)} minute(s).`
-      : "";
-
-  return {
-    shouldSend: true,
-    message: `${message}${suppressedSummary}`,
-    nextState: { signature: message, sentAtMs: nowMs, suppressedCount: 0 }
-  };
 }
 
 export async function checkIntegration(database: BotDatabase, integration: Integration): Promise<CheckResult> {
@@ -260,19 +229,6 @@ function mergeEventSeenPostIds(primarySettingsJson: string | null, secondarySett
     ...primarySettings,
     eventSeenPostIds
   });
-}
-
-function parseSettingsJson(settingsJson: string | null): Record<string, unknown> {
-  if (!settingsJson) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(settingsJson) as unknown;
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -429,7 +385,7 @@ export class PollScheduler {
   private async sendErrorIfDue(channelId: string, integration: Integration, error: unknown): Promise<void> {
     const adapter = getAdapter(integration.adapterId);
     const message = formatErrorMessage(error);
-    const windowMs = (adapter.getErrorNoticeWindowMinutes?.(integration) ?? repeatedErrorNoticeWindowMs / 60_000) * 60_000;
+    const windowMs = (adapter.getErrorNoticeWindowMinutes?.(integration) ?? defaultRepeatedErrorNoticeWindowMs / 60_000) * 60_000;
     const decision = getErrorNoticeDecision(this.errorNotices.get(integration.id), message, Date.now(), windowMs);
     this.errorNotices.set(integration.id, decision.nextState);
     if (!decision.shouldSend) {
@@ -449,7 +405,21 @@ export class PollScheduler {
       return;
     }
 
-    await channel.send({ embeds: [buildErrorEmbed(integration, message)] });
+    const sentMessage = await channel.send({ embeds: [buildErrorEmbed(integration, message)] });
+    const sentMessageId = getDiscordMessageId(sentMessage);
+    if (!sentMessageId) {
+      return;
+    }
+
+    const previousMessageId = getLatestErrorMessageId(integration.settingsJson);
+    const updatedSettingsJson = setLatestErrorMessageId(integration.settingsJson, sentMessageId);
+    if (updatedSettingsJson !== integration.settingsJson) {
+      this.database.setSettingsJson(integration.id, updatedSettingsJson);
+    }
+
+    if (previousMessageId && previousMessageId !== sentMessageId && isDeletableMessageChannel(channel)) {
+      await channel.messages.delete(previousMessageId).catch(() => undefined);
+    }
   }
 
   private async sendEventPost(channelId: string, integration: Integration, post: EventMonitorPost): Promise<void> {
@@ -591,8 +561,40 @@ type SendableChannel = {
   send(content: unknown): Promise<unknown>;
 };
 
+type DeletableMessageChannel = SendableChannel & {
+  messages: {
+    delete(messageId: string): Promise<unknown>;
+  };
+};
+
 function isSendableChannel(channel: unknown): channel is SendableChannel {
   return Boolean(channel && typeof channel === "object" && "send" in channel && typeof channel.send === "function");
+}
+
+function isDeletableMessageChannel(channel: SendableChannel): channel is DeletableMessageChannel {
+  const messages = "messages" in channel ? channel.messages : null;
+  if (!messages || typeof messages !== "object") {
+    return false;
+  }
+
+  return "delete" in messages && typeof messages.delete === "function";
+}
+
+function getDiscordMessageId(message: unknown): string | null {
+  if (!message || typeof message !== "object" || !("id" in message)) {
+    return null;
+  }
+
+  return typeof message.id === "string" ? message.id : null;
+}
+
+export function getLatestErrorMessageId(settingsJson: string | null): string | null {
+  const settings = parseSettingsJson(settingsJson);
+  return typeof settings.latestErrorMessageId === "string" ? settings.latestErrorMessageId : null;
+}
+
+export function setLatestErrorMessageId(settingsJson: string | null, messageId: string): string {
+  return mergeSettingsJson(settingsJson, { latestErrorMessageId: messageId });
 }
 
 function activateQueuedPolymarket(database: BotDatabase, integration: Integration, now = new Date()): Integration {
@@ -634,46 +636,6 @@ function logSchedulerError(error: unknown): void {
 
 function logMarketEndLookupError(integration: Integration, error: unknown): void {
   console.error(`Market-end lookup failed for ${integration.adapterId}: ${formatErrorMessage(error)}`);
-}
-
-function formatErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-export function formatSchedulerNetworkError(error: unknown): string {
-  const codes = [...new Set(collectErrorCodes(error))].join(", ");
-  const codeText = codes ? ` (${codes})` : "";
-  return `Discord/network send failed${codeText}: ${formatErrorMessage(error)}. This is usually Pi DNS/VPN/router access to Discord; scheduler will retry.`;
-}
-
-function isTransientNetworkError(error: unknown): boolean {
-  const codes = collectErrorCodes(error);
-  const message = formatErrorMessage(error).toLowerCase();
-  return (
-    codes.some((code) =>
-      ["EAI_AGAIN", "ECONNRESET", "ECONNABORTED", "EHOSTUNREACH", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].includes(code)
-    ) ||
-    message.includes("eai_again") ||
-    message.includes("timeout") ||
-    message.includes("timed out") ||
-    message.includes("connection reset")
-  );
-}
-
-function collectErrorCodes(error: unknown): string[] {
-  if (!error || typeof error !== "object") {
-    return [];
-  }
-
-  const codes: string[] = [];
-  const maybeCode = "code" in error ? error.code : undefined;
-  if (typeof maybeCode === "string") {
-    codes.push(maybeCode);
-  }
-
-  const maybeCause = "cause" in error ? error.cause : undefined;
-  codes.push(...collectErrorCodes(maybeCause));
-  return codes;
 }
 
 function getZonedDateTimeParts(date: Date, timeZone: string): { date: string; hour: number; minute: number } {

@@ -12,6 +12,7 @@ import type {
   TagSearchResult
 } from "./integrations/types.js";
 import type { MarketEndReminder } from "./marketEnd.js";
+import { parseSettingsJson } from "./settingsJson.js";
 import { formatSingaporeDateTime, nowSingaporeDateTime } from "./time.js";
 
 const successColor = 0x2ecc71;
@@ -33,6 +34,15 @@ export type IntegrationSummaryRow = {
   marketExpired: boolean;
   baseIntervalMinutes: number;
   currentIntervalMinutes: number;
+};
+
+export type ErrorCleanupSummary = {
+  scannedChannels: number;
+  deletedMessages: number;
+  keptMessages: number;
+  skippedChannels: number;
+  failedDeletes: number;
+  keepLatest: boolean;
 };
 
 export function buildStatusEmbed(integration: Integration, pollingInfo: StatusPollingInfo = {}): EmbedBuilder {
@@ -265,6 +275,21 @@ export function buildClearEmbed(integration: Integration, deletedCount: number):
       { name: "Links", value: formatLinks(integration), inline: false }
     )
     .setFooter({ text: `Cleared at ${nowSingaporeDateTime()}` });
+}
+
+export function buildClearErrorsEmbed(summary: ErrorCleanupSummary): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(summary.failedDeletes || summary.skippedChannels ? warningColor : successColor)
+    .setTitle("Check-failed message cleanup")
+    .addFields(
+      { name: "Deleted old errors", value: String(summary.deletedMessages), inline: true },
+      { name: "Kept latest errors", value: String(summary.keptMessages), inline: true },
+      { name: "Scanned channels", value: String(summary.scannedChannels), inline: true },
+      { name: "Skipped channels", value: String(summary.skippedChannels), inline: true },
+      { name: "Failed deletes", value: String(summary.failedDeletes), inline: true },
+      { name: "Mode", value: summary.keepLatest ? "Kept the newest Check failed message per channel." : "Deleted all Check failed messages.", inline: false }
+    )
+    .setFooter({ text: `Cleaned at ${nowSingaporeDateTime()}` });
 }
 
 export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
@@ -645,24 +670,20 @@ function formatSettingsFields(integration: Integration) {
     return [];
   }
 
-  try {
-    const settings = JSON.parse(integration.settingsJson) as { year?: unknown; month?: unknown; tagFilters?: unknown };
-    const fields: Array<{ name: string; value: string; inline: boolean }> = [];
-    if (typeof settings.year === "number" && typeof settings.month === "number") {
-      fields.push({ name: "Period", value: `${settings.year}-${String(settings.month).padStart(2, "0")}`, inline: true });
-    }
-    if (Array.isArray(settings.tagFilters)) {
-      const tags = settings.tagFilters
-        .map((tag) => (tag && typeof tag === "object" ? (tag as Partial<TagFilterEntry>) : null))
-        .filter((tag): tag is Partial<TagFilterEntry> => Boolean(tag?.label || tag?.slug))
-        .map((tag) => `${tag.label ?? tag.slug} (${tag.slug ?? "no slug"})`);
-      fields.push({ name: "Proposal tag filters", value: tags.length ? truncateEmbedValue(tags.join("\n")) : "none configured", inline: false });
-    }
-
-    return fields;
-  } catch {
-    return [];
+  const settings = parseSettingsJson(integration.settingsJson);
+  const fields: Array<{ name: string; value: string; inline: boolean }> = [];
+  if (typeof settings.year === "number" && typeof settings.month === "number") {
+    fields.push({ name: "Period", value: `${settings.year}-${String(settings.month).padStart(2, "0")}`, inline: true });
   }
+  if (Array.isArray(settings.tagFilters)) {
+    const tags = settings.tagFilters
+      .map((tag) => (tag && typeof tag === "object" ? (tag as Partial<TagFilterEntry>) : null))
+      .filter((tag): tag is Partial<TagFilterEntry> => Boolean(tag?.label || tag?.slug))
+      .map((tag) => `${tag.label ?? tag.slug} (${tag.slug ?? "no slug"})`);
+    fields.push({ name: "Proposal tag filters", value: tags.length ? truncateEmbedValue(tags.join("\n")) : "none configured", inline: false });
+  }
+
+  return fields;
 }
 
 function formatSnapshotFields(integration: Integration) {

@@ -1,9 +1,11 @@
 ﻿import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction, type TextChannel } from "discord.js";
 import type { BotDatabase } from "./database.js";
 import type { Guild } from "discord.js";
+import type { Message } from "discord.js";
 import {
   buildAddressLabelsEmbed,
   buildClearEmbed,
+  buildClearErrorsEmbed,
   buildCheckEmbed,
   buildEventCheckEmbed,
   buildIntegrationSummaryEmbeds,
@@ -50,6 +52,7 @@ import {
 } from "./poller.js";
 
 const roleChannelName = "market-alert-roles";
+const checkFailedTitleSuffix = " - Check failed";
 
 export function buildAdapterCommands() {
   return listAdapters().map((adapter) => {
@@ -281,6 +284,17 @@ export function buildBotCommands() {
       .setName("bot")
       .setDescription("Bot-level utility commands")
       .addSubcommand((subcommand) => subcommand.setName("summarize").setDescription("Summarize all integrations"))
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("clearerrors")
+          .setDescription("Clean old bot Check failed messages from integration channels")
+          .addBooleanOption((option) =>
+            option
+              .setName("keep-latest")
+              .setDescription("Keep the newest Check failed message per channel. Defaults to true.")
+              .setRequired(false)
+          )
+      )
       .addSubcommand((subcommand) => subcommand.setName("clearroles").setDescription("Clear the market alert role selector channel"))
   ];
 }
@@ -309,6 +323,19 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
     for (const embed of remainingEmbeds) {
       await interaction.followUp({ embeds: [embed] });
     }
+    return;
+  }
+
+  if (subcommand === "clearerrors") {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+      await interaction.reply({ content: "You need Manage Messages permission to clear check-failed messages.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const keepLatest = interaction.options.getBoolean("keep-latest") ?? true;
+    const summary = await clearOldCheckFailedMessages(interaction.guild, database, keepLatest);
+    await interaction.editReply({ embeds: [buildClearErrorsEmbed(summary)] });
     return;
   }
 
@@ -904,6 +931,104 @@ async function syncUmaAddressLabels(
   }
 
   return syncedCount;
+}
+
+export async function clearOldCheckFailedMessages(guild: Guild, database: BotDatabase, keepLatest = true) {
+  const botUserId = guild.client.user?.id;
+  const channelIds = [
+    ...new Set(
+      database
+        .listIntegrations()
+        .filter((integration) => integration.guildId === guild.id)
+        .map((integration) => integration.channelId)
+    )
+  ];
+  const summary = {
+    scannedChannels: 0,
+    deletedMessages: 0,
+    keptMessages: 0,
+    skippedChannels: 0,
+    failedDeletes: 0,
+    keepLatest
+  };
+
+  if (!botUserId) {
+    summary.skippedChannels = channelIds.length;
+    return summary;
+  }
+
+  for (const channelId of channelIds) {
+    const channel = await fetchTextChannelById(guild, channelId);
+    if (!channel) {
+      summary.skippedChannels += 1;
+      continue;
+    }
+
+    const botPermissions = channel.permissionsFor(guild.client.user);
+    if (!botPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+      summary.skippedChannels += 1;
+      continue;
+    }
+
+    summary.scannedChannels += 1;
+    let messages: Message[];
+    try {
+      messages = await fetchCheckFailedMessages(channel, botUserId);
+    } catch {
+      summary.skippedChannels += 1;
+      continue;
+    }
+
+    const sortedMessages = messages.sort((left, right) => right.createdTimestamp - left.createdTimestamp);
+    const keptMessageId = keepLatest ? sortedMessages[0]?.id : undefined;
+    if (keptMessageId) {
+      summary.keptMessages += 1;
+    }
+
+    for (const message of sortedMessages) {
+      if (message.id === keptMessageId) {
+        continue;
+      }
+
+      try {
+        await message.delete();
+        summary.deletedMessages += 1;
+      } catch {
+        summary.failedDeletes += 1;
+      }
+    }
+  }
+
+  return summary;
+}
+
+async function fetchCheckFailedMessages(channel: TextChannel, botUserId: string): Promise<Message[]> {
+  const checkFailedMessages: Message[] = [];
+  let before: string | undefined;
+
+  while (true) {
+    const messages = await channel.messages.fetch(before ? { limit: 100, before } : { limit: 100 });
+    if (messages.size === 0) {
+      return checkFailedMessages;
+    }
+
+    for (const message of messages.values()) {
+      if (isBotCheckFailedMessage(message, botUserId)) {
+        checkFailedMessages.push(message);
+      }
+    }
+
+    const oldestMessage = messages.last();
+    if (!oldestMessage || messages.size < 100) {
+      return checkFailedMessages;
+    }
+
+    before = oldestMessage.id;
+  }
+}
+
+function isBotCheckFailedMessage(message: Message, botUserId: string): boolean {
+  return message.author.id === botUserId && message.embeds.some((embed) => embed.title?.endsWith(checkFailedTitleSuffix));
 }
 
 async function buildIntegrationSummaryRows(database: BotDatabase, integrations: Integration[]) {

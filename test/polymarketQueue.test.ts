@@ -54,6 +54,18 @@ describe("Polymarket URL queue", () => {
     });
   });
 
+  it("parses quarter windows from quarterly market slugs", () => {
+    expect(
+      parsePolymarketDateRangeWindow(
+        "https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026",
+        new Date("2026-05-29T00:00:00.000Z")
+      )
+    ).toEqual({
+      startAt: "2026-04-01T04:00:00.000Z",
+      endAt: "2026-07-01T03:59:00.000Z"
+    });
+  });
+
   it("keeps a future market queued without replacing the currently active market", () => {
     const queue = upsertPolymarketQueueUrl(
       integration,

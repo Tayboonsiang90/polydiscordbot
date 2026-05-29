@@ -1,335 +1,98 @@
 import { describe, expect, it } from "vitest";
 import { getAdapterByCommandName, listAdapters } from "../src/integrations/registry.js";
 
-describe("adapter registry", () => {
-  it("uses stable command names for adapter slash commands", () => {
-    const aaa = getAdapterByCommandName("aaa");
-    const allIn = getAdapterByCommandName("allin");
-    const arenaAi = getAdapterByCommandName("arenaai");
-    const aws = getAdapterByCommandName("aws");
-    const basedRevenue = getAdapterByCommandName("basedrevenue");
-    const bea = getAdapterByCommandName("bea");
-    const blsCpi = getAdapterByCommandName("blscpi");
-    const bonbast = getAdapterByCommandName("bonbast");
-    const fertility = getAdapterByCommandName("fertility");
-    const measles = getAdapterByCommandName("measles");
-    const cloudflare = getAdapterByCommandName("cloudflare");
-    const discord = getAdapterByCommandName("discord");
-    const eia = getAdapterByCommandName("eia");
-    const fdic = getAdapterByCommandName("fdic");
-    const eggs = getAdapterByCommandName("eggs");
-    const beef = getAdapterByCommandName("beef");
-    const freeAppStore = getAdapterByCommandName("freeappstore");
-    const hkPrecip = getAdapterByCommandName("hkprecip");
-    const kaitoMindshare = getAdapterByCommandName("kaitomindshare");
-    const kma = getAdapterByCommandName("koreaprecip");
-    const mrBeastSubs = getAdapterByCommandName("mrbeastsubs");
-    const mrBeast = getAdapterByCommandName("mrbeastviews");
-    const nbs = getAdapterByCommandName("nbs");
-    const noaaNyc = getAdapterByCommandName("nycprecip");
-    const noaaSeattle = getAdapterByCommandName("seattleprecip");
-    const nytFront = getAdapterByCommandName("nytfront");
-    const ornnB200 = getAdapterByCommandName("ornnb200");
-    const ornnH200 = getAdapterByCommandName("ornnh200");
-    const paidAppStore = getAdapterByCommandName("paidappstore");
-    const umaAlert = getAdapterByCommandName("umaclarifications");
-    const umaDispute = getAdapterByCommandName("umadispute");
-    const umaProposal = getAdapterByCommandName("umaproposals");
-    const ngPrice = getAdapterByCommandName("ngprice");
-    const wti = getAdapterByCommandName("wti");
-    const xagusd = getAdapterByCommandName("xagusd");
-    const xauusd = getAdapterByCommandName("xauusd");
-    const spotifyGlobal = getAdapterByCommandName("spotifyglobal");
-    const spotifyUsa = getAdapterByCommandName("spotifyusa");
-    const strategyBtc = getAdapterByCommandName("strategybtc");
-    const tesla = getAdapterByCommandName("tesla");
-    const trumpTruth = getAdapterByCommandName("trumptruth");
-    const tsa = getAdapterByCommandName("tsa");
-    const earthquake = getAdapterByCommandName("earthquake");
-    const fullLid = getAdapterByCommandName("fulllid");
+const expectedCommandIds = [
+  ["aaa", "aaa-regular-gas"],
+  ["allin", "all-in-podcast"],
+  ["songreleases", "apple-artist-song-releases"],
+  ["arenaai", "arena-ai-no-style-control"],
+  ["aws", "aws-disrupted-events"],
+  ["basedrevenue", "based-revenue"],
+  ["bea", "bea-current-releases"],
+  ["blscpi", "bls-cpi-releases"],
+  ["bonbast", "bonbast-usd-irr"],
+  ["fertility", "cdc-fertility-rate"],
+  ["measles", "cdc-measles"],
+  ["cloudflare", "cloudflare-critical-incidents"],
+  ["discord", "discord-critical-incidents"],
+  ["eia", "eia-crude-spr"],
+  ["fdic", "fdic-failed-banks"],
+  ["eggs", "fred-egg-price"],
+  ["beef", "fred-ground-beef"],
+  ["freeappstore", "free-app-store"],
+  ["hkprecip", "hk-precip"],
+  ["ismpmi", "ism-services-pmi"],
+  ["kaitomindshare", "kaito-polymarket-mindshare"],
+  ["kpopreleases", "apple-kpop-song-releases"],
+  ["koreaprecip", "kma-seoul-precip"],
+  ["mrbeastsubs", "mrbeast-subscribers"],
+  ["mrbeastviews", "mrbeast-views"],
+  ["nbs", "nbs-press-release"],
+  ["tornadoes", "ncei-tornadoes"],
+  ["nycprecip", "noaa-nyc-precip"],
+  ["seattleprecip", "noaa-seattle-precip"],
+  ["nytfront", "nyt-front-page"],
+  ["ornnb200", "ornn-b200-index"],
+  ["ornnh200", "ornn-h200-index"],
+  ["paidappstore", "paid-app-store"],
+  ["umaclarifications", "polymarket-clarifications"],
+  ["umadispute", "polymarket-disputes"],
+  ["umaproposals", "polymarket-proposals"],
+  ["ngprice", "pyth-natural-gas-strikes"],
+  ["wti", "pyth-wti-strikes"],
+  ["xagusd", "pyth-xagusd-strikes"],
+  ["xauusd", "pyth-xauusd-strikes"],
+  ["spotifyglobal", "spotify-top-50-global"],
+  ["spotifyusa", "spotify-top-50-usa"],
+  ["strategybtc", "strategy-bitcoin-purchases"],
+  ["tesla", "tesla-deliveries"],
+  ["trumpschedule", "trump-schedule"],
+  ["trumptruth", "trump-truth"],
+  ["tsa", "tsa-passengers"],
+  ["earthquake", "usgs-earthquakes"],
+  ["aliennyc", "white-house-aliens-nyc"],
+  ["fulllid", "white-house-full-lid"]
+] as const;
 
-    expect(aaa.id).toBe("aaa-regular-gas");
-    expect(aaa.defaultChannelName).toBe("aaa-regular-gas");
-    expect(aaa.defaultPolymarketUrl).toBe("https://polymarket.com/event/will-gas-hit-by-end-of-may");
-    expect(aaa.alertRoleName).toBe("AAA Gas Alerts");
-    expect(aaa.alertRoleEmoji).toBe("\u26fd");
-    expect(allIn.id).toBe("all-in-podcast");
-    expect(allIn.defaultChannelName).toBe("allinpod");
-    expect(allIn.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-will-be-said-on-the-next-all-in-podcast-may-8");
-    expect(allIn.alertRoleName).toBe("All-In Podcast Alerts");
-    expect(allIn.alertRoleEmoji).toBe("\uD83C\uDFA7");
-    expect(arenaAi.id).toBe("arena-ai-no-style-control");
-    expect(arenaAi.defaultChannelName).toBe("arenaai");
-    expect(arenaAi.defaultPolymarketUrl).toBe("https://polymarket.com/event/best-ai-model-on-may-16-style-control-off");
-    expect(arenaAi.alertRoleName).toBe("Arena AI Alerts");
-    expect(arenaAi.alertRoleEmoji).toBe("\uD83E\uDD16");
-    expect(aws.id).toBe("aws-disrupted-events");
-    expect(aws.defaultChannelName).toBe("aws-disrupted");
-    expect(aws.defaultPolymarketUrl).toBe("https://polymarket.com/event/aws-service-disrupted-by-june-30");
-    expect(aws.alertRoleName).toBe("AWS Disrupted Alerts");
-    expect(aws.alertRoleEmoji).toBe("\u26A0");
-    expect(basedRevenue.id).toBe("based-revenue");
-    expect(basedRevenue.defaultChannelName).toBe("basedrevenue");
-    expect(basedRevenue.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-will-based-prediction-market-revenue-hit-before-2027");
-    expect(basedRevenue.alertRoleName).toBe("Based Revenue Alerts");
-    expect(basedRevenue.alertRoleEmoji).toBe("\uD83D\uDCB5");
-    expect(basedRevenue.getPollIntervalMinutes?.({} as never)).toBe(60);
-    expect(bea.id).toBe("bea-current-releases");
-    expect(bea.defaultChannelName).toBe("bea-releases");
-    expect(bea.defaultPolymarketUrl).toBeUndefined();
-    expect(bea.alertRoleName).toBe("BEA Release Alerts");
-    expect(bea.alertRoleEmoji).toBe("\uD83D\uDCF0");
-    expect(bea.getPollIntervalMinutes?.({} as never)).toBe(60);
-    expect(blsCpi.id).toBe("bls-cpi-releases");
-    expect(blsCpi.defaultChannelName).toBe("blscpi-releases");
-    expect(blsCpi.defaultPolymarketUrl).toBeUndefined();
-    expect(blsCpi.alertRoleName).toBe("BLS CPI Release Alerts");
-    expect(blsCpi.alertRoleEmoji).toBe("\uD83D\uDCC8");
-    expect(blsCpi.getPollIntervalMinutes?.({} as never)).toBe(60);
-    expect(bonbast.id).toBe("bonbast-usd-irr");
-    expect(bonbast.defaultChannelName).toBe("bonbast-usd-irr");
-    expect(bonbast.alertRoleName).toBe("Bonbast Alerts");
-    expect(fertility.id).toBe("cdc-fertility-rate");
-    expect(fertility.defaultChannelName).toBe("fertility");
-    expect(fertility.defaultPolymarketUrl).toBe("https://polymarket.com/event/us-fertility-rate-up-in-q1-2026");
-    expect(fertility.alertRoleName).toBe("CDC Fertility Alerts");
-    expect(fertility.alertRoleEmoji).toBe("\uD83D\uDC76");
-    expect(measles.id).toBe("cdc-measles");
-    expect(measles.defaultChannelName).toBe("measles");
-    expect(measles.defaultPolymarketUrl).toBe("https://polymarket.com/event/measles-cases-in-us-by-may-31");
-    expect(measles.alertRoleName).toBe("CDC Measles Alerts");
-    expect(measles.alertRoleEmoji).toBe("\uD83E\uDDA0");
-    expect(cloudflare.id).toBe("cloudflare-critical-incidents");
-    expect(cloudflare.defaultChannelName).toBe("cloudflare-critical");
-    expect(cloudflare.defaultPolymarketUrl).toBe("https://polymarket.com/event/another-critical-cloudflare-incident-by-995");
-    expect(cloudflare.alertRoleName).toBe("Cloudflare Critical Alerts");
-    expect(cloudflare.alertRoleEmoji).toBe("\uD83D\uDD34");
-    expect(discord.id).toBe("discord-critical-incidents");
-    expect(discord.defaultChannelName).toBe("discord-critical");
-    expect(discord.defaultPolymarketUrl).toBe("https://polymarket.com/event/critical-discord-incident-by-may-31");
-    expect(discord.alertRoleName).toBe("Discord Critical Alerts");
-    expect(discord.alertRoleEmoji).toBe("\uD83D\uDD34");
-    expect(eia.id).toBe("eia-crude-spr");
-    expect(eia.defaultChannelName).toBe("eia-crude-spr");
-    expect(eia.defaultPolymarketUrl).toBe("https://polymarket.com/event/will-us-crude-oil-reserves-fall-to-by-june-5");
-    expect(eia.alertRoleName).toBe("EIA Crude SPR Alerts");
-    expect(eia.alertRoleEmoji).toBe("\u26FD");
-    expect(fdic.id).toBe("fdic-failed-banks");
-    expect(fdic.defaultChannelName).toBe("fdic-failed-banks");
-    expect(fdic.defaultPolymarketUrl).toBe("https://polymarket.com/event/us-bank-failure-by-may-31-911");
-    expect(fdic.alertRoleName).toBe("FDIC Failed Bank Alerts");
-    expect(fdic.alertRoleEmoji).toBe("\uD83C\uDFE6");
-    expect(eggs.id).toBe("fred-egg-price");
-    expect(eggs.defaultChannelName).toBe("eggs");
-    expect(eggs.defaultPolymarketUrl).toBe("https://polymarket.com/event/price-of-dozen-eggs-in-april-799");
-    expect(eggs.alertRoleName).toBe("FRED Egg Price Alerts");
-    expect(eggs.alertRoleEmoji).toBe("\uD83E\uDD5A");
-    expect(beef.id).toBe("fred-ground-beef");
-    expect(beef.defaultChannelName).toBe("beef");
-    expect(beef.defaultPolymarketUrl).toBe("https://polymarket.com/event/will-ground-beef-hit-in-2026");
-    expect(beef.alertRoleName).toBe("FRED Ground Beef Alerts");
-    expect(beef.alertRoleEmoji).toBe("\uD83E\uDD69");
-    expect(freeAppStore.id).toBe("free-app-store");
-    expect(freeAppStore.defaultChannelName).toBe("freeappstore");
-    expect(freeAppStore.defaultPolymarketUrl).toBe("https://polymarket.com/event/1-free-app-in-the-us-apple-app-store-on-may-8");
-    expect(freeAppStore.alertRoleName).toBe("Free App Store Alerts");
-    expect(freeAppStore.alertRoleEmoji).toBe("\uD83C\uDD93");
-    expect(freeAppStore.dailySnapshot).toMatchObject({
-      timeZone: "America/New_York",
-      hour: 12,
-      minute: 0,
-      windowMinutes: 5
-    });
-    expect(hkPrecip.id).toBe("hk-precip");
-    expect(hkPrecip.defaultChannelName).toBe("hkprecip");
-    expect(hkPrecip.defaultPolymarketUrl).toBe("https://polymarket.com/event/precipitation-in-hong-kong-in-may");
-    expect(hkPrecip.alertRoleName).toBe("HKO Hong Kong Precip Alerts");
-    expect(hkPrecip.alertRoleEmoji).toBe("\u2614");
-    expect(hkPrecip.supportsPeriod).toBe(true);
-    expect(kaitoMindshare.id).toBe("kaito-polymarket-mindshare");
-    expect(kaitoMindshare.defaultChannelName).toBe("kaitomindshare");
-    expect(kaitoMindshare.defaultPolymarketUrl).toBe(
-      "https://polymarket.com/event/how-high-will-polymarkets-mindshare-go-by-june-30"
-    );
-    expect(kaitoMindshare.alertRoleName).toBe("Kaito Mindshare Alerts");
-    expect(kaitoMindshare.alertRoleEmoji).toBe("\uD83E\uDDE0");
-    expect(kaitoMindshare.getPollIntervalMinutes?.({} as never)).toBe(60);
-    expect(kma.id).toBe("kma-seoul-precip");
-    expect(kma.defaultChannelName).toBe("koreaprecip");
-    expect(kma.legacyChannelNames).toEqual(["kma-seoul-precip", "precipitationkorea"]);
-    expect(kma.defaultPolymarketUrl).toBe("https://polymarket.com/event/precipitation-in-seoul-in-may");
-    expect(kma.alertRoleName).toBe("KMA Seoul Precip Alerts");
-    expect(kma.alertRoleEmoji).toBe("\u2614");
-    expect(kma.supportsPeriod).toBe(true);
-    expect(mrBeastSubs.id).toBe("mrbeast-subscribers");
-    expect(mrBeastSubs.defaultChannelName).toBe("mrbeastsubs");
-    expect(mrBeastSubs.defaultPolymarketUrl).toBe("https://polymarket.com/event/will-mrbeast-hit-million-subscribers-by-june-30");
-    expect(mrBeastSubs.alertRoleName).toBe("MrBeast Subs Alerts");
-    expect(mrBeastSubs.alertRoleEmoji).toBe("\uD83D\uDC65");
-    expect(mrBeast.id).toBe("mrbeast-views");
-    expect(mrBeast.defaultChannelName).toBe("mrbeastviews");
-    expect(mrBeast.defaultPolymarketUrl).toBe("https://polymarket.com/event/will-mrbeast-hit-billion-views-by-june-30");
-    expect(mrBeast.alertRoleName).toBe("MrBeast Views Alerts");
-    expect(mrBeast.alertRoleEmoji).toBe("\uD83D\uDC40");
-    expect(nbs.id).toBe("nbs-press-release");
-    expect(nbs.defaultChannelName).toBe("nbs-press");
-    expect(nbs.defaultPolymarketUrl).toBe("https://polymarket.com/event/china-gdp-growth-yy-in-q2-2026");
-    expect(nbs.alertRoleName).toBe("NBS Press Release Alerts");
-    expect(nbs.alertRoleEmoji).toBe("\uD83C\uDDE8\uD83C\uDDF3");
-    expect(nbs.getPollIntervalMinutes?.({} as never)).toBe(60);
-    expect(noaaNyc.id).toBe("noaa-nyc-precip");
-    expect(noaaNyc.defaultChannelName).toBe("nycprecip");
-    expect(noaaNyc.legacyChannelNames).toEqual(["precipitationnyc"]);
-    expect(noaaNyc.defaultPolymarketUrl).toBe("https://polymarket.com/event/precipitation-in-nyc-in-may");
-    expect(noaaNyc.alertRoleName).toBe("NOAA NYC Precip Alerts");
-    expect(noaaNyc.alertRoleEmoji).toBe("\u2614");
-    expect(noaaNyc.supportsPeriod).toBe(true);
-    expect(noaaSeattle.id).toBe("noaa-seattle-precip");
-    expect(noaaSeattle.defaultChannelName).toBe("seattleprecip");
-    expect(noaaSeattle.legacyChannelNames).toEqual(["precipitationseattle"]);
-    expect(noaaSeattle.defaultPolymarketUrl).toBe("https://polymarket.com/event/precipitation-in-seattle-in-may");
-    expect(noaaSeattle.alertRoleName).toBe("NOAA Seattle Precip Alerts");
-    expect(noaaSeattle.alertRoleEmoji).toBe("\u2614");
-    expect(noaaSeattle.supportsPeriod).toBe(true);
-    expect(nytFront.id).toBe("nyt-front-page");
-    expect(nytFront.defaultChannelName).toBe("nytfront");
-    expect(nytFront.defaultPolymarketUrl).toBe(
-      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24"
-    );
-    expect(nytFront.alertRoleName).toBe("NYT Front Page Alerts");
-    expect(nytFront.alertRoleEmoji).toBe("\uD83D\uDCF0");
-    expect(nytFront.supportsStrikes).toBe(true);
-    expect(ornnB200.id).toBe("ornn-b200-index");
-    expect(ornnB200.defaultChannelName).toBe("ornnb200");
-    expect(ornnB200.defaultPolymarketUrl).toBe("https://polymarket.com/event/gpu-rental-prices-b200-hit-by-may-31");
-    expect(ornnB200.alertRoleName).toBe("ORNN B200 Alerts");
-    expect(ornnB200.alertRoleEmoji).toBe("\uD83D\uDDA5\uFE0F");
-    expect(ornnH200.id).toBe("ornn-h200-index");
-    expect(ornnH200.defaultChannelName).toBe("ornnh200");
-    expect(ornnH200.defaultPolymarketUrl).toBe("https://polymarket.com/event/gpu-rental-prices-h200-hit-by-may-31");
-    expect(ornnH200.alertRoleName).toBe("ORNN H200 Alerts");
-    expect(ornnH200.alertRoleEmoji).toBe("\uD83D\uDDA5\uFE0F");
-    expect(paidAppStore.id).toBe("paid-app-store");
-    expect(paidAppStore.defaultChannelName).toBe("paidappstore");
-    expect(paidAppStore.defaultPolymarketUrl).toBe(
-      "https://polymarket.com/event/1-paid-app-in-the-us-apple-app-store-on-may-8-666"
-    );
-    expect(paidAppStore.alertRoleName).toBe("Paid App Store Alerts");
-    expect(paidAppStore.alertRoleEmoji).toBe("\uD83D\uDCB0");
-    expect(paidAppStore.dailySnapshot).toMatchObject({
-      timeZone: "America/New_York",
-      hour: 12,
-      minute: 0,
-      windowMinutes: 5
-    });
-    expect(umaAlert.id).toBe("polymarket-clarifications");
-    expect(umaAlert.defaultChannelName).toBe("uma-clarifications");
-    expect(umaAlert.legacyChannelNames).toEqual(["pmclarify", "uma-alerts"]);
-    expect(umaAlert.alertRoleName).toBe("UMA Clarification Alerts");
-    expect(umaAlert.alertRoleEmoji).toBe("\uD83D\uDCE3");
-    expect(umaAlert.alertRoleChannelName).toBe("uma-alert-roles");
-    expect(umaAlert.getPollIntervalMinutes?.({} as never)).toBe(1);
-    expect(umaAlert.getErrorNoticeWindowMinutes?.({} as never)).toBe(60);
-    expect(umaAlert.updateAddressLabels).toBeUndefined();
-    expect(umaDispute.id).toBe("polymarket-disputes");
-    expect(umaDispute.defaultChannelName).toBe("uma-disputes");
-    expect(umaDispute.alertRoleName).toBe("UMA Dispute Alerts");
-    expect(umaDispute.alertRoleEmoji).toBe("\u2696\uFE0F");
-    expect(umaDispute.alertRoleChannelName).toBe("uma-alert-roles");
-    expect(umaDispute.getPollIntervalMinutes?.({} as never)).toBe(1);
-    expect(umaDispute.getErrorNoticeWindowMinutes?.({} as never)).toBe(60);
-    expect(umaDispute.updateAddressLabels).toBeDefined();
-    expect(umaProposal.id).toBe("polymarket-proposals");
-    expect(umaProposal.defaultChannelName).toBe("uma-proposals");
-    expect(umaProposal.alertRoleName).toBe("UMA Proposal Alerts");
-    expect(umaProposal.alertRoleEmoji).toBe("\uD83D\uDCE8");
-    expect(umaProposal.alertRoleChannelName).toBe("uma-alert-roles");
-    expect(umaProposal.getPollIntervalMinutes?.({} as never)).toBe(1);
-    expect(umaProposal.getErrorNoticeWindowMinutes?.({} as never)).toBe(60);
-    expect(umaProposal.searchTags).toBeDefined();
-    expect(umaProposal.updateTagFilters).toBeDefined();
-    expect(umaProposal.updateAddressLabels).toBeDefined();
-    expect(ngPrice.id).toBe("pyth-natural-gas-strikes");
-    expect(ngPrice.defaultChannelName).toBe("ngprice");
-    expect(ngPrice.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-price-will-ng-hit-in-may-2026");
-    expect(ngPrice.alertRoleName).toBe("NG Price Alerts");
-    expect(ngPrice.alertRoleEmoji).toBe("\u26FD");
-    expect(ngPrice.getPollIntervalMinutes?.({} as never)).toBe(1);
-    expect(ngPrice.getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
-    expect(wti.id).toBe("pyth-wti-strikes");
-    expect(wti.defaultChannelName).toBe("wti");
-    expect(wti.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-price-will-wti-hit-in-may-2026");
-    expect(wti.alertRoleName).toBe("WTI Price Alerts");
-    expect(wti.alertRoleEmoji).toBe("\uD83D\uDEE2\uFE0F");
-    expect(wti.getPollIntervalMinutes?.({} as never)).toBe(1);
-    expect(xagusd.id).toBe("pyth-xagusd-strikes");
-    expect(xagusd.defaultChannelName).toBe("xagusd");
-    expect(xagusd.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-price-will-xagusd-hit-in-may-2026");
-    expect(xagusd.alertRoleName).toBe("XAGUSD Price Alerts");
-    expect(xagusd.alertRoleEmoji).toBe("\uD83E\uDD48");
-    expect(xagusd.getPollIntervalMinutes?.({} as never)).toBe(1);
-    expect(xauusd.id).toBe("pyth-xauusd-strikes");
-    expect(xauusd.defaultChannelName).toBe("xauusd");
-    expect(xauusd.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-price-will-xauusd-hit-in-may-2026");
-    expect(xauusd.alertRoleName).toBe("XAUUSD Price Alerts");
-    expect(xauusd.alertRoleEmoji).toBe("\uD83E\uDD47");
-    expect(xauusd.getPollIntervalMinutes?.({} as never)).toBe(1);
-    expect(spotifyUsa.id).toBe("spotify-top-50-usa");
-    expect(spotifyUsa.defaultChannelName).toBe("spotifyusa");
-    expect(spotifyUsa.defaultPolymarketUrl).toBe(
-      "https://polymarket.com/event/which-artists-will-have-1-hits-in-the-us-in-may"
-    );
-    expect(spotifyUsa.alertRoleName).toBe("Spotify USA Top 50 Alerts");
-    expect(spotifyUsa.alertRoleEmoji).toBe("\uD83C\uDFB5");
-    expect(spotifyGlobal.id).toBe("spotify-top-50-global");
-    expect(spotifyGlobal.defaultChannelName).toBe("spotifyglobal");
-    expect(spotifyGlobal.defaultPolymarketUrl).toBe(
-      "https://polymarket.com/event/which-artists-will-have-1-hits-in-may"
-    );
-    expect(spotifyGlobal.alertRoleName).toBe("Spotify Global Top 50 Alerts");
-    expect(spotifyGlobal.alertRoleEmoji).toBe("\uD83C\uDFB5");
-    expect(strategyBtc.id).toBe("strategy-bitcoin-purchases");
-    expect(strategyBtc.defaultChannelName).toBe("strategybtc");
-    expect(strategyBtc.defaultPolymarketUrl).toBe(
-      "https://polymarket.com/event/will-microstrategy-announce-a-bitcoin-purchase-may-12-18"
-    );
-    expect(strategyBtc.alertRoleName).toBe("Strategy BTC Alerts");
-    expect(strategyBtc.alertRoleEmoji).toBe("\uD83E\uDE99");
-    expect(tesla.id).toBe("tesla-deliveries");
-    expect(tesla.defaultChannelName).toBe("tesla");
-    expect(tesla.defaultPolymarketUrl).toBe("https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026");
-    expect(tesla.alertRoleName).toBe("Tesla Deliveries Alerts");
-    expect(tesla.alertRoleEmoji).toBe("\uD83D\uDE97");
-    expect(trumpTruth.id).toBe("trump-truth");
-    expect(trumpTruth.defaultChannelName).toBe("trumptruth");
-    expect(trumpTruth.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-will-trump-post-this-week-may-4-may-10");
-    expect(trumpTruth.alertRoleName).toBe("Trump Truth Alerts");
-    expect(trumpTruth.alertRoleEmoji).toBe("\uD83D\uDCF0");
-    expect(trumpTruth.supportsStrikes).toBe(true);
-    expect(tsa.id).toBe("tsa-passengers");
-    expect(tsa.defaultChannelName).toBe("tsa");
-    expect(tsa.defaultPolymarketUrl).toBe("https://polymarket.com/event/number-of-tsa-passengers-may-4-may-10");
-    expect(tsa.alertRoleName).toBe("TSA Passenger Alerts");
-    expect(tsa.alertRoleEmoji).toBe("\u2708\uFE0F");
-    expect(earthquake.id).toBe("usgs-earthquakes");
-    expect(earthquake.defaultChannelName).toBe("earthquake");
-    expect(earthquake.defaultPolymarketUrl).toBe("https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-4-may-10");
-    expect(earthquake.alertRoleName).toBe("USGS Earthquake Alerts");
-    expect(earthquake.alertRoleEmoji).toBe("\uD83C\uDF0E");
-    expect(fullLid.id).toBe("white-house-full-lid");
-    expect(fullLid.defaultChannelName).toBe("fulllid");
-    expect(fullLid.defaultPolymarketUrl).toBe(
-      "https://polymarket.com/event/will-the-white-house-call-a-full-lid-by-630-pm-may-11-16"
-    );
-    expect(fullLid.alertRoleName).toBe("White House Lid Alerts");
-    expect(fullLid.alertRoleEmoji).toBe("\uD83E\uDDE2");
-    expect(bonbast.alertRoleEmoji).toBe("\uD83D\uDCB1");
+describe("adapter registry", () => {
+  it.each(expectedCommandIds)("resolves /%s to %s", (commandName, adapterId) => {
+    expect(getAdapterByCommandName(commandName).id).toBe(adapterId);
   });
 
-  it("does not reuse command names", () => {
-    const commandNames = listAdapters().map((adapter) => adapter.commandName);
-    const uniqueCommandNames = new Set(commandNames);
+  it("does not reuse command names or adapter ids", () => {
+    const adapters = listAdapters();
+    expect(adapters).toHaveLength(expectedCommandIds.length);
+    expect(new Set(adapters.map((adapter) => adapter.commandName)).size).toBe(adapters.length);
+    expect(new Set(adapters.map((adapter) => adapter.id)).size).toBe(adapters.length);
+  });
 
-    expect(uniqueCommandNames.size).toBe(commandNames.length);
+  it("defines required Discord metadata for every adapter", () => {
+    for (const adapter of listAdapters()) {
+      expect(adapter.id).toMatch(/^[a-z0-9-]+$/);
+      expect(adapter.commandName).toMatch(/^[a-z0-9]+$/);
+      expect(adapter.displayName).toBeTruthy();
+      expect(adapter.sourceUrl).toMatch(/^https?:\/\//);
+      expect(adapter.defaultChannelName).toMatch(/^[a-z0-9-]+$/);
+      expect(adapter.alertRoleName).toBeTruthy();
+      expect(adapter.alertRoleEmoji).toBeTruthy();
+    }
+  });
+
+  it("keeps known dynamic polling and special-command capabilities", () => {
+    expect(getAdapterByCommandName("freeappstore").dailySnapshot).toMatchObject({ timeZone: "America/New_York" });
+    expect(getAdapterByCommandName("paidappstore").dailySnapshot).toMatchObject({ timeZone: "America/New_York" });
+    expect(getAdapterByCommandName("hkprecip").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("koreaprecip").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("nycprecip").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("seattleprecip").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
+    expect(getAdapterByCommandName("nytfront").supportsStrikes).toBe(true);
+    expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();
+    expect(getAdapterByCommandName("umaproposals").updateTagFilters).toBeDefined();
+    expect(getAdapterByCommandName("umadispute").updateAddressLabels).toBeDefined();
+    expect(getAdapterByCommandName("eia").getPollIntervalMinutes?.({} as never, new Date("2026-05-12T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("trumpschedule").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T13:00:00.000Z"))).toBe(15);
+    expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
   });
 });

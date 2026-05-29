@@ -1,12 +1,35 @@
 import { fetchWithTimeout } from "../http.js";
-import type { AdapterValue, WebsiteAdapter } from "./types.js";
+import { parsePolymarketDateRangeWindow, resolveIntegrationPolymarketQueue, type PolymarketQueueMarket, upsertPolymarketQueueUrl } from "../polymarketQueue.js";
+import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://earthquake.usgs.gov/earthquakes/browse/significant.php#sigdef";
-const apiUrl =
-  "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=5.5&orderby=time&limit=1&starttime=2026-05-04T04:00:00Z&endtime=2026-05-11T03:59:59Z";
+const usgsApiUrl = "https://earthquake.usgs.gov/fdsnws/event/1/query";
+const defaultPolymarketUrl = "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-4-may-10";
+const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
+const earthquakeMarketSearchQuery = "5.5 earthquakes";
+const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
+const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
+const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 
 type UsgsEarthquakeFeatureCollection = {
   features?: UsgsEarthquakeFeature[];
+};
+
+type EarthquakeDiscoverySettings = {
+  polymarketMarkets?: PolymarketQueueMarket[];
+  lastEarthquakeDiscoveryAt?: string;
+};
+
+type GammaSearchResponse = {
+  events?: GammaSearchEvent[];
+};
+
+type GammaSearchEvent = {
+  slug?: unknown;
+  title?: unknown;
+  active?: unknown;
+  closed?: unknown;
+  tags?: Array<{ slug?: unknown }>;
 };
 
 export type UsgsEarthquakeFeature = {
@@ -23,10 +46,10 @@ export type UsgsEarthquakeFeature = {
   } | null;
 };
 
-export function extractLatestUsgsEarthquakeValue(data: UsgsEarthquakeFeatureCollection): string {
+export function extractLatestUsgsEarthquakeValue(data: UsgsEarthquakeFeatureCollection, polymarketUrl = defaultPolymarketUrl): string {
   const feature = data.features?.[0];
   if (!feature) {
-    return "No 5.5+ USGS earthquakes found in the May 4-May 10 market window.";
+    return `No 5.5+ USGS earthquakes found in the ${formatMarketWindow(polymarketUrl)} market window.`;
   }
 
   return formatUsgsEarthquake(feature);
@@ -62,8 +85,12 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
   defaultChannelName: "earthquake",
   alertRoleName: "USGS Earthquake Alerts",
   alertRoleEmoji: "\uD83C\uDF0E",
-  async fetchCurrentValue(): Promise<AdapterValue> {
-    const response = await fetchWithTimeout(apiUrl, {
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshEarthquakePolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
+    const polymarketUrl = integration?.polymarketUrl ?? defaultPolymarketUrl;
+    const response = await fetchWithTimeout(buildUsgsApiUrl(polymarketUrl), {
       headers: {
         "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
       }
@@ -74,7 +101,7 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
     }
 
     const data = (await response.json()) as UsgsEarthquakeFeatureCollection;
-    const value = extractLatestUsgsEarthquakeValue(data);
+    const value = extractLatestUsgsEarthquakeValue(data, polymarketUrl);
     return {
       value,
       rawValue: value,
@@ -83,3 +110,220 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export async function refreshEarthquakePolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  let resolved = resolveIntegrationPolymarketQueue(integration, now);
+  let settings = parseEarthquakeDiscoverySettings(resolved.settingsJson);
+  if (!shouldDiscoverEarthquakeMarkets(settings, now)) {
+    return resolved;
+  }
+
+  settings = { ...settings, lastEarthquakeDiscoveryAt: now.toISOString() };
+  resolved = {
+    settingsJson: JSON.stringify(settings),
+    activeUrl: resolved.activeUrl
+  };
+
+  try {
+    const candidates = await fetchEarthquakeMarketSearchCandidates(now);
+    const existingSlugs = new Set((settings.polymarketMarkets ?? []).map((market) => market.slug));
+    for (const candidate of candidates) {
+      if (existingSlugs.has(candidate.slug)) {
+        continue;
+      }
+
+      resolved = upsertPolymarketQueueUrl(
+        {
+          ...integration,
+          settingsJson: resolved.settingsJson,
+          polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
+        },
+        candidate.url,
+        now
+      );
+      existingSlugs.add(candidate.slug);
+    }
+
+    return resolved;
+  } catch {
+    return resolved;
+  }
+}
+
+export function buildUsgsApiUrl(polymarketUrl: string): string {
+  const window = parsePolymarketDateRangeWindow(polymarketUrl);
+  if (!window) {
+    throw new Error(`Could not parse earthquake market date range from Polymarket URL: ${polymarketUrl}`);
+  }
+
+  const url = new URL(usgsApiUrl);
+  url.searchParams.set("format", "geojson");
+  url.searchParams.set("minmagnitude", "5.5");
+  url.searchParams.set("orderby", "time");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("starttime", window.startAt);
+  url.searchParams.set("endtime", window.endAt);
+  return url.toString();
+}
+
+function shouldDiscoverEarthquakeMarkets(settings: EarthquakeDiscoverySettings, now: Date): boolean {
+  const markets = normalizeEarthquakeQueueMarkets(settings.polymarketMarkets);
+  if (hasQueuedFutureMarket(markets, now)) {
+    return false;
+  }
+
+  const activeMarket = getActiveMarket(markets, now);
+  const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
+  if (!isDiscoveryIntervalDue(settings.lastEarthquakeDiscoveryAt, now, intervalMs)) {
+    return false;
+  }
+
+  if (!activeMarket) {
+    return true;
+  }
+
+  return Date.parse(activeMarket.endAt ?? "") - now.getTime() <= marketDiscoveryLookaheadMs;
+}
+
+async function fetchEarthquakeMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const searchUrl = new URL(gammaSearchUrl);
+  searchUrl.searchParams.set("q", earthquakeMarketSearchQuery);
+  searchUrl.searchParams.set("events_status", "active");
+  searchUrl.searchParams.set("limit_per_type", "10");
+  searchUrl.searchParams.append("events_tag", "earthquakes");
+
+  const response = await fetchWithTimeout(searchUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GammaSearchResponse;
+  return (payload.events ?? [])
+    .map((event) => normalizeEarthquakeSearchEvent(event, now))
+    .filter((candidate) => candidate !== null);
+}
+
+function normalizeEarthquakeSearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
+  if (event.active === false || event.closed === true || !isNonEmptyString(event.slug) || !isNonEmptyString(event.title)) {
+    return null;
+  }
+
+  if (
+    !event.slug.startsWith("how-many-5pt5-or-above-earthquakes-") ||
+    !event.title.toLowerCase().startsWith("how many 5.5 or above earthquakes")
+  ) {
+    return null;
+  }
+
+  const tagSlugs = new Set((event.tags ?? []).map((tag) => tag.slug).filter(isNonEmptyString));
+  if (!tagSlugs.has("earthquakes")) {
+    return null;
+  }
+
+  const url = `https://polymarket.com/event/${event.slug}`;
+  return parsePolymarketDateRangeWindow(url, now) ? { slug: event.slug, url } : null;
+}
+
+function parseEarthquakeDiscoverySettings(settingsJson: string | null): EarthquakeDiscoverySettings {
+  if (!settingsJson) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(settingsJson) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    const settings = parsed as EarthquakeDiscoverySettings;
+    return {
+      ...settings,
+      polymarketMarkets: normalizeEarthquakeQueueMarkets(settings.polymarketMarkets),
+      lastEarthquakeDiscoveryAt:
+        typeof settings.lastEarthquakeDiscoveryAt === "string" ? settings.lastEarthquakeDiscoveryAt : undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
+function normalizeEarthquakeQueueMarkets(value: unknown): PolymarketQueueMarket[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const market = item as Partial<PolymarketQueueMarket>;
+    if (!market.url || !market.slug) {
+      return [];
+    }
+
+    return [
+      {
+        url: market.url,
+        slug: market.slug,
+        startAt: typeof market.startAt === "string" ? market.startAt : null,
+        endAt: typeof market.endAt === "string" ? market.endAt : null,
+        addedAt: typeof market.addedAt === "string" ? market.addedAt : new Date(0).toISOString()
+      }
+    ];
+  });
+}
+
+function hasQueuedFutureMarket(markets: PolymarketQueueMarket[], now: Date): boolean {
+  const nowMs = now.getTime();
+  return markets.some((market) => Boolean(market.startAt) && Date.parse(market.startAt!) > nowMs);
+}
+
+function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): PolymarketQueueMarket | null {
+  const nowMs = now.getTime();
+  return (
+    markets.find((market) => {
+      if (!market.startAt || !market.endAt) {
+        return false;
+      }
+
+      return nowMs >= Date.parse(market.startAt) && nowMs <= Date.parse(market.endAt);
+    }) ?? null
+  );
+}
+
+function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, intervalMs: number): boolean {
+  if (!lastDiscoveryAt) {
+    return true;
+  }
+
+  const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
+  return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
+}
+
+function formatMarketWindow(polymarketUrl: string): string {
+  const window = parsePolymarketDateRangeWindow(polymarketUrl);
+  if (!window) {
+    return "configured";
+  }
+
+  return `${formatEasternDate(new Date(window.startAt))} to ${formatEasternDate(new Date(window.endAt))}`;
+}
+
+function formatEasternDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}

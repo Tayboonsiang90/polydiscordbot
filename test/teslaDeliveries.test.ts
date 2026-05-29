@@ -1,9 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractLatestTeslaDeliveryReleaseFromFilings,
   extractTeslaDeliveryReleaseFromExhibit,
-  formatTeslaDeliveryReleaseValue
+  formatTeslaDeliveryReleaseValue,
+  parseTeslaDeliveryMarketWindow,
+  refreshTeslaPolymarketQueue
 } from "../src/integrations/teslaDeliveries.js";
+import type { Integration } from "../src/integrations/types.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("Tesla deliveries parsing", () => {
   it("extracts 8-K filing candidates from SEC recent filings", () => {
@@ -62,5 +70,111 @@ describe("Tesla deliveries parsing", () => {
 
     expect(value).toContain("Total Deliveries: 400,000");
     expect(value).toContain("Press URL: https://ir.tesla.com/press-release/tesla-second-quarter-2026-production-deliveries-and-deployments");
+  });
+
+  it("parses Tesla quarterly market windows", () => {
+    expect(
+      parseTeslaDeliveryMarketWindow(
+        "https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026",
+        undefined,
+        new Date("2026-05-29T00:00:00.000Z")
+      )
+    ).toEqual({
+      startAt: "2026-04-01T04:00:00.000Z",
+      endAt: "2026-07-01T03:59:00.000Z"
+    });
+  });
+
+  it("discovers and queues the next Tesla deliveries market near quarter end", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "how-many-tesla-deliveries-in-q1-2026",
+              title: "How many Tesla deliveries in Q1 2026?",
+              active: true,
+              closed: true
+            },
+            {
+              slug: "how-many-tesla-deliveries-in-q3-2026",
+              title: "How many Tesla deliveries in Q3 2026?",
+              active: true,
+              closed: false
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshTeslaPolymarketQueue(
+      {
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: "https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026",
+              slug: "how-many-tesla-deliveries-in-q2-2026",
+              startAt: "2026-04-01T04:00:00.000Z",
+              endAt: "2026-07-01T03:59:00.000Z",
+              addedAt: "2026-04-01T04:00:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026"
+      } as Integration,
+      new Date("2026-06-25T12:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      lastTeslaDiscoveryAt?: string;
+      polymarketMarkets?: Array<{ slug: string }>;
+    };
+
+    expect(settings.lastTeslaDiscoveryAt).toBe("2026-06-25T12:00:00.000Z");
+    expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual([
+      "how-many-tesla-deliveries-in-q2-2026",
+      "how-many-tesla-deliveries-in-q3-2026"
+    ]);
+    expect(result.activeUrl).toBe("https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026");
+  });
+
+  it("discovers and activates the current Tesla deliveries market after the stored quarter expires", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "how-many-tesla-deliveries-in-q3-2026",
+              title: "How many Tesla deliveries in Q3 2026?",
+              active: true,
+              closed: false
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshTeslaPolymarketQueue(
+      {
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: "https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026",
+              slug: "how-many-tesla-deliveries-in-q2-2026",
+              startAt: "2026-04-01T04:00:00.000Z",
+              endAt: "2026-07-01T03:59:00.000Z",
+              addedAt: "2026-04-01T04:00:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/how-many-tesla-deliveries-in-q2-2026"
+      } as Integration,
+      new Date("2026-07-01T12:00:00.000Z")
+    );
+
+    expect(result.activeUrl).toBe("https://polymarket.com/event/how-many-tesla-deliveries-in-q3-2026");
   });
 });

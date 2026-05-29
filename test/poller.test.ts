@@ -3,9 +3,11 @@ import {
   getDueSnapshotDate,
   getEffectivePollIntervalMinutes,
   getErrorNoticeDecision,
+  getLatestErrorMessageId,
   getPollIntervalReason,
   formatSchedulerNetworkError,
   hasValueChanged,
+  setLatestErrorMessageId,
   selectNewEventPosts
 } from "../src/poller.js";
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "../src/integrations/types.js";
@@ -101,6 +103,18 @@ describe("getErrorNoticeDecision", () => {
     expect(second.shouldSend).toBe(true);
     expect(second.message).toBe("HTTP 503");
     expect(second.nextState.signature).toBe("HTTP 503");
+  });
+});
+
+describe("latest error message settings", () => {
+  it("stores the latest Discord error message id without removing adapter settings", () => {
+    const settingsJson = setLatestErrorMessageId(JSON.stringify({ period: { year: 2026, month: 5 } }), "message-2");
+
+    expect(getLatestErrorMessageId(settingsJson)).toBe("message-2");
+    expect(JSON.parse(settingsJson)).toMatchObject({
+      period: { year: 2026, month: 5 },
+      latestErrorMessageId: "message-2"
+    });
   });
 });
 

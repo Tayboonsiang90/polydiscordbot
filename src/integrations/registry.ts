@@ -1,5 +1,6 @@
 import { aaaRegularGasAdapter } from "./aaaGas.js";
 import { allInPodcastAdapter } from "./allInPodcast.js";
+import { artistSongReleasesAdapter, kpopSongReleasesAdapter } from "./appleSongReleases.js";
 import { arenaAiLeaderboardAdapter } from "./arenaAiLeaderboard.js";
 import { awsDisruptedAdapter } from "./awsDisrupted.js";
 import { basedRevenueAdapter } from "./basedRevenue.js";
@@ -16,11 +17,13 @@ import { fredEggPriceAdapter } from "./fredEggPrice.js";
 import { fredGroundBeefAdapter } from "./fredGroundBeef.js";
 import { freeAppStoreAdapter } from "./freeAppStore.js";
 import { hkPrecipAdapter } from "./hkPrecip.js";
+import { ismServicesPmiAdapter } from "./ismServicesPmi.js";
 import { kaitoMindshareAdapter } from "./kaitoMindshare.js";
 import { kmaSeoulPrecipAdapter } from "./kmaSeoulPrecip.js";
 import { mrBeastSubscribersAdapter } from "./mrBeastSubscribers.js";
 import { mrBeastViewsAdapter } from "./mrBeastViews.js";
 import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
+import { nceiTornadoesAdapter } from "./nceiTornadoes.js";
 import { noaaNycPrecipAdapter } from "./noaaNycPrecip.js";
 import { noaaSeattlePrecipAdapter } from "./noaaSeattlePrecip.js";
 import { nytFrontPageAdapter } from "./nytFrontPage.js";
@@ -38,15 +41,18 @@ import { spotifyTop50GlobalAdapter } from "./spotifyTop50Global.js";
 import { spotifyTop50UsaAdapter } from "./spotifyTop50Usa.js";
 import { strategyBitcoinPurchasesAdapter } from "./strategyBitcoinPurchases.js";
 import { teslaDeliveriesAdapter } from "./teslaDeliveries.js";
+import { trumpScheduleAdapter } from "./trumpSchedule.js";
 import { trumpTruthAdapter } from "./trumpTruth.js";
 import { tsaPassengersAdapter } from "./tsaPassengers.js";
 import type { WebsiteAdapter } from "./types.js";
 import { usgsEarthquakesAdapter } from "./usgsEarthquakes.js";
+import { whiteHouseAliensNycAdapter } from "./whiteHouseAliensNyc.js";
 import { whiteHouseFullLidAdapter } from "./whiteHouseFullLid.js";
 
 const adapters = new Map<string, WebsiteAdapter>([
   [aaaRegularGasAdapter.id, aaaRegularGasAdapter],
   [allInPodcastAdapter.id, allInPodcastAdapter],
+  [artistSongReleasesAdapter.id, artistSongReleasesAdapter],
   [arenaAiLeaderboardAdapter.id, arenaAiLeaderboardAdapter],
   [awsDisruptedAdapter.id, awsDisruptedAdapter],
   [basedRevenueAdapter.id, basedRevenueAdapter],
@@ -63,11 +69,14 @@ const adapters = new Map<string, WebsiteAdapter>([
   [fredGroundBeefAdapter.id, fredGroundBeefAdapter],
   [freeAppStoreAdapter.id, freeAppStoreAdapter],
   [hkPrecipAdapter.id, hkPrecipAdapter],
+  [ismServicesPmiAdapter.id, ismServicesPmiAdapter],
   [kaitoMindshareAdapter.id, kaitoMindshareAdapter],
+  [kpopSongReleasesAdapter.id, kpopSongReleasesAdapter],
   [kmaSeoulPrecipAdapter.id, kmaSeoulPrecipAdapter],
   [mrBeastSubscribersAdapter.id, mrBeastSubscribersAdapter],
   [mrBeastViewsAdapter.id, mrBeastViewsAdapter],
   [nbsPressReleaseAdapter.id, nbsPressReleaseAdapter],
+  [nceiTornadoesAdapter.id, nceiTornadoesAdapter],
   [noaaNycPrecipAdapter.id, noaaNycPrecipAdapter],
   [noaaSeattlePrecipAdapter.id, noaaSeattlePrecipAdapter],
   [nytFrontPageAdapter.id, nytFrontPageAdapter],
@@ -85,9 +94,11 @@ const adapters = new Map<string, WebsiteAdapter>([
   [spotifyTop50UsaAdapter.id, spotifyTop50UsaAdapter],
   [strategyBitcoinPurchasesAdapter.id, strategyBitcoinPurchasesAdapter],
   [teslaDeliveriesAdapter.id, teslaDeliveriesAdapter],
+  [trumpScheduleAdapter.id, trumpScheduleAdapter],
   [trumpTruthAdapter.id, trumpTruthAdapter],
   [tsaPassengersAdapter.id, tsaPassengersAdapter],
   [usgsEarthquakesAdapter.id, usgsEarthquakesAdapter],
+  [whiteHouseAliensNycAdapter.id, whiteHouseAliensNycAdapter],
   [whiteHouseFullLidAdapter.id, whiteHouseFullLidAdapter]
 ]);
 
