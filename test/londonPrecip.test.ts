@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildLondonPrecipitationAlphaValue,
   extractHeathrowClimateRows,
+  extractInfoclimatLondonMonthlyPrecipitation,
+  extractLondonPrecipitationOfficialValue,
   extractLondonPrecipitationValue,
   getLondonPrecipSettings,
   isValidLondonPrecipPeriod,
@@ -13,6 +16,14 @@ Heathrow (London Airport)
    yyyy  mm   tmax    tmin      af    rain     sun
    2026   4   17.8     6.8       0     4.8   223.1#  Provisional
    2026   5   19.4    10.1       0    42.6   180.0#  Provisional
+`;
+
+const infoclimatHtml = `
+  <table>
+    <tr><th></th><th>janv.2026</th><th>fev.2026</th><th>mars2026</th><th>avr.2026</th><th>mai2026</th></tr>
+    <tr><td>CumulPrécips</td><td>104,6</td><td>44,4</td><td>1,0</td><td>0,0</td><td>12,4</td></tr>
+    <tr><td>Mise àjour</td><td>2026-02-02 09:21:01</td><td>2026-03-02 09:20:39</td><td>2026-04-02 08:21:01</td><td>2026-05-02 08:21:07</td><td>2026-05-29 10:37:13</td></tr>
+  </table>
 `;
 
 const londonIntegration: Integration = {
@@ -48,23 +59,53 @@ describe("Met Office London precipitation adapter", () => {
     ]);
 
     expect(extractLondonPrecipitationValue(sampleText, { year: 2026, month: 5 })).toBe(
-      ["Metric: Met Office Heathrow precipitation", "Period: 2026-05", "Value: 42.6 mm", "Status: Provisional"].join("\n")
+      [
+        "Metric: Met Office Heathrow precipitation",
+        "Period: 2026-05",
+        "Current total: 42.6 mm",
+        "Data status: official Met Office station data",
+        "Official Met Office row: 42.6 mm (Provisional)",
+        "Alpha Infoclimat cumulative: not available"
+      ].join("\n")
     );
   });
 
   it("returns a stable not-published value before the monthly row appears", () => {
-    expect(extractLondonPrecipitationValue(sampleText, { year: 2026, month: 6 })).toContain("Value: not published yet");
-    expect(extractLondonPrecipitationValue(sampleText, { year: 2026, month: 6 })).toContain("Latest available: 2026-05 = 42.6 mm");
+    expect(extractLondonPrecipitationValue(sampleText, { year: 2026, month: 6 })).toContain("Current total: not published yet");
+    expect(extractLondonPrecipitationValue(sampleText, { year: 2026, month: 6 })).toContain(
+      "Latest official Met Office row: 2026-05 = 42.6 mm"
+    );
+  });
+
+  it("extracts and uses Infoclimat alpha cumulative precipitation", () => {
+    const official = extractLondonPrecipitationOfficialValue(
+      sampleText.replace("   2026   5   19.4    10.1       0    42.6   180.0#  Provisional", ""),
+      { year: 2026, month: 5 }
+    );
+    const alpha = extractInfoclimatLondonMonthlyPrecipitation(infoclimatHtml, { year: 2026, month: 5 }, "https://example.com");
+
+    expect(alpha).toEqual({
+      totalText: "12.4",
+      total: 12.4,
+      updatedAt: "2026-05-29 10:37:13",
+      sourceUrl: "https://example.com"
+    });
+    expect(buildLondonPrecipitationAlphaValue(official, alpha, { year: 2026, month: 5 })).toContain(
+      "Current total: 12.4 mm"
+    );
+    expect(buildLondonPrecipitationAlphaValue(official, alpha, { year: 2026, month: 5 })).toContain(
+      "Data status: alpha Infoclimat daily climatology"
+    );
   });
 
   it("alerts only when the displayed value changes", () => {
     expect(
       londonPrecipShouldAlertOnChange(
-        "Metric: Met Office Heathrow precipitation\nValue: 42.6 mm\nStatus: Provisional",
-        "Metric: Met Office Heathrow precipitation\nValue: 42.6 mm\nStatus: Final"
+        "Metric: Met Office Heathrow precipitation\nCurrent total: 42.6 mm\nStatus: Provisional",
+        "Metric: Met Office Heathrow precipitation\nCurrent total: 42.6 mm\nStatus: Final"
       )
     ).toBe(false);
-    expect(londonPrecipShouldAlertOnChange("Value: not published yet", "Value: 42.6 mm")).toBe(true);
+    expect(londonPrecipShouldAlertOnChange("Current total: not published yet", "Current total: 42.6 mm")).toBe(true);
   });
 
   it("reads stored year and month settings", () => {

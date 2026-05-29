@@ -60,7 +60,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `kaito-polymarket-mindshare` | `/kaitomindshare` | `#kaitomindshare` | `Kaito Mindshare Alerts` | `🧠` | Monitors finalized Kaito Info Markets Historical Data rows for Polymarket mindshare. |
 | `apple-kpop-song-releases` | `/kpopreleases` | `#kpopreleases` | `KPop Song Release Alerts` | `🎤` | Monitors Apple Music/iTunes for new 2026 songs by unresolved KPop groups parsed from the Polymarket market. |
 | `kma-seoul-precip` | `/koreaprecip` | `#koreaprecip` | `KMA Seoul Precip Alerts` | `☔` | Monitors KMA Seoul monthly precipitation for Polymarket resolution checks. |
-| `met-office-london-precip` | `/londonprecip` | `#londonprecip` | `Met Office London Precip Alerts` | `☔` | Monitors Met Office Heathrow station rain mm and auto-discovers monthly London precipitation markets. |
+| `met-office-london-precip` | `/londonprecip` | `#londonprecip` | `Met Office London Precip Alerts` | `☔` | Monitors Met Office Heathrow station rain mm, with Infoclimat daily cumulative alpha before the Met Office monthly row appears. |
 | `mrbeast-subscribers` | `/mrbeastsubs` | `#mrbeastsubs` | `MrBeast Subs Alerts` | `👥` | Tracks MrBeast YouTube channel subscribers, dailyized rate, and Polymarket target projections. |
 | `mrbeast-views` | `/mrbeastviews` | `#mrbeastviews` | `MrBeast Views Alerts` | `👀` | Tracks MrBeast YouTube channel total views, dailyized rate, and Polymarket target projections. |
 | `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
@@ -252,6 +252,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - NCEI tornadoes monitors monthly U.S. tornado counts from the NCEI Tornadoes Time Series JSON endpoint, treats preliminary counts as resolution-relevant, and only alerts when the target month first becomes published.
 - USGS earthquakes monitors the official USGS event API for the latest 5.5+ earthquake in the active Polymarket date window and auto-discovers upcoming weekly 5.5+ earthquake markets into the shared queue.
 - HKO Hong Kong precipitation uses Daily Extract as the official total, then adds the text-only Yesterday's Weather rainfall only when that report is newer than the latest Daily Extract day.
+- Met Office London precipitation uses Heathrow stationdata as the official monthly row and Infoclimat Heathrow climatology as daily cumulative alpha before the Met Office row appears.
 - White House Alien Arrests NYC reads the embedded Flourish table on `whitehouse.gov/aliens` and exact-matches the `New York, NY` row's `Total Arrests` counter.
 - White House Full Lid monitors Roll Call's Factba.se calendar and Forth's WH pool page for today's ET full lid; it polls every minute during 8:00 AM-8:30 PM ET and hourly off-hours.
 - Register new adapters in `src/integrations/registry.ts`.
