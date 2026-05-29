@@ -36,6 +36,7 @@ const expectedCommandIds = [
   ["nycprecip", "noaa-nyc-precip"],
   ["seattleprecip", "noaa-seattle-precip"],
   ["nytfront", "nyt-front-page"],
+  ["chatgptoutage", "openai-chatgpt-outages"],
   ["ornnb200", "ornn-b200-index"],
   ["ornnh200", "ornn-h200-index"],
   ["paidappstore", "paid-app-store"],
@@ -93,6 +94,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("seattleprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("claudedown").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("gistemp").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("chatgptoutage").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("hkprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("koreaprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("londonprecip").refreshSettings).toBeDefined();
