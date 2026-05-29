@@ -230,7 +230,7 @@ describe("adapter registry", () => {
     expect(umaAlert.alertRoleChannelName).toBe("uma-alert-roles");
     expect(umaAlert.getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(umaAlert.getErrorNoticeWindowMinutes?.({} as never)).toBe(60);
-    expect(umaAlert.updateAddressLabels).toBeDefined();
+    expect(umaAlert.updateAddressLabels).toBeUndefined();
     expect(umaDispute.id).toBe("polymarket-disputes");
     expect(umaDispute.defaultChannelName).toBe("uma-disputes");
     expect(umaDispute.alertRoleName).toBe("UMA Dispute Alerts");

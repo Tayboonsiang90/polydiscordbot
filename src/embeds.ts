@@ -394,7 +394,7 @@ function formatPrioritySummaryFields(
     ...(summary.proposer ? [{ name: "Proposer", value: formatAddressWithLabel(summary.proposer, addressLabels), inline: false }] : []),
     ...(summary.disputer ? [{ name: "Disputer", value: formatAddressWithLabel(summary.disputer, addressLabels), inline: false }] : []),
     ...(summary.clarification ? [{ name: "Clarification", value: summary.clarification, inline: false }] : []),
-    ...(summary.creator ? [{ name: "Creator", value: formatAddressWithLabel(summary.creator, addressLabels), inline: false }] : [])
+    ...(summary.creator ? [{ name: "Creator", value: summary.creator, inline: false }] : [])
   ].map((field) => ({ ...field, value: truncateEmbedValue(field.value) }));
 }
 

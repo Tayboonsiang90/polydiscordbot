@@ -351,11 +351,11 @@ describe("adapter commands", () => {
       name: "umaclarifications",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "check" }),
-        expect.objectContaining({ name: "addresses" }),
         expect.objectContaining({ name: "test" }),
         expect.objectContaining({ name: "polymarket" })
       ])
     });
+    expect(umaAlertCommand?.toJSON().options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "addresses" })]));
 
     const umaDisputeCommand = buildAdapterCommands().find((command) => command.name === "umadispute");
     expect(umaDisputeCommand?.toJSON()).toMatchObject({

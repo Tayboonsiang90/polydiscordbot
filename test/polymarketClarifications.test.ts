@@ -103,7 +103,7 @@ describe("Polymarket clarification parsing", () => {
       value: "**[Trump kiss by May 31?](https://polymarket.com/market/trump-kiss-by-may-31)**",
       inline: false
     });
-    expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Creator", value: `Polymarket Creator\n${creator.toLowerCase()}` })]));
+    expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Creator", value: creator })]));
     expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Links" })]));
     expect(post.postedAt.getTime()).toBe(Number.parseInt("6a0dbf9f", 16) * 1_000);
   });
