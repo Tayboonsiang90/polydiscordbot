@@ -4,7 +4,7 @@ import type { AdapterValue, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.cdc.gov/measles/data-research/index.html";
 const measlesCounterUrl = "https://www.cdc.gov/wcms/vizdata/measles/measles_hosp.json";
-const defaultPolymarketUrl = "https://polymarket.com/event/measles-cases-in-us-by-may-31";
+const defaultPolymarketUrl = "https://polymarket.com/event/measles-cases-in-us-by-june-30";
 
 type CdcMeaslesCounterJson = Record<string, { total_cases?: unknown }>;
 
