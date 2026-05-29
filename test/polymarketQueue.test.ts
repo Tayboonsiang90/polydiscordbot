@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  parsePolymarketMonthWindow,
   parsePolymarketDateRangeWindow,
   resolveIntegrationPolymarketQueue,
   upsertPolymarketQueueUrl
@@ -76,6 +77,24 @@ describe("Polymarket URL queue", () => {
       startAt: "2026-05-29T04:00:00.000Z",
       endAt: "2026-05-30T03:59:00.000Z"
     });
+  });
+
+  it("parses month-only market slugs", () => {
+    expect(
+      parsePolymarketDateRangeWindow(
+        "https://polymarket.com/event/precipitation-in-london-in-june",
+        new Date("2026-05-29T12:00:00.000Z")
+      )
+    ).toEqual({
+      startAt: "2026-06-01T04:00:00.000Z",
+      endAt: "2026-07-01T03:59:00.000Z"
+    });
+    expect(
+      parsePolymarketMonthWindow(
+        "https://polymarket.com/event/precipitation-in-london-in-april-522",
+        new Date("2026-05-29T12:00:00.000Z")
+      )
+    ).toMatchObject({ year: 2026, month: 4 });
   });
 
   it("keeps a future market queued without replacing the currently active market", () => {

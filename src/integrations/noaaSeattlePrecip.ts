@@ -1,11 +1,19 @@
 ﻿import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 
 const sourceUrl = "https://www.weather.gov/wrh/climate?wfo=sew";
 const apiUrl = "https://data.rcc-acis.org/StnData";
 const stationId = "SEWthr 9";
 const defaultYear = 2026;
 const defaultMonth = 5;
+const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
+  searchQuery: "precipitation in seattle",
+  slugPrefix: "precipitation-in-seattle-in-",
+  titlePrefix: "Precipitation in Seattle in",
+  lastDiscoveryAtKey: "lastNoaaSeattlePrecipDiscoveryAt",
+  requiredTagSlugs: ["precipitation"]
+};
 
 type NoaaSettings = {
   year: number;
@@ -64,6 +72,9 @@ export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\u2614",
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getNoaaSeattlePrecipSettings(integration);
     const response = await fetchWithTimeout(apiUrl, {

@@ -1,10 +1,18 @@
 ﻿import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 
 const sourceUrl = "https://data.kma.go.kr/climate/RankState/selectRankStatisticsDivisionList.do";
 const ajaxUrl = "https://data.kma.go.kr/climate/RankState/selectRankStatisticsDivisionAjax.do";
 const defaultYear = 2026;
 const defaultMonth = 5;
+const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
+  searchQuery: "precipitation in seoul",
+  slugPrefix: "precipitation-in-seoul-in-",
+  titlePrefix: "Precipitation in Seoul in",
+  lastDiscoveryAtKey: "lastKmaSeoulPrecipDiscoveryAt",
+  requiredTagSlugs: ["precipitation"]
+};
 
 type KmaSettings = {
   year: number;
@@ -73,6 +81,9 @@ export const kmaSeoulPrecipAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\u2614",
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getKmaSeoulPrecipSettings(integration);
     const response = await fetchWithTimeout(ajaxUrl, {

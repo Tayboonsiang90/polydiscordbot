@@ -19,6 +19,13 @@ export type PolymarketQueueResolution = {
   activeUrl: string | null;
 };
 
+export type PolymarketMonthWindow = {
+  year: number;
+  month: number;
+  startAt: string;
+  endAt: string;
+};
+
 export function upsertPolymarketQueueUrl(integration: Integration, url: string, now = new Date()): PolymarketQueueResolution {
   const settings = parseSettings(integration.settingsJson);
   const markets = normalizeMarkets(settings.polymarketMarkets);
@@ -83,6 +90,33 @@ export function parsePolymarketDateRangeWindow(url: string, now = new Date()): {
     if (endMonth && endDay) {
       return buildEasternWindow(year, startMonth, startDay, endMonth, endDay);
     }
+  }
+
+  const monthWindow = parsePolymarketMonthWindow(url, now);
+  return monthWindow ? { startAt: monthWindow.startAt, endAt: monthWindow.endAt } : null;
+}
+
+export function parsePolymarketMonthWindow(url: string, now = new Date()): PolymarketMonthWindow | null {
+  const slug = getPolymarketSlug(url);
+  if (!slug) {
+    return null;
+  }
+
+  const parts = slug.split("-").map((part) => part.toLowerCase());
+  for (let index = 1; index < parts.length; index += 1) {
+    if (parts[index - 1] !== "in") {
+      continue;
+    }
+
+    const month = monthNumber(parts[index]);
+    if (!month) {
+      continue;
+    }
+
+    const explicitYear = parts.slice(index + 1).map(parseYear).find((value): value is number => value !== null);
+    const year = explicitYear ?? inferMonthOnlyMarketYear(month, now);
+    const window = buildEasternWindow(year, month, 1, month, new Date(Date.UTC(year, month, 0)).getUTCDate());
+    return window ? { year, month, ...window } : null;
   }
 
   return null;
@@ -290,6 +324,20 @@ function getEasternYear(date: Date): number {
 function getEasternQuarter(date: Date): number {
   const month = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "numeric" }).format(date));
   return Math.floor((month - 1) / 3) + 1;
+}
+
+function inferMonthOnlyMarketYear(month: number, now: Date): number {
+  const currentYear = getEasternYear(now);
+  const currentMonth = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "numeric" }).format(now));
+  if (month === 12 && currentMonth === 1) {
+    return currentYear - 1;
+  }
+
+  if (month === 1 && currentMonth === 12) {
+    return currentYear + 1;
+  }
+
+  return currentYear;
 }
 
 function padNumber(value: number): string {

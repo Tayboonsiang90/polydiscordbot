@@ -1,5 +1,6 @@
 ﻿import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 
 const sourceUrl = "https://www.weather.gov.hk/en/cis/dailyExtract.htm";
 const dataBaseUrl = "https://www.weather.gov.hk/cis/dailyExtract";
@@ -8,6 +9,13 @@ const defaultYear = 2026;
 const defaultMonth = 5;
 const hkoFetchTimeoutMs = 30_000;
 const hkoFetchAttempts = 3;
+const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
+  searchQuery: "precipitation in hong kong",
+  slugPrefix: "precipitation-in-hong-kong-in-",
+  titlePrefix: "Precipitation in Hong Kong in",
+  lastDiscoveryAtKey: "lastHkPrecipDiscoveryAt",
+  requiredTagSlugs: ["precipitation"]
+};
 
 type HkPrecipSettings = {
   year: number;
@@ -150,6 +158,9 @@ export const hkPrecipAdapter: WebsiteAdapter = {
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
   shouldAlertOnChange: hkPrecipShouldAlertOnChange,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getHkPrecipSettings(integration);
     const [response, yesterdayReport] = await Promise.all([

@@ -42,6 +42,7 @@ import type {
 } from "./integrations/types.js";
 import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from "./marketEnd.js";
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
+import { mergeSettingsJson } from "./settingsJson.js";
 import {
   buildAlertMessagePayload,
   checkEventIntegration,
@@ -710,7 +711,7 @@ export async function handleAdapterCommand(
       return;
     }
 
-    const updated = database.setSettingsJson(integration.id, JSON.stringify({ year, month }));
+    const updated = database.setSettingsJson(integration.id, mergeSettingsJson(integration.settingsJson, { year, month }));
     await interaction.reply({ embeds: [buildPeriodUpdatedEmbed(updated, year, month)] });
     return;
   }

@@ -25,6 +25,7 @@ const expectedCommandIds = [
   ["kaitomindshare", "kaito-polymarket-mindshare"],
   ["kpopreleases", "apple-kpop-song-releases"],
   ["koreaprecip", "kma-seoul-precip"],
+  ["londonprecip", "met-office-london-precip"],
   ["mrbeastsubs", "mrbeast-subscribers"],
   ["mrbeastviews", "mrbeast-views"],
   ["nbs", "nbs-press-release"],
@@ -83,8 +84,14 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("paidappstore").dailySnapshot).toMatchObject({ timeZone: "America/New_York" });
     expect(getAdapterByCommandName("hkprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("koreaprecip").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("londonprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("nycprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("seattleprecip").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("hkprecip").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("koreaprecip").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("londonprecip").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("nycprecip").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("seattleprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("nytfront").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();
