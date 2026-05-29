@@ -36,6 +36,7 @@ const expectedCommandIds = [
   ["ornnb200", "ornn-b200-index"],
   ["ornnh200", "ornn-h200-index"],
   ["paidappstore", "paid-app-store"],
+  ["powerball", "powerball-jackpot"],
   ["umaclarifications", "polymarket-clarifications"],
   ["umadispute", "polymarket-disputes"],
   ["umaproposals", "polymarket-proposals"],
@@ -100,6 +101,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("eia").getPollIntervalMinutes?.({} as never, new Date("2026-05-12T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("trumpschedule").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T13:00:00.000Z"))).toBe(15);
+    expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
   });
 });

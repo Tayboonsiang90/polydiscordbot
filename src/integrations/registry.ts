@@ -34,6 +34,7 @@ import { paidAppStoreAdapter } from "./paidAppStore.js";
 import { polymarketClarificationsAdapter } from "./polymarketClarifications.js";
 import { polymarketDisputesAdapter } from "./polymarketDisputes.js";
 import { polymarketProposalsAdapter } from "./polymarketProposals.js";
+import { powerballJackpotAdapter } from "./powerballJackpot.js";
 import { pythNaturalGasAdapter } from "./pythNaturalGas.js";
 import { pythWtiAdapter } from "./pythWti.js";
 import { pythXagUsdAdapter } from "./pythXagUsd.js";
@@ -88,6 +89,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [polymarketClarificationsAdapter.id, polymarketClarificationsAdapter],
   [polymarketDisputesAdapter.id, polymarketDisputesAdapter],
   [polymarketProposalsAdapter.id, polymarketProposalsAdapter],
+  [powerballJackpotAdapter.id, powerballJackpotAdapter],
   [pythNaturalGasAdapter.id, pythNaturalGasAdapter],
   [pythWtiAdapter.id, pythWtiAdapter],
   [pythXagUsdAdapter.id, pythXagUsdAdapter],
