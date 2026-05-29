@@ -1,6 +1,6 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import { fetchWithTimeout } from "../http.js";
-import { updateAddressLabelsInSettingsJson } from "../addressLabels.js";
+import { enrichEventPostAddressProfiles, updateAddressLabelsInSettingsJson } from "../addressLabels.js";
 import {
   defaultPolygonRpcUrl,
   defaultPolygonRpcUrls,
@@ -236,7 +236,7 @@ export async function fetchPolymarketProposalUpdates(
     }
 
     matchedProposalCount += 1;
-    posts.push(normalizePolymarketProposalEvent(proposal, market, tagMatch));
+    posts.push(await enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch)));
   }
 
   posts.sort(compareProposalPostsDescending);
@@ -283,7 +283,7 @@ export async function buildPolymarketProposalPostFromLog(
 
   const market = await fetchClobMarketByQuestionId(proposal.questionId).catch(() => null);
   const tagMatch = findProposalTagMatch(market?.tags ?? [], tagFilters);
-  return tagMatch ? normalizePolymarketProposalEvent(proposal, market, tagMatch) : null;
+  return tagMatch ? enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch)) : null;
 }
 
 export function decodeProposePriceLog(log: PolygonLog): PolymarketProposalEvent | null {

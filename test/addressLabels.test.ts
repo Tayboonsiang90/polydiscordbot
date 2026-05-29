@@ -1,9 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  fetchPolymarketAddressProfileStatus,
   formatAddressWithLabel,
   getAddressLabelsFromSettingsJson,
+  testOnlyAddressLabelHelpers,
   updateAddressLabelsInSettingsJson
 } from "../src/addressLabels.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  testOnlyAddressLabelHelpers.resetProfileCache();
+});
 
 describe("address labels", () => {
   it("adds, updates, removes, and preserves other settings", () => {
@@ -53,5 +60,40 @@ describe("address labels", () => {
         })
       )
     ).toEqual([{ address: "0x2222222222222222222222222222222222222222", label: "Known Disputer" }]);
+  });
+
+  it("checks Polymarket Data API trades before adding a profile link", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const target = url.toString();
+        const parsed = new URL(target);
+        expect(parsed.origin + parsed.pathname).toBe("https://data-api.polymarket.com/trades");
+        expect(parsed.searchParams.get("user")).toBe("0x3333333333333333333333333333333333333333");
+        expect(parsed.searchParams.get("limit")).toBe("1");
+        expect(parsed.searchParams.get("takerOnly")).toBe("false");
+        return new Response(JSON.stringify([{ proxyWallet: "0x3333333333333333333333333333333333333333" }]), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      })
+    );
+
+    const status = await fetchPolymarketAddressProfileStatus("0x3333333333333333333333333333333333333333");
+
+    expect(status).toMatchObject({
+      address: "0x3333333333333333333333333333333333333333",
+      profileUrl: "https://polymarket.com/0x3333333333333333333333333333333333333333",
+      hasTrades: true
+    });
+    expect(
+      formatAddressWithLabel(
+        "0x3333333333333333333333333333333333333333",
+        [{ address: "0x3333333333333333333333333333333333333333", label: "Known Trader" }],
+        status
+      )
+    ).toBe(
+      "Known Trader ([Polymarket](https://polymarket.com/0x3333333333333333333333333333333333333333))\n0x3333333333333333333333333333333333333333"
+    );
   });
 });

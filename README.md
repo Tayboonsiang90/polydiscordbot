@@ -182,7 +182,7 @@ UMA Proposal and Dispute Alerts also support address labels:
 - `/umaproposals addresses action:remove address:0x0000000000000000000000000000000000000000`
 - `/umaproposals addresses action:clear`
 
-The same `addresses` subcommand is available on `/umadispute`. Adding, removing, or clearing labels syncs across the configured UMA proposal and dispute integrations so proposer and disputer fields can show names above the raw address.
+The same `addresses` subcommand is available on `/umadispute`. Adding, removing, or clearing labels syncs across the configured UMA proposal and dispute integrations so proposer and disputer fields can show names above the raw address. Alerts check Polymarket's public Data API trades endpoint for each proposer/disputer address; addresses with at least one trade get a Polymarket profile link, while addresses with no returned trades are marked as no trades found.
 
 App Store integrations have one extra command:
 

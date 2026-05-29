@@ -78,7 +78,9 @@ export type EventPostPrioritySummary = {
   marketTags?: string[];
   matchedTags?: string[];
   proposer?: string;
+  proposerProfile?: AddressProfileStatus;
   disputer?: string;
+  disputerProfile?: AddressProfileStatus;
   creator?: string;
   clarification?: string;
 };
@@ -148,6 +150,15 @@ export type AddressLabelAction = "add" | "remove" | "list" | "clear";
 export type AddressLabelEntry = {
   address: string;
   label: string;
+};
+
+export type AddressProfileStatus = {
+  address: string;
+  profileUrl: string;
+  checkedAt: string;
+  sourceUrl: string;
+  hasTrades?: boolean;
+  error?: string;
 };
 
 export type AddressLabelUpdateResult = {

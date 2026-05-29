@@ -391,8 +391,12 @@ function formatPrioritySummaryFields(
     ...(summary.marketTags?.length
       ? [{ name: "Market tags", value: formatMarketTags(summary.marketTags, summary.matchedTags ?? []), inline: false }]
       : []),
-    ...(summary.proposer ? [{ name: "Proposer", value: formatAddressWithLabel(summary.proposer, addressLabels), inline: false }] : []),
-    ...(summary.disputer ? [{ name: "Disputer", value: formatAddressWithLabel(summary.disputer, addressLabels), inline: false }] : []),
+    ...(summary.proposer
+      ? [{ name: "Proposer", value: formatAddressWithLabel(summary.proposer, addressLabels, summary.proposerProfile), inline: false }]
+      : []),
+    ...(summary.disputer
+      ? [{ name: "Disputer", value: formatAddressWithLabel(summary.disputer, addressLabels, summary.disputerProfile), inline: false }]
+      : []),
     ...(summary.clarification ? [{ name: "Clarification", value: summary.clarification, inline: false }] : []),
     ...(summary.creator ? [{ name: "Creator", value: summary.creator, inline: false }] : [])
   ].map((field) => ({ ...field, value: truncateEmbedValue(field.value) }));

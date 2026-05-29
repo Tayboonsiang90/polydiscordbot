@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
+import { testOnlyAddressLabelHelpers } from "../src/addressLabels.js";
 import { buildEventPostEmbed } from "../src/embeds.js";
 import {
   buildFastPolymarketDisputePostFromLog,
@@ -24,6 +25,7 @@ const ancillaryData = "q: title: Trump kiss by May 31?, description: Rules. mark
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  testOnlyAddressLabelHelpers.resetProfileCache();
 });
 
 describe("Polymarket dispute parsing", () => {
@@ -116,6 +118,19 @@ describe("fetchPolymarketDisputeUpdates", () => {
         });
       }
 
+      if (target.startsWith("https://data-api.polymarket.com/trades")) {
+        const url = new URL(target);
+        expect(url.searchParams.get("limit")).toBe("1");
+        expect(url.searchParams.get("takerOnly")).toBe("false");
+        const user = url.searchParams.get("user");
+        if (user === proposer) {
+          return jsonResponse([{ proxyWallet: proposer, side: "BUY" }]);
+        }
+        if (user === disputer) {
+          return jsonResponse([]);
+        }
+      }
+
       throw new Error(`Unexpected fetch: ${target}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -147,7 +162,9 @@ describe("fetchPolymarketDisputeUpdates", () => {
       proposedOutcome: "NO (0)",
       marketTags: ["Politics", "Trump"],
       proposer,
-      disputer
+      proposerProfile: expect.objectContaining({ address: proposer, hasTrades: true }),
+      disputer,
+      disputerProfile: expect.objectContaining({ address: disputer, hasTrades: false })
     });
     const embedFields = buildEventPostEmbed(
       buildIntegration(
@@ -176,8 +193,18 @@ describe("fetchPolymarketDisputeUpdates", () => {
       inline: false
     });
     expect(embedFields[1]).toEqual({ name: "Proposed outcome", value: "**NO (0)**", inline: false });
-    expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Proposer", value: `Known Proposer\n${proposer}` })]));
-    expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Disputer", value: `Known Disputer\n${disputer}` })]));
+    expect(embedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Proposer",
+          value: `Known Proposer ([Polymarket](https://polymarket.com/${proposer}))\n${proposer}`
+        }),
+        expect.objectContaining({
+          name: "Disputer",
+          value: `Known Disputer\n${disputer}\nPolymarket: no trades found`
+        })
+      ])
+    );
     expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Links" })]));
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,

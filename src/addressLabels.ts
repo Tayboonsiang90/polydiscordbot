@@ -1,6 +1,23 @@
-import type { AddressLabelAction, AddressLabelEntry, AddressLabelUpdateResult } from "./integrations/types.js";
+import type {
+  AddressLabelAction,
+  AddressLabelEntry,
+  AddressLabelUpdateResult,
+  AddressProfileStatus,
+  EventMonitorPost
+} from "./integrations/types.js";
 
 const addressPattern = /^0x[0-9a-fA-F]{40}$/;
+const polymarketTradesApiUrl = "https://data-api.polymarket.com/trades";
+const polymarketProfileBaseUrl = "https://polymarket.com";
+const profileCacheMs = 10 * 60_000;
+const profileLookupTimeoutMs = 2_500;
+
+type ProfileCacheEntry = {
+  expiresAtMs: number;
+  status: AddressProfileStatus;
+};
+
+const profileCache = new Map<string, ProfileCacheEntry>();
 
 export function getAddressLabelsFromSettingsJson(settingsJson: string | null): AddressLabelEntry[] {
   const settings = parseSettingsJson(settingsJson);
@@ -78,14 +95,96 @@ export function updateAddressLabelsInSettingsJson(
   throw new Error(`Unsupported address label action: ${action}`);
 }
 
-export function formatAddressWithLabel(address: string, labels: AddressLabelEntry[]): string {
+export async function enrichEventPostAddressProfiles(post: EventMonitorPost): Promise<EventMonitorPost> {
+  const summary = post.prioritySummary;
+  if (!summary) {
+    return post;
+  }
+
+  const [proposerProfile, disputerProfile] = await Promise.all([
+    summary.proposer ? fetchPolymarketAddressProfileStatus(summary.proposer) : Promise.resolve(undefined),
+    summary.disputer ? fetchPolymarketAddressProfileStatus(summary.disputer) : Promise.resolve(undefined)
+  ]);
+
+  return {
+    ...post,
+    prioritySummary: {
+      ...summary,
+      ...(proposerProfile ? { proposerProfile } : {}),
+      ...(disputerProfile ? { disputerProfile } : {})
+    }
+  };
+}
+
+export async function fetchPolymarketAddressProfileStatus(
+  address: string,
+  now = new Date()
+): Promise<AddressProfileStatus | undefined> {
+  const normalized = normalizeAddress(address);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const cached = profileCache.get(normalized);
+  if (cached && cached.expiresAtMs > now.getTime()) {
+    return cached.status;
+  }
+
+  const url = new URL(polymarketTradesApiUrl);
+  url.searchParams.set("user", normalized);
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("takerOnly", "false");
+
+  const baseStatus = {
+    address: normalized,
+    profileUrl: `${polymarketProfileBaseUrl}/${normalized}`,
+    checkedAt: now.toISOString(),
+    sourceUrl: url.toString()
+  };
+
+  let status: AddressProfileStatus;
+  try {
+    const response = await fetch(url.toString(), {
+      headers: { "user-agent": "PolymarketResolutionMonitorBot/0.1" },
+      signal: AbortSignal.timeout(profileLookupTimeoutMs)
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const payload = (await response.json()) as unknown;
+    status = { ...baseStatus, hasTrades: Array.isArray(payload) && payload.length > 0 };
+  } catch (error) {
+    status = { ...baseStatus, error: formatError(error) };
+  }
+
+  profileCache.set(normalized, { status, expiresAtMs: now.getTime() + profileCacheMs });
+  return status;
+}
+
+export function formatAddressWithLabel(
+  address: string,
+  labels: AddressLabelEntry[],
+  profile?: AddressProfileStatus
+): string {
   const normalized = normalizeAddress(address);
   if (!normalized) {
     return address;
   }
 
   const label = labels.find((entry) => entry.address === normalized)?.label;
-  return label ? `${label}\n${normalized}` : normalized;
+  const profileForAddress = profile?.address === normalized ? profile : undefined;
+  const profileSuffix = profileForAddress?.hasTrades ? ` ([Polymarket](${profileForAddress.profileUrl}))` : "";
+  const lines = [`${label ?? normalized}${profileSuffix}`];
+  if (label) {
+    lines.push(normalized);
+  }
+  if (profileForAddress?.hasTrades === false) {
+    lines.push("Polymarket: no trades found");
+  } else if (profileForAddress?.error) {
+    lines.push("Polymarket: profile check failed");
+  }
+  return lines.join("\n");
 }
 
 function getAddressLabelsFromSettings(settings: Record<string, unknown>): AddressLabelEntry[] {
@@ -156,3 +255,13 @@ function uniqueAddressLabels(labels: AddressLabelEntry[]): AddressLabelEntry[] {
 function compareAddressLabels(left: AddressLabelEntry, right: AddressLabelEntry): number {
   return left.label.localeCompare(right.label) || left.address.localeCompare(right.address);
 }
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export const testOnlyAddressLabelHelpers = {
+  resetProfileCache(): void {
+    profileCache.clear();
+  }
+};

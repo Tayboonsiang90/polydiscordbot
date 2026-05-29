@@ -1,6 +1,6 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import { fetchWithTimeout } from "../http.js";
-import { updateAddressLabelsInSettingsJson } from "../addressLabels.js";
+import { enrichEventPostAddressProfiles, updateAddressLabelsInSettingsJson } from "../addressLabels.js";
 import {
   defaultPolygonRpcUrl,
   defaultPolygonRpcUrls,
@@ -166,7 +166,7 @@ export async function fetchPolymarketDisputeUpdates(integration: Integration, no
       marketByQuestionId.set(dispute.questionId, market);
     }
 
-    posts.push(normalizePolymarketDisputeEvent(dispute, market));
+    posts.push(await enrichEventPostAddressProfiles(normalizePolymarketDisputeEvent(dispute, market)));
   }
 
   posts.sort(compareDisputePostsDescending);
@@ -201,7 +201,7 @@ export async function buildPolymarketDisputePostFromLog(log: PolygonLog): Promis
   }
 
   const market = await fetchClobMarketByQuestionId(dispute.questionId).catch(() => null);
-  return normalizePolymarketDisputeEvent(dispute, market);
+  return enrichEventPostAddressProfiles(normalizePolymarketDisputeEvent(dispute, market));
 }
 
 export function buildFastPolymarketDisputePostFromLog(log: PolygonLog): EventMonitorPost | null {
