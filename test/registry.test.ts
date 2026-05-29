@@ -14,6 +14,7 @@ const expectedCommandIds = [
   ["fertility", "cdc-fertility-rate"],
   ["measles", "cdc-measles"],
   ["claudecommits", "claude-code-commits"],
+  ["claudedown", "claude-downtime"],
   ["cloudflare", "cloudflare-critical-incidents"],
   ["discord", "discord-critical-incidents"],
   ["eia", "eia-crude-spr"],
@@ -89,11 +90,13 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("londonprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("nycprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("seattleprecip").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("claudedown").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("hkprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("koreaprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("londonprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("nycprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("seattleprecip").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("claudedown").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("nytfront").supportsStrikes).toBe(true);
@@ -105,6 +108,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("trumpschedule").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T13:00:00.000Z"))).toBe(15);
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
   });
 });
