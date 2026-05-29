@@ -230,6 +230,7 @@ describe("adapter registry", () => {
     expect(umaAlert.alertRoleChannelName).toBe("uma-alert-roles");
     expect(umaAlert.getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(umaAlert.getErrorNoticeWindowMinutes?.({} as never)).toBe(60);
+    expect(umaAlert.updateAddressLabels).toBeDefined();
     expect(umaDispute.id).toBe("polymarket-disputes");
     expect(umaDispute.defaultChannelName).toBe("uma-disputes");
     expect(umaDispute.alertRoleName).toBe("UMA Dispute Alerts");
@@ -237,6 +238,7 @@ describe("adapter registry", () => {
     expect(umaDispute.alertRoleChannelName).toBe("uma-alert-roles");
     expect(umaDispute.getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(umaDispute.getErrorNoticeWindowMinutes?.({} as never)).toBe(60);
+    expect(umaDispute.updateAddressLabels).toBeDefined();
     expect(umaProposal.id).toBe("polymarket-proposals");
     expect(umaProposal.defaultChannelName).toBe("uma-proposals");
     expect(umaProposal.alertRoleName).toBe("UMA Proposal Alerts");
@@ -246,6 +248,7 @@ describe("adapter registry", () => {
     expect(umaProposal.getErrorNoticeWindowMinutes?.({} as never)).toBe(60);
     expect(umaProposal.searchTags).toBeDefined();
     expect(umaProposal.updateTagFilters).toBeDefined();
+    expect(umaProposal.updateAddressLabels).toBeDefined();
     expect(ngPrice.id).toBe("pyth-natural-gas-strikes");
     expect(ngPrice.defaultChannelName).toBe("ngprice");
     expect(ngPrice.defaultPolymarketUrl).toBe("https://polymarket.com/event/what-price-will-ng-hit-in-may-2026");

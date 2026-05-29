@@ -1,5 +1,6 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import { fetchWithTimeout } from "../http.js";
+import { updateAddressLabelsInSettingsJson } from "../addressLabels.js";
 import {
   defaultPolygonRpcUrl,
   defaultPolygonRpcUrls,
@@ -15,6 +16,8 @@ import {
 } from "./polymarketDisputes.js";
 import type {
   AdapterValue,
+  AddressLabelAction,
+  AddressLabelUpdateResult,
   EventMonitorPost,
   EventMonitorResult,
   Integration,
@@ -166,6 +169,14 @@ export const polymarketProposalsAdapter: WebsiteAdapter = {
     blockedTagQuery?: string
   ): Promise<TagBlocklistUpdateResult> {
     return updatePolymarketProposalTagBlocklist(integration, subscriptionTagQuery, action, blockedTagQuery);
+  },
+  async updateAddressLabels(
+    integration: Integration,
+    action: AddressLabelAction,
+    addressQuery?: string,
+    labelQuery?: string
+  ): Promise<AddressLabelUpdateResult> {
+    return updateAddressLabelsInSettingsJson(integration.settingsJson, action, addressQuery, labelQuery);
   },
   getTagFilters(integration: Integration): TagFilterEntry[] {
     return getPolymarketProposalTagFilters(integration);

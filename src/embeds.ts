@@ -1,6 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
+import { formatAddressWithLabel, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
 import type { CheckResult, EventCheckResult, SnapshotResult } from "./poller.js";
 import type {
+  AddressLabelUpdateResult,
   EventMonitorPost,
   Integration,
   StrikeSearchResult,
@@ -205,6 +207,18 @@ export function buildTagBlocklistEmbed(integration: Integration, result: TagBloc
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 }
 
+export function buildAddressLabelsEmbed(integration: Integration, result: AddressLabelUpdateResult): EmbedBuilder {
+  return baseEmbed(integration, "Address labels")
+    .addFields(
+      { name: "Action", value: result.action, inline: true },
+      { name: "Changed", value: result.changed ? "yes" : "no", inline: true },
+      { name: "Result", value: result.message, inline: false },
+      ...(result.matchedLabel ? [{ name: "Address", value: formatAddressLabelEntry(result.matchedLabel), inline: false }] : []),
+      { name: "Current labels", value: formatAddressLabelEntries(result.addressLabels), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
 export function buildPolymarketUpdatedEmbed(integration: Integration): EmbedBuilder {
   return baseEmbed(integration, "Polymarket URL updated")
     .addFields(
@@ -274,7 +288,7 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
   const sourceLabel = post.sourceLabel ?? "Truth Social";
   const eventFields = [
     ...(hasStrike ? [{ name: "STRIKE HIT", value: formatMatchedStrikeTerms(post.matchedTerms), inline: false }] : []),
-    ...formatPrioritySummaryFields(post),
+    ...formatPrioritySummaryFields(integration, post),
     ...(post.summaryFields ?? []).map((field) => ({
       name: field.name,
       value: truncateEmbedValue(field.value),
@@ -344,11 +358,16 @@ export function buildEventPostMessagePayload(integration: Integration, post: Eve
   };
 }
 
-function formatPrioritySummaryFields(post: EventMonitorPost): Array<{ name: string; value: string; inline: boolean }> {
+function formatPrioritySummaryFields(
+  integration: Integration,
+  post: EventMonitorPost
+): Array<{ name: string; value: string; inline: boolean }> {
   const summary = post.prioritySummary;
   if (!summary) {
     return [];
   }
+
+  const addressLabels = getAddressLabelsFromSettingsJson(integration.settingsJson);
 
   return [
     ...(summary.question
@@ -372,10 +391,10 @@ function formatPrioritySummaryFields(post: EventMonitorPost): Array<{ name: stri
     ...(summary.marketTags?.length
       ? [{ name: "Market tags", value: formatMarketTags(summary.marketTags, summary.matchedTags ?? []), inline: false }]
       : []),
-    ...(summary.proposer ? [{ name: "Proposer", value: summary.proposer, inline: false }] : []),
-    ...(summary.disputer ? [{ name: "Disputer", value: summary.disputer, inline: false }] : []),
+    ...(summary.proposer ? [{ name: "Proposer", value: formatAddressWithLabel(summary.proposer, addressLabels), inline: false }] : []),
+    ...(summary.disputer ? [{ name: "Disputer", value: formatAddressWithLabel(summary.disputer, addressLabels), inline: false }] : []),
     ...(summary.clarification ? [{ name: "Clarification", value: summary.clarification, inline: false }] : []),
-    ...(summary.creator ? [{ name: "Creator", value: summary.creator, inline: false }] : [])
+    ...(summary.creator ? [{ name: "Creator", value: formatAddressWithLabel(summary.creator, addressLabels), inline: false }] : [])
   ].map((field) => ({ ...field, value: truncateEmbedValue(field.value) }));
 }
 
@@ -562,6 +581,14 @@ function formatTagFilterEntry(tag: TagFilterEntry): string {
       ? ` | excludes ${maybeTagWithExclusions.excludedTags.map((blockedTag) => blockedTag.label ?? blockedTag.slug).join(", ")}`
       : "";
   return `${id}${tag.label} | ${tag.slug}${channelName}${excludedTags}`;
+}
+
+function formatAddressLabelEntries(labels: Array<{ address: string; label: string }>): string {
+  return labels.length ? truncateEmbedValue(labels.map(formatAddressLabelEntry).join("\n")) : "none configured";
+}
+
+function formatAddressLabelEntry(label: { address: string; label: string }): string {
+  return `${label.label} | ${label.address}`;
 }
 
 function formatPriorityValue(label: string, url?: string): string {

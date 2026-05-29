@@ -149,7 +149,17 @@ describe("fetchPolymarketDisputeUpdates", () => {
       proposer,
       disputer
     });
-    const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
+    const embedFields = buildEventPostEmbed(
+      buildIntegration(
+        JSON.stringify({
+          addressLabels: [
+            { address: proposer, label: "Known Proposer" },
+            { address: disputer, label: "Known Disputer" }
+          ]
+        })
+      ),
+      result.posts[0]
+    )[0].data.fields ?? [];
     expect(embedFields.slice(0, 8).map((field) => field.name)).toEqual([
       "Question",
       "Proposed outcome",
@@ -166,6 +176,8 @@ describe("fetchPolymarketDisputeUpdates", () => {
       inline: false
     });
     expect(embedFields[1]).toEqual({ name: "Proposed outcome", value: "**NO (0)**", inline: false });
+    expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Proposer", value: `Known Proposer\n${proposer}` })]));
+    expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Disputer", value: `Known Disputer\n${disputer}` })]));
     expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Links" })]));
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
@@ -184,7 +196,7 @@ describe("fetchPolymarketDisputeUpdates", () => {
   });
 });
 
-function buildIntegration(): Integration {
+function buildIntegration(settingsJson: string | null = null): Integration {
   return {
     id: 1,
     guildId: "guild",
@@ -197,7 +209,7 @@ function buildIntegration(): Integration {
     roleMessageId: null,
     roleChannelId: null,
     roleEmoji: null,
-    settingsJson: null,
+    settingsJson,
     pollIntervalMinutes: 1,
     status: "active",
     lastValue: null,

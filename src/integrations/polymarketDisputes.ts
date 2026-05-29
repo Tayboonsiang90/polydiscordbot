@@ -1,5 +1,6 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import { fetchWithTimeout } from "../http.js";
+import { updateAddressLabelsInSettingsJson } from "../addressLabels.js";
 import {
   defaultPolygonRpcUrl,
   defaultPolygonRpcUrls,
@@ -8,7 +9,15 @@ import {
   polymarketBulletinBoardAddress,
   type PolygonLog
 } from "./polymarketClarifications.js";
-import type { AdapterValue, EventMonitorPost, EventMonitorResult, Integration, WebsiteAdapter } from "./types.js";
+import type {
+  AdapterValue,
+  AddressLabelAction,
+  AddressLabelUpdateResult,
+  EventMonitorPost,
+  EventMonitorResult,
+  Integration,
+  WebsiteAdapter
+} from "./types.js";
 
 export const optimisticOracleV1Address = "0xBb1A8db2D4350976a11cdfA60A1d43f97710Da49";
 export const optimisticOracleV2Address = "0xee3afe347d5c74317041e2618c49534daf887c24";
@@ -113,6 +122,14 @@ export const polymarketDisputesAdapter: WebsiteAdapter = {
   },
   async fetchEventUpdates(integration: Integration): Promise<EventMonitorResult> {
     return fetchPolymarketDisputeUpdates(integration);
+  },
+  async updateAddressLabels(
+    integration: Integration,
+    action: AddressLabelAction,
+    addressQuery?: string,
+    labelQuery?: string
+  ): Promise<AddressLabelUpdateResult> {
+    return updateAddressLabelsInSettingsJson(integration.settingsJson, action, addressQuery, labelQuery);
   }
 };
 

@@ -2,6 +2,7 @@
 import type { BotDatabase } from "./database.js";
 import type { Guild } from "discord.js";
 import {
+  buildAddressLabelsEmbed,
   buildClearEmbed,
   buildCheckEmbed,
   buildEventCheckEmbed,
@@ -29,7 +30,14 @@ import {
   type ProposalTagFilterEntry
 } from "./integrations/polymarketProposals.js";
 import { parseTrumpTruthSettings, upsertTrumpTruthPolymarketMarket } from "./integrations/trumpTruth.js";
-import type { Integration, TagFilterAction, TagFilterEntry, TagFilterUpdateResult, WebsiteAdapter } from "./integrations/types.js";
+import type {
+  AddressLabelAction,
+  Integration,
+  TagFilterAction,
+  TagFilterEntry,
+  TagFilterUpdateResult,
+  WebsiteAdapter
+} from "./integrations/types.js";
 import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from "./marketEnd.js";
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
 import {
@@ -227,6 +235,42 @@ export function buildAdapterCommands() {
       );
     }
 
+    if (adapter.updateAddressLabels) {
+      command.addSubcommand((subcommand) =>
+        subcommand
+          .setName("addresses")
+          .setDescription("Label known EVM addresses in UMA alerts")
+          .addStringOption((option) =>
+            option
+              .setName("action")
+              .setDescription("Address label action")
+              .setRequired(true)
+              .addChoices(
+                { name: "add", value: "add" },
+                { name: "remove", value: "remove" },
+                { name: "list", value: "list" },
+                { name: "clear", value: "clear" }
+              )
+          )
+          .addStringOption((option) =>
+            option
+              .setName("address")
+              .setDescription("0x EVM address to label or remove")
+              .setRequired(false)
+              .setMinLength(42)
+              .setMaxLength(42)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("name")
+              .setDescription("Name to show above this address")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(80)
+          )
+      );
+    }
+
     return command;
   });
 }
@@ -329,9 +373,9 @@ export async function handleAdapterCommand(
   }
 
   const subcommand = interaction.options.getSubcommand();
-  if (proposalChannelTag && subcommand !== "tagblocks") {
+  if (proposalChannelTag && subcommand !== "tagblocks" && subcommand !== "addresses") {
     await interaction.reply({
-      content: `Use this command in #${adapter.defaultChannelName}. This tag channel only supports /${adapter.commandName} tagblocks.`,
+      content: `Use this command in #${adapter.defaultChannelName}. This tag channel only supports /${adapter.commandName} tagblocks and addresses.`,
       flags: MessageFlags.Ephemeral
     });
     return;
@@ -472,6 +516,45 @@ export async function handleAdapterCommand(
         ? database.setSettingsJson(integration.id, result.settingsJson)
         : integration;
     await interaction.editReply({ embeds: [buildTagBlocklistEmbed(updated, result)] });
+    return;
+  }
+
+  if (subcommand === "addresses") {
+    if (!adapter.updateAddressLabels) {
+      await interaction.reply({ content: "This integration does not support address labels.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const action = interaction.options.getString("action", true) as AddressLabelAction;
+    const addressQuery = interaction.options.getString("address")?.trim();
+    const labelQuery = interaction.options.getString("name")?.trim();
+    if ((action === "add" || action === "remove") && !addressQuery) {
+      await interaction.reply({ content: "`add` and `remove` need an EVM address.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (action === "add" && !labelQuery) {
+      await interaction.reply({ content: "`add` needs a name.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply();
+    const result = await adapter.updateAddressLabels(integration, action, addressQuery, labelQuery);
+    const updated =
+      result.settingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, result.settingsJson)
+        : integration;
+    const syncedCount =
+      action === "list"
+        ? 1
+        : await syncUmaAddressLabels(database, interaction.guild.id, updated.id, action, addressQuery, labelQuery);
+    await interaction.editReply({
+      embeds: [
+        buildAddressLabelsEmbed(updated, {
+          ...result,
+          message: syncedCount > 1 ? `${result.message} Synced across ${syncedCount} UMA integrations.` : result.message
+        })
+      ]
+    });
     return;
   }
 
@@ -792,6 +875,35 @@ function findTextChannelByName(guild: Guild, channelName: string): TextChannel |
 function getIntegrationChannelParentId(guild: Guild, integration: Integration): string | undefined {
   const channel = guild.channels.cache.get(integration.channelId);
   return channel?.type === ChannelType.GuildText ? channel.parentId ?? undefined : undefined;
+}
+
+async function syncUmaAddressLabels(
+  database: BotDatabase,
+  guildId: string,
+  sourceIntegrationId: number,
+  action: AddressLabelAction,
+  addressQuery?: string,
+  labelQuery?: string
+): Promise<number> {
+  let syncedCount = 1;
+  for (const integration of database.listIntegrations()) {
+    if (integration.guildId !== guildId || integration.id === sourceIntegrationId) {
+      continue;
+    }
+
+    const adapter = getAdapter(integration.adapterId);
+    if (!adapter.updateAddressLabels) {
+      continue;
+    }
+
+    const result = await adapter.updateAddressLabels(integration, action, addressQuery, labelQuery);
+    if (result.settingsJson !== integration.settingsJson) {
+      database.setSettingsJson(integration.id, result.settingsJson);
+    }
+    syncedCount += 1;
+  }
+
+  return syncedCount;
 }
 
 async function buildIntegrationSummaryRows(database: BotDatabase, integrations: Integration[]) {

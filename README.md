@@ -175,6 +175,15 @@ UMA Proposal Alerts also supports:
 Proposal alerts are off until at least one Polymarket tag filter is configured. The bot watches UMA `ProposePrice` logs first, then enriches each proposal with Polymarket CLOB market metadata and only alerts when the market tags exactly match a configured tag label or slug. Adding a tag creates a dedicated channel named `#uma-proposals-<tag-slug>`, removing a tag deletes that tag channel, and matching alerts are sent to the tag-specific channel instead of the base `#uma-proposals` command channel.
 Run `/umaproposals tagblocks` inside a tag-specific proposal channel to exclude another tag only from that channel, for example excluding `mentions` from `#uma-proposals-politics`. From the base `#uma-proposals` channel, include `tag:<configured-tag>` to choose which tag channel gets the exclusion.
 
+UMA Clarification, Proposal, and Dispute Alerts also support address labels:
+
+- `/umaproposals addresses action:add address:0x0000000000000000000000000000000000000000 name:Example`
+- `/umaproposals addresses action:list`
+- `/umaproposals addresses action:remove address:0x0000000000000000000000000000000000000000`
+- `/umaproposals addresses action:clear`
+
+The same `addresses` subcommand is available on `/umaclarifications` and `/umadispute`. Adding, removing, or clearing labels syncs across the configured UMA alert integrations so proposer, disputer, and creator fields can show names above the raw address.
+
 App Store integrations have one extra command:
 
 - `/freeappstore snapshot`

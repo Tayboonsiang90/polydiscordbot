@@ -1,4 +1,13 @@
-import type { AdapterValue, EventMonitorPost, EventMonitorResult, Integration, WebsiteAdapter } from "./types.js";
+import type {
+  AdapterValue,
+  AddressLabelAction,
+  AddressLabelUpdateResult,
+  EventMonitorPost,
+  EventMonitorResult,
+  Integration,
+  WebsiteAdapter
+} from "./types.js";
+import { updateAddressLabelsInSettingsJson } from "../addressLabels.js";
 import { fetchWithTimeout } from "../http.js";
 
 export const polymarketBulletinBoardAddress = "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7";
@@ -125,6 +134,14 @@ export const polymarketClarificationsAdapter: WebsiteAdapter = {
   },
   async fetchEventUpdates(integration: Integration): Promise<EventMonitorResult> {
     return fetchPolymarketClarificationUpdates(integration);
+  },
+  async updateAddressLabels(
+    integration: Integration,
+    action: AddressLabelAction,
+    addressQuery?: string,
+    labelQuery?: string
+  ): Promise<AddressLabelUpdateResult> {
+    return updateAddressLabelsInSettingsJson(integration.settingsJson, action, addressQuery, labelQuery);
   }
 };
 

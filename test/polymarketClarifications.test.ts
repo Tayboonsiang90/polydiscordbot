@@ -86,7 +86,10 @@ describe("Polymarket clarification parsing", () => {
       creator,
       clarification: "We are aware of the dispute on this market."
     });
-    const embedFields = buildEventPostEmbed(buildIntegration(), post)[0].data.fields ?? [];
+    const embedFields = buildEventPostEmbed(
+      buildIntegration(JSON.stringify({ addressLabels: [{ address: creator, label: "Polymarket Creator" }] })),
+      post
+    )[0].data.fields ?? [];
     expect(embedFields.slice(0, 6).map((field) => field.name)).toEqual([
       "Question",
       "Posted at (SGT)",
@@ -100,6 +103,7 @@ describe("Polymarket clarification parsing", () => {
       value: "**[Trump kiss by May 31?](https://polymarket.com/market/trump-kiss-by-may-31)**",
       inline: false
     });
+    expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Creator", value: `Polymarket Creator\n${creator.toLowerCase()}` })]));
     expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Links" })]));
     expect(post.postedAt.getTime()).toBe(Number.parseInt("6a0dbf9f", 16) * 1_000);
   });
@@ -383,7 +387,7 @@ function buildUpdateLog(updateText: string): PolygonLog {
   } as PolygonLog & { address: string };
 }
 
-function buildIntegration(): Integration {
+function buildIntegration(settingsJson: string | null = null): Integration {
   return {
     id: 1,
     guildId: "guild",
@@ -396,7 +400,7 @@ function buildIntegration(): Integration {
     roleMessageId: null,
     roleChannelId: null,
     roleEmoji: null,
-    settingsJson: null,
+    settingsJson,
     pollIntervalMinutes: 1,
     status: "active",
     lastValue: null,

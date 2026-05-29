@@ -143,6 +143,22 @@ export type TagBlocklistUpdateResult = {
   settingsJson: string;
 };
 
+export type AddressLabelAction = "add" | "remove" | "list" | "clear";
+
+export type AddressLabelEntry = {
+  address: string;
+  label: string;
+};
+
+export type AddressLabelUpdateResult = {
+  action: AddressLabelAction;
+  changed: boolean;
+  message: string;
+  matchedLabel?: AddressLabelEntry;
+  addressLabels: AddressLabelEntry[];
+  settingsJson: string;
+};
+
 export type WebsiteAdapter = {
   id: string;
   commandName: string;
@@ -185,5 +201,11 @@ export type WebsiteAdapter = {
     action: TagFilterAction,
     blockedTagQuery?: string
   ): Promise<TagBlocklistUpdateResult>;
+  updateAddressLabels?(
+    integration: Integration,
+    action: AddressLabelAction,
+    addressQuery?: string,
+    labelQuery?: string
+  ): Promise<AddressLabelUpdateResult>;
   getTagFilters?(integration: Integration): TagFilterEntry[];
 };
