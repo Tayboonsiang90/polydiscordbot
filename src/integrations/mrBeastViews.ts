@@ -5,6 +5,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 const sourceUrl = "https://www.youtube.com/@MrBeast/about";
 const defaultPolymarketUrl = "https://polymarket.com/event/will-mrbeast-hit-billion-views-by-june-30";
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
+const minimumDailyRateWindowMs = 60 * 60_000;
 
 type GammaEvent = {
   markets?: GammaMarket[];
@@ -26,7 +27,7 @@ export type MrBeastViewTarget = {
 export type MrBeastViewProjection = {
   currentViews: number;
   previousViews: number | null;
-  previousCheckedAt: Date | null;
+  previousChangedAt: Date | null;
   dailyRate: number | null;
   deadline: Date | null;
   targets: MrBeastViewTarget[];
@@ -87,26 +88,32 @@ export function parseMrBeastMarketDeadline(polymarketUrl: string | null, now = n
 }
 
 export function parseMrBeastStoredViews(value: string | null): number | null {
-  const match = value?.match(/Total views:\s*([\d,]+)/i);
+  const match = value?.match(/Total views:\s*([\d,.\s\u00a0]+[KMB]?)/i);
   return parseViewCount(match?.[1]);
 }
 
 export function buildMrBeastViewValue(input: MrBeastViewProjection, observedAt = new Date()): string {
   const dailyRate = input.dailyRate;
   const openTargets = input.targets.filter((target) => !target.resolved);
-  const nextTarget = openTargets.find((target) => target.views > input.currentViews) ?? openTargets[0] ?? input.targets.at(-1) ?? null;
+  const nextTarget =
+    openTargets.find((target) => target.views > input.currentViews) ?? openTargets[0] ?? input.targets.at(-1) ?? null;
   const deadlineDays = input.deadline ? Math.max(0, (input.deadline.getTime() - observedAt.getTime()) / 86_400_000) : null;
 
   return [
     "Metric: MrBeast YouTube channel total views",
-    `Total views: ${formatInteger(input.currentViews)}`,
-    `Previous views: ${input.previousViews === null ? "not available" : formatInteger(input.previousViews)}`,
-    `Change since previous check: ${input.previousViews === null ? "not available" : formatSignedInteger(input.currentViews - input.previousViews)}`,
-    `Dailyized rate: ${dailyRate === null ? "not available" : `${formatSignedInteger(Math.round(dailyRate))}/day`}`,
+    `Total views: ${formatCompactCount(input.currentViews)}`,
+    `Change: ${
+      input.previousViews === null
+        ? "not available"
+        : `${formatSignedCompactCount(input.currentViews - input.previousViews)} since last stored total`
+    }`,
+    `Rate: ${
+      dailyRate === null ? "not enough history" : `${formatSignedCompactCount(Math.round(dailyRate))}/day since last counter change`
+    }`,
     `Market deadline: ${input.deadline ? formatEasternDateTime(input.deadline) : "not parsed"}`,
-    `Next open target: ${nextTarget ? formatTargetStatus(nextTarget, input.currentViews, dailyRate, observedAt) : "not available"}`,
-    `Views needed by deadline: ${formatViewsNeededByDeadline(nextTarget, input.currentViews, deadlineDays)}`,
-    `Market targets: ${formatTargetList(input.targets, input.currentViews)}`
+    `Next target: ${nextTarget ? formatTargetStatus(nextTarget, input.currentViews) : "not available"}`,
+    `Needed by deadline: ${formatViewsNeededByDeadline(nextTarget, input.currentViews, deadlineDays)}`,
+    `Targets: ${formatTargetList(input.targets, input.currentViews)}`
   ].join("\n");
 }
 
@@ -117,6 +124,7 @@ export const mrBeastViewsAdapter: WebsiteAdapter = {
   sourceUrl,
   defaultPolymarketUrl,
   defaultChannelName: "mrbeastviews",
+  legacyChannelNames: ["mrbeast", "mrbeast-views"],
   alertRoleName: "MrBeast Views Alerts",
   alertRoleEmoji: "\uD83D\uDC40",
   shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
@@ -141,14 +149,14 @@ export const mrBeastViewsAdapter: WebsiteAdapter = {
 
     const currentViews = extractMrBeastTotalViews(await channelResponse.text());
     const previousViews = parseMrBeastStoredViews(integration?.lastValue ?? null);
-    const previousCheckedAt = integration?.lastCheckedAt ? new Date(integration.lastCheckedAt) : null;
+    const previousChangedAt = integration?.lastChangedAt ? new Date(integration.lastChangedAt) : null;
     const observedAt = new Date();
-    const dailyRate = calculateDailyRate(currentViews, previousViews, previousCheckedAt, observedAt);
+    const dailyRate = calculateDailyRate(currentViews, previousViews, previousChangedAt, observedAt);
     const value = buildMrBeastViewValue(
       {
         currentViews,
         previousViews,
-        previousCheckedAt: previousCheckedAt && !Number.isNaN(previousCheckedAt.getTime()) ? previousCheckedAt : null,
+        previousChangedAt: previousChangedAt && !Number.isNaN(previousChangedAt.getTime()) ? previousChangedAt : null,
         dailyRate,
         deadline: parseMrBeastMarketDeadline(integration?.polymarketUrl ?? defaultPolymarketUrl, observedAt),
         targets
@@ -182,30 +190,38 @@ async function fetchMrBeastTargets(polymarketUrl: string | null): Promise<MrBeas
   return extractMrBeastTargetsFromGamma(events.flatMap((event) => event.markets ?? []));
 }
 
-function calculateDailyRate(currentViews: number, previousViews: number | null, previousCheckedAt: Date | null, observedAt: Date): number | null {
-  if (previousViews === null || !previousCheckedAt || Number.isNaN(previousCheckedAt.getTime())) {
+function calculateDailyRate(
+  currentViews: number,
+  previousViews: number | null,
+  previousChangedAt: Date | null,
+  observedAt: Date
+): number | null {
+  if (previousViews === null || !previousChangedAt || Number.isNaN(previousChangedAt.getTime())) {
     return null;
   }
 
-  const elapsedDays = (observedAt.getTime() - previousCheckedAt.getTime()) / 86_400_000;
-  return elapsedDays > 0 ? (currentViews - previousViews) / elapsedDays : null;
+  const elapsedMs = observedAt.getTime() - previousChangedAt.getTime();
+  if (elapsedMs < minimumDailyRateWindowMs) {
+    return null;
+  }
+
+  return ((currentViews - previousViews) / elapsedMs) * 86_400_000;
 }
 
-function formatTargetStatus(target: MrBeastViewTarget, currentViews: number, dailyRate: number | null, observedAt: Date): string {
+function formatTargetStatus(target: MrBeastViewTarget, currentViews: number): string {
   if (currentViews >= target.views || target.resolved) {
     return `${target.label} hit`;
   }
 
   const remaining = target.views - currentViews;
-  if (dailyRate === null || dailyRate <= 0) {
-    return `${target.label}, ${formatInteger(remaining)} views remaining`;
-  }
-
-  const projectedAt = new Date(observedAt.getTime() + (remaining / dailyRate) * 86_400_000);
-  return `${target.label}, projected ${formatEasternDate(projectedAt)} ET`;
+  return `${target.label} - ${formatCompactCount(remaining)} away`;
 }
 
-function formatViewsNeededByDeadline(target: MrBeastViewTarget | null, currentViews: number, deadlineDays: number | null): string {
+function formatViewsNeededByDeadline(
+  target: MrBeastViewTarget | null,
+  currentViews: number,
+  deadlineDays: number | null
+): string {
   if (!target || deadlineDays === null) {
     return "not available";
   }
@@ -215,7 +231,7 @@ function formatViewsNeededByDeadline(target: MrBeastViewTarget | null, currentVi
     return "0/day";
   }
 
-  return deadlineDays > 0 ? `${formatInteger(Math.ceil(remaining / deadlineDays))}/day` : "deadline passed";
+  return deadlineDays > 0 ? `${formatCompactCount(Math.ceil(remaining / deadlineDays))}/day` : "deadline passed";
 }
 
 function formatTargetList(targets: MrBeastViewTarget[], currentViews: number): string {
@@ -223,9 +239,11 @@ function formatTargetList(targets: MrBeastViewTarget[], currentViews: number): s
     return "not available";
   }
 
-  return targets
-    .map((target) => `${target.label} ${target.resolved || currentViews >= target.views ? "hit" : "open"}`)
-    .join(" | ");
+  const hitTargets = targets.filter((target) => target.resolved || currentViews >= target.views);
+  const openTargets = targets.filter((target) => !target.resolved && currentViews < target.views);
+  const openLabels = openTargets.slice(0, 4).map((target) => target.label).join(", ");
+  const moreOpen = openTargets.length > 4 ? ` +${openTargets.length - 4} more` : "";
+  return `${hitTargets.length} hit, ${openTargets.length} open${openTargets.length ? ` (${openLabels}${moreOpen})` : ""}`;
 }
 
 function isResolvedYesMarket(market: GammaMarket): boolean {
@@ -258,11 +276,14 @@ function parseJsonStringArray(value: string[] | string | undefined): string[] {
 
 function parseViewCount(value: string | undefined): number | null {
   const normalized = value?.replace(/[\s\u00a0,]/g, "").trim() ?? "";
-  if (!/^\d+$/.test(normalized)) {
+  const match = normalized.match(/^(\d+(?:\.\d+)?)([KMB])?$/i);
+  if (!match) {
     return null;
   }
 
-  return Number(normalized);
+  const suffix = match[2]?.toUpperCase();
+  const multiplier = suffix === "B" ? 1_000_000_000 : suffix === "M" ? 1_000_000 : suffix === "K" ? 1_000 : 1;
+  return Math.round(Number(match[1]) * multiplier);
 }
 
 function monthNumber(value: string): number | null {
@@ -327,6 +348,27 @@ function formatInteger(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 }
 
-function formatSignedInteger(value: number): string {
-  return `${value >= 0 ? "+" : "-"}${formatInteger(Math.abs(value))}`;
+function formatCompactCount(value: number): string {
+  const absoluteValue = Math.abs(value);
+  if (absoluteValue >= 1_000_000_000) {
+    return `${formatDecimal(value / 1_000_000_000, 3)}B`;
+  }
+
+  if (absoluteValue >= 1_000_000) {
+    return `${formatDecimal(value / 1_000_000, 1)}M`;
+  }
+
+  if (absoluteValue >= 1_000) {
+    return `${formatDecimal(value / 1_000, 1)}K`;
+  }
+
+  return formatInteger(value);
+}
+
+function formatSignedCompactCount(value: number): string {
+  return `${value >= 0 ? "+" : "-"}${formatCompactCount(Math.abs(value))}`;
+}
+
+function formatDecimal(value: number, maximumFractionDigits: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits }).format(value);
 }

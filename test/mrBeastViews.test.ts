@@ -49,14 +49,17 @@ describe("MrBeast YouTube views adapter", () => {
     expect(parseMrBeastStoredViews("Metric: MrBeast YouTube channel total views\nTotal views: 123,020,785,579")).toBe(
       123_020_785_579
     );
+    expect(parseMrBeastStoredViews("Metric: MrBeast YouTube channel total views\nTotal views: 123.021B")).toBe(
+      123_021_000_000
+    );
   });
 
-  it("formats rate and projection data", () => {
+  it("formats compact rate and target data", () => {
     const value = buildMrBeastViewValue(
       {
         currentViews: 123_500_000_000,
         previousViews: 123_000_000_000,
-        previousCheckedAt: new Date("2026-05-18T00:00:00.000Z"),
+        previousChangedAt: new Date("2026-05-18T00:00:00.000Z"),
         dailyRate: 500_000_000,
         deadline: new Date("2026-06-01T03:59:00.000Z"),
         targets: [
@@ -67,28 +70,29 @@ describe("MrBeast YouTube views adapter", () => {
       new Date("2026-05-19T00:00:00.000Z")
     );
 
-    expect(value).toContain("Total views: 123,500,000,000");
-    expect(value).toContain("Change since previous check: +500,000,000");
-    expect(value).toContain("Dailyized rate: +500,000,000/day");
-    expect(value).toContain("Next open target: 124B, projected 2026-05-19 ET");
-    expect(value).toContain("Market targets: 123B hit | 124B open");
+    expect(value).toContain("Total views: 123.5B");
+    expect(value).toContain("Change: +500M since last stored total");
+    expect(value).toContain("Rate: +500M/day since last counter change");
+    expect(value).toContain("Next target: 124B - 500M away");
+    expect(value).toContain("Needed by deadline: 38M/day");
+    expect(value).toContain("Targets: 1 hit, 1 open (124B)");
   });
 
   it("alerts only when the actual view counter changes", () => {
     const previous = [
       "Metric: MrBeast YouTube channel total views",
-      "Total views: 123,020,785,579",
-      "Views needed by deadline: 22,523,772/day"
+      "Total views: 123.021B",
+      "Needed by deadline: 22.5M/day"
     ].join("\n");
     const currentProjectionOnly = [
       "Metric: MrBeast YouTube channel total views",
-      "Total views: 123,020,785,579",
-      "Views needed by deadline: 22,524,131/day"
+      "Total views: 123.021B",
+      "Needed by deadline: 22.6M/day"
     ].join("\n");
     const currentViewsChanged = [
       "Metric: MrBeast YouTube channel total views",
-      "Total views: 123,020,785,580",
-      "Views needed by deadline: 22,524,131/day"
+      "Total views: 123.022B",
+      "Needed by deadline: 22.6M/day"
     ].join("\n");
 
     expect(mrBeastViewsAdapter.shouldAlertOnChange?.(previous, currentProjectionOnly)).toBe(false);

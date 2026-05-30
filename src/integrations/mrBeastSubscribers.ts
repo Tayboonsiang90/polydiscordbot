@@ -5,6 +5,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 const sourceUrl = "https://www.youtube.com/@MrBeast/about";
 const defaultPolymarketUrl = "https://polymarket.com/event/will-mrbeast-hit-million-subscribers-by-june-30";
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
+const minimumDailyRateWindowMs = 60 * 60_000;
 
 type GammaEvent = {
   markets?: GammaMarket[];
@@ -26,7 +27,7 @@ export type MrBeastSubscriberTarget = {
 export type MrBeastSubscriberProjection = {
   currentSubscribers: number;
   previousSubscribers: number | null;
-  previousCheckedAt: Date | null;
+  previousChangedAt: Date | null;
   dailyRate: number | null;
   deadline: Date | null;
   targets: MrBeastSubscriberTarget[];
@@ -145,14 +146,14 @@ export const mrBeastSubscribersAdapter: WebsiteAdapter = {
 
     const currentSubscribers = extractMrBeastSubscribers(await channelResponse.text());
     const previousSubscribers = parseMrBeastStoredSubscribers(integration?.lastValue ?? null);
-    const previousCheckedAt = integration?.lastCheckedAt ? new Date(integration.lastCheckedAt) : null;
+    const previousChangedAt = integration?.lastChangedAt ? new Date(integration.lastChangedAt) : null;
     const observedAt = new Date();
-    const dailyRate = calculateDailyRate(currentSubscribers, previousSubscribers, previousCheckedAt, observedAt);
+    const dailyRate = calculateDailyRate(currentSubscribers, previousSubscribers, previousChangedAt, observedAt);
     const value = buildMrBeastSubscriberValue(
       {
         currentSubscribers,
         previousSubscribers,
-        previousCheckedAt: previousCheckedAt && !Number.isNaN(previousCheckedAt.getTime()) ? previousCheckedAt : null,
+        previousChangedAt: previousChangedAt && !Number.isNaN(previousChangedAt.getTime()) ? previousChangedAt : null,
         dailyRate,
         deadline: parseMrBeastSubscriberMarketDeadline(integration?.polymarketUrl ?? defaultPolymarketUrl, observedAt),
         targets
@@ -189,15 +190,19 @@ async function fetchMrBeastSubscriberTargets(polymarketUrl: string | null): Prom
 function calculateDailyRate(
   currentSubscribers: number,
   previousSubscribers: number | null,
-  previousCheckedAt: Date | null,
+  previousChangedAt: Date | null,
   observedAt: Date
 ): number | null {
-  if (previousSubscribers === null || !previousCheckedAt || Number.isNaN(previousCheckedAt.getTime())) {
+  if (previousSubscribers === null || !previousChangedAt || Number.isNaN(previousChangedAt.getTime())) {
     return null;
   }
 
-  const elapsedDays = (observedAt.getTime() - previousCheckedAt.getTime()) / 86_400_000;
-  return elapsedDays > 0 ? (currentSubscribers - previousSubscribers) / elapsedDays : null;
+  const elapsedMs = observedAt.getTime() - previousChangedAt.getTime();
+  if (elapsedMs < minimumDailyRateWindowMs) {
+    return null;
+  }
+
+  return ((currentSubscribers - previousSubscribers) / elapsedMs) * 86_400_000;
 }
 
 function formatProjectionTable(

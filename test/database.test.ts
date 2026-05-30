@@ -126,6 +126,34 @@ describe("BotDatabase alert role metadata", () => {
     database.close();
   });
 
+  it("can keep lastChangedAt stable when adapter-specific comparison suppresses a change", () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "mrbeastviews",
+      adapterId: "mrbeast-views",
+      displayName: "MrBeast YouTube Views",
+      sourceUrl: "https://www.youtube.com/@MrBeast/about",
+      pollIntervalMinutes: 5
+    });
+
+    const first = database.recordCheck(integration.id, "Total views: 123B", new Date("2026-05-08T15:55:00.000Z"));
+    const suppressed = database.recordCheck(
+      first.id,
+      "Total views: 123B\nNeeded by deadline: 10M/day",
+      new Date("2026-05-08T16:00:00.000Z"),
+      false
+    );
+    const changed = database.recordCheck(suppressed.id, "Total views: 124B", new Date("2026-05-08T17:00:00.000Z"), true);
+
+    expect(first.lastChangedAt).toBeNull();
+    expect(suppressed.lastCheckedAt).toBe("2026-05-08T16:00:00.000Z");
+    expect(suppressed.lastChangedAt).toBeNull();
+    expect(changed.lastChangedAt).toBe("2026-05-08T17:00:00.000Z");
+
+    database.close();
+  });
+
   it("deduplicates market end reminders by integration, URL, and reminder key", () => {
     const database = createTestDatabase();
     const integration = database.createIntegration({

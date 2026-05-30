@@ -56,7 +56,7 @@ describe("MrBeast YouTube subscribers adapter", () => {
       {
         currentSubscribers: 488_000_000,
         previousSubscribers: 487_000_000,
-        previousCheckedAt: new Date("2026-05-18T00:00:00.000Z"),
+        previousChangedAt: new Date("2026-05-18T00:00:00.000Z"),
         dailyRate: 1_000_000,
         deadline: new Date("2026-07-01T03:59:00.000Z"),
         targets: [

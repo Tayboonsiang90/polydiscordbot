@@ -170,9 +170,9 @@ export class BotDatabase {
     return this.getIntegrationById(id);
   }
 
-  recordCheck(id: number, value: string, checkedAt: Date): Integration {
+  recordCheck(id: number, value: string, checkedAt: Date, changedOverride?: boolean): Integration {
     const integration = this.getIntegrationById(id);
-    const changed = integration.lastValue !== null && integration.lastValue !== value;
+    const changed = changedOverride ?? (integration.lastValue !== null && integration.lastValue !== value);
     this.db
       .prepare(
         `UPDATE integrations

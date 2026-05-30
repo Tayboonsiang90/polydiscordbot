@@ -101,7 +101,7 @@ export async function checkIntegration(database: BotDatabase, integration: Integ
   const changed =
     hasValueChanged(previousValue, adapterValue.value) &&
     (adapter.shouldAlertOnChange ? adapter.shouldAlertOnChange(previousValue, adapterValue.value) : true);
-  const updatedIntegration = database.recordCheck(integration.id, adapterValue.value, adapterValue.observedAt);
+  const updatedIntegration = database.recordCheck(integration.id, adapterValue.value, adapterValue.observedAt, changed);
 
   return {
     integration: updatedIntegration,
