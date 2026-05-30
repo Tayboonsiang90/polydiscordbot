@@ -38,6 +38,7 @@ const expectedCommandIds = [
   ["nytfront", "nyt-front-page"],
   ["chatgptoutage", "openai-chatgpt-outages"],
   ["ornnb200", "ornn-b200-index"],
+  ["ornnh100", "ornn-h100-index"],
   ["ornnh200", "ornn-h200-index"],
   ["paidappstore", "paid-app-store"],
   ["powerball", "powerball-jackpot"],
@@ -115,6 +116,10 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("ornnh100").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("ornnh100").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("ornnh200").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("ornnb200").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("whitehousetweets").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("whitehousetweets").upsertPolymarketMarket).toBeDefined();

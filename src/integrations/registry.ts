@@ -33,6 +33,7 @@ import { noaaSeattlePrecipAdapter } from "./noaaSeattlePrecip.js";
 import { nytFrontPageAdapter } from "./nytFrontPage.js";
 import { openAiChatGptOutagesAdapter } from "./openAiChatGptOutages.js";
 import { ornnB200IndexAdapter } from "./ornnB200Index.js";
+import { ornnH100IndexAdapter } from "./ornnH100Index.js";
 import { ornnH200IndexAdapter } from "./ornnH200Index.js";
 import { paidAppStoreAdapter } from "./paidAppStore.js";
 import { polymarketClarificationsAdapter } from "./polymarketClarifications.js";
@@ -93,6 +94,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [nytFrontPageAdapter.id, nytFrontPageAdapter],
   [openAiChatGptOutagesAdapter.id, openAiChatGptOutagesAdapter],
   [ornnB200IndexAdapter.id, ornnB200IndexAdapter],
+  [ornnH100IndexAdapter.id, ornnH100IndexAdapter],
   [ornnH200IndexAdapter.id, ornnH200IndexAdapter],
   [paidAppStoreAdapter.id, paidAppStoreAdapter],
   [polymarketClarificationsAdapter.id, polymarketClarificationsAdapter],
