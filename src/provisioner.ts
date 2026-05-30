@@ -134,7 +134,7 @@ export class IntegrationProvisioner {
 
       for (let index = 0; index < groups.length; index += 1) {
         const group = groups[index];
-        const roleMessage = await findOrCreateGroupedRoleMessage(roleChannel, group, channelGroup.title);
+        const roleMessage = await findOrCreateGroupedRoleMessage(roleChannel, group, channelGroup.title, activeMessageIds);
         const reactedEntries = await syncGroupedRoleMessage(roleMessage, group, index, groups.length, channelGroup.title);
         activeMessageIds.add(roleMessage.id);
 
@@ -169,7 +169,7 @@ export class IntegrationProvisioner {
         commandName: adapter.commandName,
         roleId: role.id,
         roleName: role.name,
-        emoji: adapter.alertRoleEmoji,
+        emoji: integration.roleEmoji ?? adapter.alertRoleEmoji,
         roleChannelName: adapter.alertRoleChannelName ?? defaultRoleChannelName,
         roleGroupTitle: adapter.alertRoleGroupTitle ?? defaultRoleGroupTitle
       });
@@ -270,9 +270,18 @@ async function findOrCreateRoleChannel(guild: Guild, channelName: string, title:
   });
 }
 
-async function findOrCreateGroupedRoleMessage(channel: TextChannel, entries: AlertRoleEntry[], title: string): Promise<Message> {
+async function findOrCreateGroupedRoleMessage(
+  channel: TextChannel,
+  entries: AlertRoleEntry[],
+  title: string,
+  claimedMessageIds: Set<string>
+): Promise<Message> {
   const existingMessageIds = [...new Set(entries.map((entry) => entry.integration.roleMessageId).filter(Boolean))] as string[];
   for (const messageId of existingMessageIds) {
+    if (claimedMessageIds.has(messageId)) {
+      continue;
+    }
+
     const existing = await channel.messages.fetch(messageId).catch(() => null);
     if (existing && isGroupedRoleMessage(existing, title)) {
       return existing;
@@ -290,7 +299,7 @@ async function syncGroupedRoleMessage(
   title: string
 ): Promise<AlertRoleEntry[]> {
   const reactedEntries = entries.map((entry) => ({ ...entry }));
-  await removeObsoleteRoleReactions(roleMessage, reactedEntries);
+  await removeObsoleteBotRoleReactions(roleMessage, reactedEntries);
 
   const usedEmojis = new Set<string>();
   for (const entry of reactedEntries) {
@@ -302,10 +311,14 @@ async function syncGroupedRoleMessage(
   return reactedEntries;
 }
 
-async function removeObsoleteRoleReactions(roleMessage: Message, entries: AlertRoleEntry[]): Promise<void> {
+async function removeObsoleteBotRoleReactions(roleMessage: Message, entries: AlertRoleEntry[]): Promise<void> {
   const allowedEmojis = new Set(
-    entries.flatMap((entry) => [entry.adapter.alertRoleEmoji, entry.integration.roleEmoji].filter(isNonEmptyString))
+    entries.flatMap((entry) => [entry.emoji, entry.adapter.alertRoleEmoji, entry.integration.roleEmoji].filter(isNonEmptyString))
   );
+  const botUserId = roleMessage.client.user?.id;
+  if (!botUserId) {
+    return;
+  }
 
   for (const reaction of roleMessage.reactions.cache.values()) {
     const emoji = reaction.emoji.name ?? reaction.emoji.toString();
@@ -313,7 +326,7 @@ async function removeObsoleteRoleReactions(roleMessage: Message, entries: AlertR
       continue;
     }
 
-    await reaction.remove().catch(() => undefined);
+    await reaction.users.remove(botUserId).catch(() => undefined);
   }
 }
 
@@ -322,7 +335,8 @@ async function reactWithFallbackEmoji(
   entry: AlertRoleEntry,
   usedEmojis: Set<string>
 ): Promise<string> {
-  const candidates = [entry.adapter.alertRoleEmoji, ...fallbackAlertRoleEmojis].filter((emoji) => !usedEmojis.has(emoji));
+  const candidates = uniqueStrings([entry.integration.roleEmoji, entry.adapter.alertRoleEmoji, ...fallbackAlertRoleEmojis].filter(isNonEmptyString))
+    .filter((emoji) => !usedEmojis.has(emoji));
   for (const emoji of candidates) {
     if (hasReactionEmoji(roleMessage, emoji)) {
       return emoji;
@@ -348,12 +362,30 @@ function hasReactionEmoji(roleMessage: Message, emoji: string): boolean {
   return roleMessage.reactions.cache.some((reaction) => (reaction.emoji.name ?? reaction.emoji.toString()) === emoji);
 }
 
-function groupAlertRoleEntries(entries: AlertRoleEntry[]): AlertRoleEntry[][] {
-  const groups: AlertRoleEntry[][] = [];
+export function groupAlertRoleEntries(entries: AlertRoleEntry[]): AlertRoleEntry[][] {
+  const groupsByMessageId = new Map<string, AlertRoleEntry[]>();
+  const ungroupedEntries: AlertRoleEntry[] = [];
   for (const entry of entries) {
+    const roleMessageId = entry.integration.roleMessageId;
+    const roleEmoji = getRoleEntryGroupingEmoji(entry);
+    if (roleMessageId) {
+      const group = groupsByMessageId.get(roleMessageId) ?? [];
+      if (canAddEntryToRoleGroup(group, roleEmoji)) {
+        group.push(entry);
+        groupsByMessageId.set(roleMessageId, group);
+        continue;
+      }
+    }
+
+    ungroupedEntries.push(entry);
+  }
+
+  const groups = [...groupsByMessageId.values()];
+  for (const entry of ungroupedEntries) {
+    const roleEmoji = getRoleEntryGroupingEmoji(entry);
     const group = groups.find(
       (candidate) =>
-        candidate.length < maxReactionsPerRoleMessage && !candidate.some((existing) => existing.emoji === entry.emoji)
+        canAddEntryToRoleGroup(candidate, roleEmoji)
     );
     if (group) {
       group.push(entry);
@@ -364,6 +396,14 @@ function groupAlertRoleEntries(entries: AlertRoleEntry[]): AlertRoleEntry[][] {
   }
 
   return groups;
+}
+
+function canAddEntryToRoleGroup(group: AlertRoleEntry[], roleEmoji: string): boolean {
+  return group.length < maxReactionsPerRoleMessage && !group.some((existing) => getRoleEntryGroupingEmoji(existing) === roleEmoji);
+}
+
+function getRoleEntryGroupingEmoji(entry: AlertRoleEntry): string {
+  return entry.integration.roleEmoji ?? entry.emoji ?? entry.adapter.alertRoleEmoji;
 }
 
 function groupEntriesByRoleChannel(entries: AlertRoleEntry[]): Array<{ channelName: string; title: string; entries: AlertRoleEntry[] }> {
@@ -405,10 +445,18 @@ async function cleanupStaleRoleMessages(
       continue;
     }
 
-    if (isLegacyRoleMessage(message) || isGroupedRoleMessage(message, title)) {
+    if ((isLegacyRoleMessage(message) || isGroupedRoleMessage(message, title)) && !hasNonBotReactions(message)) {
       await message.delete().catch(() => undefined);
     }
   }
+}
+
+function hasNonBotReactions(message: Message): boolean {
+  return message.reactions.cache.some((reaction) => {
+    const count = reaction.count ?? 0;
+    const botReactionCount = reaction.me ? 1 : 0;
+    return count > botReactionCount;
+  });
 }
 
 function isLegacyRoleMessage(message: Message): boolean {
@@ -425,6 +473,10 @@ function isUnknownEmojiError(error: unknown): boolean {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function logProvisionerError(error: unknown): void {
