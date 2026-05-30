@@ -1,3 +1,4 @@
+import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlug, parseManualEasternDateTime } from "../marketEnd.js";
 import { resolveIntegrationPolymarketQueue, type PolymarketQueueMarket } from "../polymarketQueue.js";
@@ -14,6 +15,7 @@ const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 const maxXApiPages = 10;
+const defaultNitterFeedUrls = ["https://xcancel.com/WhiteHouse/rss"];
 
 export type WhiteHouseTweet = {
   id: string;
@@ -114,8 +116,15 @@ export const whiteHouseTweetsAdapter: WebsiteAdapter = {
     }
 
     const observedAt = new Date();
-    const tweets = await fetchWhiteHouseTweetsFromXApi(window, observedAt);
-    const value = buildWhiteHouseTweetsMonitorValue(tweets, integration?.lastValue ?? null, polymarketUrl, window, observedAt);
+    const tweetResult = await fetchWhiteHouseTweets(window, observedAt);
+    const value = buildWhiteHouseTweetsMonitorValue(
+      tweetResult.tweets,
+      integration?.lastValue ?? null,
+      polymarketUrl,
+      window,
+      observedAt,
+      tweetResult.source
+    );
     return {
       value,
       rawValue: value,
@@ -163,7 +172,8 @@ export function buildWhiteHouseTweetsMonitorValue(
   previousValue: string | null,
   polymarketUrl: string,
   window: WhiteHouseTweetsMarketWindow,
-  now: Date
+  now: Date,
+  source = "X API"
 ): string {
   const previousState = parseWhiteHouseTweetsStoredState(previousValue);
   const sameMarket = previousState.polymarketUrl === polymarketUrl;
@@ -208,6 +218,7 @@ export function buildWhiteHouseTweetsMonitorValue(
     `Hourly summary ready: ${hourlySummaryReady ? "yes" : "no"}`,
     `Hourly new posts: ${hourlyNewPosts}`,
     `Hourly summary: ${closedBuckets.length ? closedBuckets.map(([bucket, count]) => `${bucket}: ${count}`).join(" | ") : "none"}`,
+    `Capture source: ${source}`,
     `Window: ${window.label}`,
     `Window UTC: ${window.startAt} to ${window.endAt}`,
     `Latest captured posts: ${latestPosts.length ? latestPosts.map((post) => `${post.createdAt} ${post.type} ${post.url}`).join(" | ") : "none"}`,
@@ -303,8 +314,56 @@ export function normalizeWhiteHouseTweetFromApi(tweet: XTweet): WhiteHouseTweet 
   };
 }
 
-async function fetchWhiteHouseTweetsFromXApi(window: WhiteHouseTweetsMarketWindow, now: Date = new Date()): Promise<WhiteHouseTweet[]> {
-  const bearerToken = getXBearerToken();
+export function parseWhiteHouseTweetsNitterFeed(xml: string, feedUrl = defaultNitterFeedUrls[0]): WhiteHouseTweet[] {
+  const $ = cheerio.load(xml, { xmlMode: true });
+  const tweets: WhiteHouseTweet[] = [];
+
+  $("item").each((_, item) => {
+    const title = $(item).find("title").first().text().trim();
+    const description = $(item).find("description").first().text().trim();
+    const link = $(item).find("link").first().text().trim();
+    const pubDate = $(item).find("pubDate").first().text().trim();
+    const createdAt = new Date(pubDate);
+    const id = extractTweetId(link) ?? buildStableNitterId(link, pubDate, title);
+    if (!id || Number.isNaN(createdAt.getTime()) || isNitterReply(title, description)) {
+      return;
+    }
+
+    tweets.push({
+      id,
+      text: normalizeNitterTweetText(title, description),
+      createdAt: createdAt.toISOString(),
+      type: inferNitterTweetType(title, description),
+      url: normalizeNitterTweetUrl(link, id, feedUrl)
+    });
+  });
+
+  return sortTweets(tweets);
+}
+
+async function fetchWhiteHouseTweets(
+  window: WhiteHouseTweetsMarketWindow,
+  now: Date
+): Promise<{ tweets: WhiteHouseTweet[]; source: string }> {
+  const bearerToken = getOptionalXBearerToken();
+  if (bearerToken) {
+    try {
+      return { tweets: await fetchWhiteHouseTweetsFromXApi(window, now, bearerToken), source: "X API" };
+    } catch (error) {
+      if (!allowNitterFallback()) {
+        throw error;
+      }
+    }
+  }
+
+  return { tweets: await fetchWhiteHouseTweetsFromNitterFeeds(), source: "Nitter/XCancel RSS" };
+}
+
+async function fetchWhiteHouseTweetsFromXApi(
+  window: WhiteHouseTweetsMarketWindow,
+  now: Date,
+  bearerToken: string
+): Promise<WhiteHouseTweet[]> {
   const userId = await fetchWhiteHouseUserId(bearerToken);
   const tweets: WhiteHouseTweet[] = [];
   let nextToken: string | undefined;
@@ -342,6 +401,42 @@ async function fetchWhiteHouseTweetsFromXApi(window: WhiteHouseTweetsMarketWindo
   return sortTweets(tweets);
 }
 
+async function fetchWhiteHouseTweetsFromNitterFeeds(): Promise<WhiteHouseTweet[]> {
+  const feedUrls = getNitterFeedUrls();
+  const tweets: WhiteHouseTweet[] = [];
+  const errors: string[] = [];
+
+  for (const feedUrl of feedUrls) {
+    try {
+      const response = await fetchWithTimeout(feedUrl, {
+        headers: {
+          accept: "application/rss+xml, application/xml, text/xml",
+          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const xml = await response.text();
+      const feedTweets = parseWhiteHouseTweetsNitterFeed(xml, feedUrl);
+      if (!feedTweets.length && !/<item[\s>]/i.test(xml)) {
+        throw new Error("RSS feed returned no items");
+      }
+
+      tweets.push(...feedTweets);
+    } catch (error) {
+      errors.push(`${feedUrl}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (!tweets.length && errors.length === feedUrls.length) {
+    throw new Error(`Nitter/XCancel RSS polling failed: ${errors.join(" | ")}`);
+  }
+
+  return uniqueTweets(tweets);
+}
+
 async function fetchWhiteHouseUserId(bearerToken: string): Promise<string> {
   if (cachedWhiteHouseUserId) {
     return cachedWhiteHouseUserId;
@@ -375,13 +470,19 @@ async function readXApiJson(response: Response, label: string): Promise<unknown>
   }
 }
 
-function getXBearerToken(): string {
+function getOptionalXBearerToken(): string | null {
   const token = process.env.X_BEARER_TOKEN ?? process.env.TWITTER_BEARER_TOKEN;
-  if (!isNonEmptyString(token)) {
-    throw new Error("X_BEARER_TOKEN is required for direct X API polling. Add it to .env and restart the bot.");
-  }
+  return isNonEmptyString(token) ? token.trim() : null;
+}
 
-  return token;
+function allowNitterFallback(): boolean {
+  return process.env.WHITE_HOUSE_TWEETS_ALLOW_NITTER_FALLBACK?.toLowerCase() !== "false";
+}
+
+function getNitterFeedUrls(): string[] {
+  const configured = process.env.WHITE_HOUSE_TWEETS_NITTER_FEEDS ?? process.env.WHITE_HOUSE_TWEETS_RSS_URLS;
+  const urls = configured?.split(",").map((url) => url.trim()).filter(Boolean) ?? [];
+  return urls.length ? urls : defaultNitterFeedUrls;
 }
 
 function resolveWhiteHouseTweetsQueue(
@@ -648,6 +749,18 @@ function sortTweets(tweets: WhiteHouseTweet[]): WhiteHouseTweet[] {
   return [...tweets].sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt) || left.id.localeCompare(right.id));
 }
 
+function uniqueTweets(tweets: WhiteHouseTweet[]): WhiteHouseTweet[] {
+  const seen = new Set<string>();
+  return sortTweets(tweets).filter((tweet) => {
+    if (seen.has(tweet.id)) {
+      return false;
+    }
+
+    seen.add(tweet.id);
+    return true;
+  });
+}
+
 function sortCapturedPosts(posts: CapturedPost[]): CapturedPost[] {
   return [...posts].sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt) || left.id.localeCompare(right.id));
 }
@@ -775,4 +888,59 @@ function padNumber(value: number): string {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function extractTweetId(link: string): string | null {
+  return link.match(/\/status(?:es)?\/(\d+)/)?.[1] ?? null;
+}
+
+function buildStableNitterId(link: string, pubDate: string, title: string): string | null {
+  const seed = `${link}|${pubDate}|${title}`.trim();
+  if (!seed) {
+    return null;
+  }
+
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+
+  return `nitter-${hash.toString(16)}`;
+}
+
+function isNitterReply(title: string, description: string): boolean {
+  const text = `${title}\n${description}`.trim();
+  return /(^|:\s*)R to @/i.test(text) || /\bReplying to @/i.test(text);
+}
+
+function inferNitterTweetType(title: string, description: string): WhiteHouseTweet["type"] {
+  const text = `${title}\n${description}`;
+  if (/\bRT by @?WhiteHouse\b/i.test(text) || /^\s*RT @/i.test(text)) {
+    return "Repost";
+  }
+
+  if (/\bQuote(?:d)? Tweet\b/i.test(text) || /\bQT @/i.test(text)) {
+    return "Quote";
+  }
+
+  return "Post";
+}
+
+function normalizeNitterTweetText(title: string, description: string): string {
+  const text = title || cheerio.load(description).root().text();
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function normalizeNitterTweetUrl(link: string, id: string, feedUrl: string): string {
+  try {
+    const parsed = new URL(link);
+    return `https://x.com${parsed.pathname}`;
+  } catch {
+    try {
+      const parsedFeed = new URL(feedUrl);
+      return `https://x.com/${parsedFeed.pathname.split("/").filter(Boolean)[0] ?? "WhiteHouse"}/status/${id}`;
+    } catch {
+      return `https://x.com/WhiteHouse/status/${id}`;
+    }
+  }
 }

@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildWhiteHouseTweetsMonitorValue,
   normalizeWhiteHouseTweetFromApi,
+  parseWhiteHouseTweetsNitterFeed,
   parseWhiteHouseTweetsMarketWindow,
   refreshWhiteHouseTweetsPolymarketQueue,
+  whiteHouseTweetsAdapter,
   whiteHouseTweetsShouldAlertOnChange,
   type WhiteHouseTweet
 } from "../src/integrations/whiteHouseTweets.js";
@@ -69,6 +71,64 @@ describe("White House X posts adapter", () => {
         referenced_tweets: [{ type: "replied_to", id: "reply" }]
       })
     ).toBeNull();
+  });
+
+  it("parses Nitter/XCancel RSS posts while excluding replies", () => {
+    const tweets = parseWhiteHouseTweetsNitterFeed(`
+      <rss><channel>
+        <item>
+          <title>The White House: New post</title>
+          <link>https://xcancel.com/WhiteHouse/status/100</link>
+          <pubDate>Fri, 29 May 2026 13:00:00 GMT</pubDate>
+          <description>New post</description>
+        </item>
+        <item>
+          <title>R to @example: reply</title>
+          <link>https://xcancel.com/WhiteHouse/status/101</link>
+          <pubDate>Fri, 29 May 2026 13:01:00 GMT</pubDate>
+          <description>Replying to @example</description>
+        </item>
+        <item>
+          <title>RT by @WhiteHouse: repost</title>
+          <link>https://xcancel.com/WhiteHouse/status/102</link>
+          <pubDate>Fri, 29 May 2026 13:02:00 GMT</pubDate>
+          <description>RT by @WhiteHouse</description>
+        </item>
+      </channel></rss>
+    `);
+
+    expect(tweets).toEqual([
+      expect.objectContaining({ id: "100", type: "Post", url: "https://x.com/WhiteHouse/status/100" }),
+      expect.objectContaining({ id: "102", type: "Repost", url: "https://x.com/WhiteHouse/status/102" })
+    ]);
+  });
+
+  it("falls back to Nitter/XCancel RSS when no X bearer token is configured", async () => {
+    vi.stubEnv("X_BEARER_TOKEN", "");
+    vi.stubEnv("TWITTER_BEARER_TOKEN", "");
+    vi.stubEnv("WHITE_HOUSE_TWEETS_NITTER_FEEDS", "https://xcancel.com/WhiteHouse/rss");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => `
+          <rss><channel><item>
+            <title>The White House: feed post</title>
+            <link>https://xcancel.com/WhiteHouse/status/200</link>
+            <pubDate>Fri, 29 May 2026 13:00:00 GMT</pubDate>
+            <description>feed post</description>
+          </item></channel></rss>
+        `
+      })
+    );
+
+    const result = await whiteHouseTweetsAdapter.fetchCurrentValue({
+      polymarketUrl: marketUrl,
+      lastValue: null
+    } as Integration);
+
+    expect(result.value).toContain("Current total: 1");
+    expect(result.value).toContain("Capture source: Nitter/XCancel RSS");
   });
 
   it("initializes a market count without creating a retroactive hourly alert", () => {

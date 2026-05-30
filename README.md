@@ -112,6 +112,8 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    POLYGON_RPC_URLS=...
    POLYGON_WS_URL=...
    X_BEARER_TOKEN=...
+   WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://xcancel.com/WhiteHouse/rss
+   WHITE_HOUSE_TWEETS_ALLOW_NITTER_FALLBACK=true
    ```
 
 3. Register slash commands for your test server:
@@ -265,7 +267,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Met Office London precipitation uses Heathrow stationdata as the official monthly row and Infoclimat Heathrow climatology as daily cumulative alpha before the Met Office row appears.
 - White House Alien Arrests NYC reads the embedded Flourish table on `whitehouse.gov/aliens` and exact-matches the `New York, NY` row's `Total Arrests` counter.
 - White House Full Lid monitors Roll Call's Factba.se calendar and Forth's WH pool page for today's ET full lid; it polls every minute during 8:00 AM-8:30 PM ET and hourly off-hours.
-- White House X Posts uses the official X API with `X_BEARER_TOKEN`, polls every 5 minutes to preserve deleted-post capture as much as the API allows, keeps a monotonic captured-post set, auto-discovers overlapping weekly Polymarket markets, and sends role-tagged hourly summaries only when newly captured posts exist.
+- White House X Posts uses the official X API when `X_BEARER_TOKEN` is set; otherwise it falls back to Nitter/XCancel RSS feeds such as `WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://xcancel.com/WhiteHouse/rss`. It polls every 5 minutes, keeps a monotonic captured-post set, auto-discovers overlapping weekly Polymarket markets, and sends role-tagged hourly summaries only when newly captured posts exist. RSS fallback is free but less authoritative and can miss deleted posts if the feed never exposes them before removal.
 - Register new adapters in `src/integrations/registry.ts`.
 - Give each adapter a unique `commandName` for its slash command.
 - Give each adapter a unique `alertRoleName` and `alertRoleEmoji`.
