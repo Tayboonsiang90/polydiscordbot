@@ -65,9 +65,17 @@ export type EventMonitorPost = {
   hideTextField?: boolean;
   fields?: Array<{ name: string; value: string; inline?: boolean }>;
   imageUrls: string[];
+  imageAttachments?: EventPostImageAttachment[];
   imageText: string;
   matchedTerms: string[];
   strikeTerms: string[];
+};
+
+export type EventPostImageAttachment = {
+  name: string;
+  data: Buffer;
+  description?: string;
+  displayAsImage?: boolean;
 };
 
 export type EventPostPrioritySummary = {

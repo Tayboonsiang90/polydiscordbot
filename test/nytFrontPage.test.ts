@@ -3,6 +3,7 @@ import {
   extractNytFrontPageGammaStrikeTerms,
   extractNytFrontPageIssue,
   extractNytStrikeTermsFromQuestion,
+  findNytStrikeTermBoxes,
   parseNytFrontPageSettings
 } from "../src/integrations/nytFrontPage.js";
 
@@ -131,5 +132,21 @@ describe("NYT front page adapter", () => {
       nytParsedFromUrl: "https://polymarket.com/event/test",
       nytLastParsedAt: "2026-05-18T00:00:00.000Z"
     });
+  });
+
+  it("finds OCR boxes for single and multi-word strike terms", () => {
+    expect(
+      findNytStrikeTermBoxes(
+        [
+          { text: "Federal", bbox: { x0: 10, y0: 20, x1: 50, y1: 40 } },
+          { text: "Reserve", bbox: { x0: 55, y0: 20, x1: 100, y1: 40 } },
+          { text: "Trump's", bbox: { x0: 15, y0: 60, x1: 75, y1: 80 } }
+        ],
+        ["Federal Reserve", "Trump"]
+      )
+    ).toEqual([
+      { term: "Federal Reserve", x0: 10, y0: 20, x1: 100, y1: 40 },
+      { term: "Trump", x0: 15, y0: 60, x1: 75, y1: 80 }
+    ]);
   });
 });

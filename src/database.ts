@@ -500,8 +500,9 @@ function keepFirstTwoLines(value: string | null): string | null {
 }
 
 function serializeEventPost(post: EventMonitorPost): string {
+  const { imageAttachments: _imageAttachments, ...serializablePost } = post;
   return JSON.stringify({
-    ...post,
+    ...serializablePost,
     postedAt: post.postedAt.toISOString()
   });
 }
@@ -515,6 +516,7 @@ function deserializeEventAlert(row: EventAlertRow): EventAlert {
       ...post,
       postedAt: new Date(post.postedAt),
       imageUrls: Array.isArray(post.imageUrls) ? post.imageUrls : [],
+      imageAttachments: [],
       matchedTerms: Array.isArray(post.matchedTerms) ? post.matchedTerms : [],
       strikeTerms: Array.isArray(post.strikeTerms) ? post.strikeTerms : [],
       imageText: typeof post.imageText === "string" ? post.imageText : ""

@@ -363,6 +363,38 @@ describe("adapter commands", () => {
     );
   });
 
+  it("attaches highlighted event images when provided", () => {
+    const post: EventMonitorPost = {
+      id: "nyt-front-page-2026-05-18",
+      type: "Front page",
+      text: "Federal Reserve",
+      qualifyingText: "Federal Reserve",
+      postedAt: new Date("2026-05-18T04:20:00.000Z"),
+      url: "https://nytimes.pressreader.com/the-new-york-times/20260518/page/1",
+      imageUrls: ["https://example.com/original.jpg"],
+      imageAttachments: [
+        {
+          name: "nyt-front-page-2026-05-18-highlight.png",
+          data: Buffer.from("png"),
+          description: "highlighted"
+        }
+      ],
+      imageText: "Federal Reserve",
+      matchedTerms: ["Federal Reserve"],
+      strikeTerms: ["Federal Reserve"]
+    };
+    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "nyt-front-page" }, post);
+
+    expect(payload.files).toEqual([
+      {
+        attachment: Buffer.from("png"),
+        name: "nyt-front-page-2026-05-18-highlight.png",
+        description: "highlighted"
+      }
+    ]);
+    expect(payload.embeds[1].toJSON().image?.url).toBe("attachment://nyt-front-page-2026-05-18-highlight.png");
+  });
+
   it("uses the post-specific Polymarket URL in Trump Truth event alerts", () => {
     const post: EventMonitorPost = {
       id: "123",

@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { Jimp, rgbaToInt } from "jimp";
 import Tesseract from "tesseract.js";
 import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlug } from "../marketEnd.js";
@@ -10,7 +11,7 @@ const defaultPolymarketUrl = "https://polymarket.com/event/what-will-the-nyt-fro
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
 const strikeRefreshIntervalMs = 5 * 60_000;
 const pageImageWidth = 1200;
-const ocrTextCache = new Map<string, string>();
+const ocrCache = new Map<string, NytOcrResult>();
 
 export type NytFrontPageSettings = {
   nytStrikeTerms?: string[];
@@ -44,6 +45,26 @@ type JsonLdNode = {
   datePublished?: string;
   headline?: string;
   thumbnailUrl?: string;
+};
+
+export type NytOcrWord = {
+  text: string;
+  bbox: {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  };
+};
+
+export type NytHighlightBox = NytOcrWord["bbox"] & {
+  term: string;
+};
+
+type NytOcrResult = {
+  text: string;
+  words: NytOcrWord[];
+  imageBuffer: Buffer;
 };
 
 export const nytFrontPageAdapter: WebsiteAdapter = {
@@ -224,14 +245,20 @@ export function extractNytFrontPageIssue(html: string, pageUrl: string): NytFron
 }
 
 export async function enrichNytFrontPagePostWithOcr(post: EventMonitorPost, strikeTerms: string[]): Promise<EventMonitorPost> {
-  const ocrText = await recognizeImageText(post.imageUrls[0]);
-  const imageText = [post.imageText, ocrText].filter(Boolean).join("\n");
+  const ocr = await recognizeImageText(post.imageUrls[0]);
+  const imageText = [post.imageText, ocr.text].filter(Boolean).join("\n");
   const qualifyingText = [post.text, imageText].filter(Boolean).join("\n");
+  const matchedTerms = findMatchedStrikeTerms(qualifyingText, strikeTerms);
+  const highlightBoxes = findNytStrikeTermBoxes(ocr.words, matchedTerms);
+  const highlightedImage = highlightBoxes.length
+    ? await buildHighlightedNytImageAttachment(ocr.imageBuffer, highlightBoxes, post.id)
+    : null;
   return {
     ...post,
     imageText,
     qualifyingText,
-    matchedTerms: findMatchedStrikeTerms(qualifyingText, strikeTerms)
+    matchedTerms,
+    imageAttachments: highlightedImage ? [highlightedImage] : post.imageAttachments
   };
 }
 
@@ -279,12 +306,12 @@ async function fetchLatestIssueDate(): Promise<string> {
   return date;
 }
 
-async function recognizeImageText(imageUrl: string | undefined): Promise<string> {
+async function recognizeImageText(imageUrl: string | undefined): Promise<NytOcrResult> {
   if (!imageUrl) {
-    return "";
+    return { text: "", words: [], imageBuffer: Buffer.alloc(0) };
   }
 
-  const cached = ocrTextCache.get(imageUrl);
+  const cached = ocrCache.get(imageUrl);
   if (cached !== undefined) {
     return cached;
   }
@@ -292,17 +319,198 @@ async function recognizeImageText(imageUrl: string | undefined): Promise<string>
   try {
     const response = await fetchWithTimeout(imageUrl, { headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" } }, 30_000);
     if (!response.ok) {
-      return "";
+      return { text: "", words: [], imageBuffer: Buffer.alloc(0) };
     }
 
     const imageBuffer = Buffer.from(await response.arrayBuffer());
     const result = await Tesseract.recognize(imageBuffer, "eng");
     const text = result.data.text.replace(/\s+/g, " ").trim();
-    ocrTextCache.set(imageUrl, text);
-    return text;
+    const words = normalizeNytOcrWords(collectTesseractWords(result.data));
+    const ocrResult = { text, words, imageBuffer };
+    ocrCache.set(imageUrl, ocrResult);
+    return ocrResult;
   } catch {
-    return "";
+    return { text: "", words: [], imageBuffer: Buffer.alloc(0) };
   }
+}
+
+function collectTesseractWords(page: Tesseract.Page): unknown[] {
+  return (
+    page.blocks?.flatMap((block) =>
+      block.paragraphs.flatMap((paragraph) => paragraph.lines.flatMap((line) => line.words))
+    ) ?? []
+  );
+}
+
+export function findNytStrikeTermBoxes(words: NytOcrWord[], strikeTerms: string[]): NytHighlightBox[] {
+  const boxes: NytHighlightBox[] = [];
+  const normalizedWords = words.map((word) => normalizeOcrToken(word.text));
+
+  for (const term of strikeTerms) {
+    const termTokens = tokenizeStrikeTerm(term);
+    if (!termTokens.length) {
+      continue;
+    }
+
+    for (let index = 0; index <= normalizedWords.length - termTokens.length; index += 1) {
+      const sequence = normalizedWords.slice(index, index + termTokens.length);
+      if (!sequence.every((wordToken, offset) => ocrTokenMatchesStrikeToken(wordToken, termTokens[offset]))) {
+        continue;
+      }
+
+      boxes.push({
+        ...mergeBoundingBoxes(words.slice(index, index + termTokens.length)),
+        term
+      });
+    }
+  }
+
+  return dedupeHighlightBoxes(boxes);
+}
+
+function normalizeNytOcrWords(words: unknown): NytOcrWord[] {
+  if (!Array.isArray(words)) {
+    return [];
+  }
+
+  return words.flatMap((word) => {
+    if (!word || typeof word !== "object") {
+      return [];
+    }
+
+    const candidate = word as Partial<NytOcrWord>;
+    const bbox = candidate.bbox;
+    if (!isNonEmptyString(candidate.text) || !bbox || !isFiniteBox(bbox)) {
+      return [];
+    }
+
+    return [
+      {
+        text: candidate.text,
+        bbox: {
+          x0: Math.round(bbox.x0),
+          y0: Math.round(bbox.y0),
+          x1: Math.round(bbox.x1),
+          y1: Math.round(bbox.y1)
+        }
+      }
+    ];
+  });
+}
+
+async function buildHighlightedNytImageAttachment(
+  imageBuffer: Buffer,
+  boxes: NytHighlightBox[],
+  postId: string
+): Promise<NonNullable<EventMonitorPost["imageAttachments"]>[number] | null> {
+  if (!imageBuffer.length || !boxes.length) {
+    return null;
+  }
+
+  try {
+    const image = await Jimp.read(imageBuffer);
+    const borderColor = rgbaToInt(255, 214, 10, 255);
+    const shadowColor = rgbaToInt(220, 38, 38, 255);
+    for (const box of boxes) {
+      drawRectangle(image, expandBox(box, 8), shadowColor, 8);
+      drawRectangle(image, expandBox(box, 4), borderColor, 4);
+    }
+
+    return {
+      name: `${sanitizeAttachmentName(postId)}-highlight.png`,
+      data: await image.getBuffer("image/png"),
+      description: `NYT front page with highlighted strike terms: ${[...new Set(boxes.map((box) => box.term))].join(", ")}`,
+      displayAsImage: true
+    };
+  } catch {
+    return null;
+  }
+}
+
+function drawRectangle(
+  image: Awaited<ReturnType<typeof Jimp.read>>,
+  box: NytHighlightBox | NytOcrWord["bbox"],
+  color: number,
+  thickness: number
+): void {
+  const x0 = clamp(Math.floor(box.x0), 0, image.bitmap.width - 1);
+  const x1 = clamp(Math.ceil(box.x1), 0, image.bitmap.width - 1);
+  const y0 = clamp(Math.floor(box.y0), 0, image.bitmap.height - 1);
+  const y1 = clamp(Math.ceil(box.y1), 0, image.bitmap.height - 1);
+
+  for (let offset = 0; offset < thickness; offset += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      setPixelIfInBounds(image, x, y0 + offset, color);
+      setPixelIfInBounds(image, x, y1 - offset, color);
+    }
+    for (let y = y0; y <= y1; y += 1) {
+      setPixelIfInBounds(image, x0 + offset, y, color);
+      setPixelIfInBounds(image, x1 - offset, y, color);
+    }
+  }
+}
+
+function setPixelIfInBounds(image: Awaited<ReturnType<typeof Jimp.read>>, x: number, y: number, color: number): void {
+  if (x < 0 || y < 0 || x >= image.bitmap.width || y >= image.bitmap.height) {
+    return;
+  }
+
+  image.setPixelColor(color, x, y);
+}
+
+function expandBox(box: NytHighlightBox, padding: number): NytHighlightBox {
+  return {
+    ...box,
+    x0: box.x0 - padding,
+    y0: box.y0 - padding,
+    x1: box.x1 + padding,
+    y1: box.y1 + padding
+  };
+}
+
+function mergeBoundingBoxes(words: NytOcrWord[]): NytOcrWord["bbox"] {
+  return {
+    x0: Math.min(...words.map((word) => word.bbox.x0)),
+    y0: Math.min(...words.map((word) => word.bbox.y0)),
+    x1: Math.max(...words.map((word) => word.bbox.x1)),
+    y1: Math.max(...words.map((word) => word.bbox.y1))
+  };
+}
+
+function dedupeHighlightBoxes(boxes: NytHighlightBox[]): NytHighlightBox[] {
+  const seen = new Set<string>();
+  return boxes.filter((box) => {
+    const key = `${box.term}:${box.x0}:${box.y0}:${box.x1}:${box.y1}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function tokenizeStrikeTerm(term: string): string[] {
+  return term.split(/\s+/).map(normalizeOcrToken).filter(isNonEmptyString);
+}
+
+function normalizeOcrToken(value: string): string {
+  return value.toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "").replace(/[^a-z0-9]+/g, "");
+}
+
+function ocrTokenMatchesStrikeToken(wordToken: string, strikeToken: string): boolean {
+  return wordToken === strikeToken || wordToken === `${strikeToken}s`;
+}
+
+function isFiniteBox(box: Partial<NytOcrWord["bbox"]>): box is NytOcrWord["bbox"] {
+  return [box.x0, box.y0, box.x1, box.y1].every((value) => typeof value === "number" && Number.isFinite(value));
+}
+
+function sanitizeAttachmentName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "nyt-front-page";
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function formatNytFrontPageValue(post: EventMonitorPost): string {

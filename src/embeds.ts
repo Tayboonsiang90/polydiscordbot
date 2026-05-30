@@ -307,6 +307,10 @@ export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
 export function buildEventPostEmbed(integration: Integration, post: EventMonitorPost): EmbedBuilder[] {
   const hasStrike = post.matchedTerms.length > 0;
   const hasImages = post.imageUrls.length > 0;
+  const imageAttachmentNames = (post.imageAttachments ?? [])
+    .filter((attachment) => attachment.displayAsImage !== false)
+    .map((attachment) => attachment.name)
+    .filter(Boolean);
   const title =
     post.alertTitle ??
     (hasStrike ? "TEXT STRIKE DETECTED" : hasImages ? "New post - review attached images manually" : "New post");
@@ -366,8 +370,19 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
       .setFooter({ text: `Alert sent at ${nowSingaporeDateTime()}` })
   ];
 
-  for (const imageUrl of post.imageUrls.slice(0, 3)) {
-    embeds.push(new EmbedBuilder().setColor(hasStrike ? errorColor : successColor).setTitle("Attached image").setImage(imageUrl));
+  if (imageAttachmentNames.length) {
+    for (const attachmentName of imageAttachmentNames.slice(0, 3)) {
+      embeds.push(
+        new EmbedBuilder()
+          .setColor(hasStrike ? errorColor : successColor)
+          .setTitle("Highlighted image")
+          .setImage(`attachment://${attachmentName}`)
+      );
+    }
+  } else {
+    for (const imageUrl of post.imageUrls.slice(0, 3)) {
+      embeds.push(new EmbedBuilder().setColor(hasStrike ? errorColor : successColor).setTitle("Attached image").setImage(imageUrl));
+    }
   }
 
   return embeds;
@@ -378,6 +393,11 @@ export function buildEventPostMessagePayload(integration: Integration, post: Eve
   return {
     content,
     embeds: buildEventPostEmbed(integration, post),
+    files: (post.imageAttachments ?? []).map((attachment) => ({
+      attachment: attachment.data,
+      name: attachment.name,
+      description: attachment.description
+    })),
     components: [buildEventSourceLinkRow(post.url, post.buttonLabel)],
     allowedMentions: content && integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
   };
