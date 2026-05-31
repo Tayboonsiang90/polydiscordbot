@@ -16,6 +16,7 @@ import {
   parseTrumpTruthArchiveSearchResults,
   parseTrumpTruthSettings,
   refreshTrumpTruthSettings,
+  isPostInTrumpTruthMarketWindow,
   upsertTrumpTruthPolymarketMarket
 } from "../src/integrations/trumpTruth.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -508,6 +509,21 @@ describe("Trump Truth archive feed", () => {
     });
   });
 
+  it("detects archive RT items as ReTruths", () => {
+    const items = parseTrumpTruthArchiveFeed(`
+      <rss xmlns:truth="https://truthsocial.com/ns"><channel><item>
+        <title>RT @NewtGingrichAfter spending this week reviewing Israel</title>
+        <link>https://www.trumpstruth.org/statuses/1</link>
+        <description><![CDATA[<p>RT <span>@NewtGingrich</span>Israel</p>]]></description>
+        <pubDate>Sun, 31 May 2026 14:13:18 +0000</pubDate>
+        <truth:originalUrl>https://truthsocial.com/@realDonaldTrump/116669598824791805</truth:originalUrl>
+        <truth:originalId>116669598824791805</truth:originalId>
+      </item></channel></rss>
+    `);
+
+    expect(items[0]).toMatchObject({ isReTruth: true });
+  });
+
   it("normalizes archive items into event posts with text strikes and images", () => {
     const post = normalizeTrumpTruthArchiveItem(
       {
@@ -526,6 +542,50 @@ describe("Trump Truth archive feed", () => {
     expect(post.url).toBe("https://truthsocial.com/@realDonaldTrump/123");
     expect(post.matchedTerms).toEqual(["King"]);
     expect(post.imageUrls).toEqual(["https://example.com/image.jpg"]);
+  });
+
+  it("does not count archive ReTruth text as qualifying", () => {
+    const post = normalizeTrumpTruthArchiveItem(
+      {
+        id: "123",
+        archiveUrl: "https://www.trumpstruth.org/statuses/1",
+        originalUrl: "https://truthsocial.com/@realDonaldTrump/123",
+        originalId: "123",
+        postedAt: new Date("2026-05-31T14:13:18.000Z"),
+        html: "<p>RT @NewtGingrich Israel</p>",
+        title: "RT @NewtGingrichIsrael",
+        isReTruth: true
+      },
+      ["Israel"]
+    );
+
+    expect(post.type).toBe("ReTruth");
+    expect(post.text).toContain("Israel");
+    expect(post.qualifyingText).toBe("");
+    expect(post.matchedTerms).toEqual([]);
+  });
+
+  it("checks archive posts against the active market window", () => {
+    const market = {
+      startAt: "2026-05-25T04:00:00.000Z",
+      endAt: "2026-06-01T03:59:00.000Z"
+    };
+    const insidePost = normalizeTrumpTruthArchiveItem(
+      {
+        id: "123",
+        archiveUrl: "https://www.trumpstruth.org/statuses/1",
+        originalUrl: "https://truthsocial.com/@realDonaldTrump/123",
+        originalId: "123",
+        postedAt: new Date("2026-05-31T14:13:18.000Z"),
+        html: "<p>Hello</p>",
+        title: "Post"
+      },
+      []
+    );
+    const outsidePost = { ...insidePost, postedAt: new Date("2026-06-01T04:00:00.000Z") };
+
+    expect(isPostInTrumpTruthMarketWindow(insidePost, market)).toBe(true);
+    expect(isPostInTrumpTruthMarketWindow(outsidePost, market)).toBe(false);
   });
 
   it("deduplicates archive full-size images and thumbnails for the same attachment", () => {
@@ -659,6 +719,32 @@ describe("Trump Truth archive feed", () => {
     expect(post.matchedTerms).toEqual(["King", "Kimmel"]);
   });
 
+  it("does not run OCR or count image text for ReTruths", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const post = await enrichTrumpTruthPostWithOcr(
+      normalizeTrumpTruthArchiveItem(
+        {
+          id: "126",
+          archiveUrl: "https://www.trumpstruth.org/statuses/3",
+          originalUrl: "https://truthsocial.com/@realDonaldTrump/126",
+          originalId: "126",
+          postedAt: new Date("2026-05-31T14:13:18.000Z"),
+          html: '<p>RT @NewtGingrich</p><img src="https://example.com/retruth.jpg" alt="Israel screenshot">',
+          title: "RT @NewtGingrich",
+          isReTruth: true
+        },
+        ["Israel"]
+      ),
+      ["Israel"]
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(post.qualifyingText).toBe("");
+    expect(post.matchedTerms).toEqual([]);
+  });
+
   it("retries OCR after a transient image fetch failure", async () => {
     const fetchMock = vi
       .fn()
@@ -734,7 +820,7 @@ describe("Trump Truth archive feed", () => {
           {
             url: "https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17",
             slug: "what-will-trump-post-this-week-may-11-may-17",
-            startAt: "2026-05-11T04:00:00.000Z",
+            startAt: "2026-05-01T04:00:00.000Z",
             endAt: "2100-01-01T00:00:00.000Z",
             strikeTerms: ["King"],
             resolvedTerms: [],

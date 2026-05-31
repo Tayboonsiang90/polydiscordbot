@@ -62,6 +62,7 @@ type TrumpTruthArchiveItem = {
   postedAt: Date;
   html: string;
   title: string;
+  isReTruth?: boolean;
 };
 
 type GammaEvent = {
@@ -109,16 +110,17 @@ export const trumpTruthAdapter: WebsiteAdapter = {
     return { value, rawValue: value, unit: "latest Truth Social post", observedAt: result.observedAt };
   },
   async fetchEventUpdates(integration: Integration): Promise<EventMonitorResult> {
-    const settings = await refreshTrumpTruthSettings(integration);
+    const now = new Date();
+    const settings = await refreshTrumpTruthSettings(integration, false, now);
+    const activeMarket = getActiveTrumpTruthMarket(settings.markets ?? [], now);
     const items = await fetchTrumpTruthArchiveItems();
     const posts = items
       .slice(0, maxPosts)
-      .map((item) => ({
-        ...normalizeTrumpTruthArchiveItem(item, settings.strikeTerms ?? []),
-        polymarketUrl: settings.parsedFromUrl
-      }));
+      .map((item) => normalizeTrumpTruthArchiveItem(item, settings.strikeTerms ?? []))
+      .filter((post) => (activeMarket ? isPostInTrumpTruthMarketWindow(post, activeMarket) : false))
+      .map((post) => attachTrumpTruthMarketAuditFields(post, activeMarket!, settings.parsedFromUrl));
 
-    return { posts, strikeTerms: settings.strikeTerms ?? [], polymarketUrl: settings.parsedFromUrl, observedAt: new Date() };
+    return { posts, strikeTerms: settings.strikeTerms ?? [], polymarketUrl: settings.parsedFromUrl, observedAt: now };
   },
   async enrichEventPost(post: EventMonitorPost, strikeTerms: string[]): Promise<EventMonitorPost> {
     return enrichTrumpTruthPostWithOcr(post, strikeTerms);
@@ -563,23 +565,29 @@ export function normalizeTrumpTruthArchiveItem(item: TrumpTruthArchiveItem, stri
   const text = extractPostText(item.html);
   const imageUrls = extractImageUrls(item.html);
   const imageText = extractImageText(item.html);
-  const qualifyingText = [text, imageText].filter(Boolean).join("\n");
+  const isReTruth = item.isReTruth || isArchiveReTruth(item.title, item.html);
+  const qualifyingText = isReTruth ? "" : [text, imageText].filter(Boolean).join("\n");
+  const matchedTerms = isReTruth ? [] : findMatchedStrikeTerms(qualifyingText, strikeTerms);
 
   return {
     id: item.originalId || item.id,
-    type: "Truth",
+    type: isReTruth ? "ReTruth" : "Truth",
     text,
     qualifyingText,
     postedAt: item.postedAt,
     url: item.originalUrl || item.archiveUrl,
     imageUrls,
     imageText,
-    matchedTerms: findMatchedStrikeTerms(qualifyingText, strikeTerms),
+    matchedTerms,
     strikeTerms
   };
 }
 
 export async function enrichTrumpTruthPostWithOcr(post: EventMonitorPost, strikeTerms: string[]): Promise<EventMonitorPost> {
+  if (post.type === "ReTruth") {
+    return { ...post, qualifyingText: "", matchedTerms: [] };
+  }
+
   if (!post.imageUrls.length) {
     return post;
   }
@@ -613,7 +621,7 @@ export function parseTrumpTruthArchiveFeed(xml: string): TrumpTruthArchiveItem[]
       const title = item.find("title").first().text().trim();
       const id = originalId || archiveUrl;
 
-      return { id, archiveUrl, originalUrl, originalId, postedAt, html: description, title };
+      return { id, archiveUrl, originalUrl, originalId, postedAt, html: description, title, isReTruth: isArchiveReTruth(title, description) };
     })
     .filter((item) => item.id && item.archiveUrl && !Number.isNaN(item.postedAt.getTime()));
 }
@@ -681,7 +689,7 @@ async function fetchArchiveDetailIfNeeded(item: TrumpTruthArchiveItem): Promise<
     }
 
     const html = await response.text();
-    return { ...item, html: extractArchiveStatusBodyHtml(html) || item.html };
+    return { ...item, html: extractArchiveStatusBodyHtml(html) || item.html, isReTruth: item.isReTruth || isArchiveReTruth(html) };
   } catch {
     return item;
   }
@@ -697,6 +705,31 @@ function normalizeArchiveUrl(value: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+function attachTrumpTruthMarketAuditFields(
+  post: EventMonitorPost,
+  market: TrumpTruthMarket,
+  polymarketUrl: string | undefined
+): EventMonitorPost {
+  return {
+    ...post,
+    polymarketUrl,
+    fields: [
+      ...(post.fields ?? []),
+      { name: "Posted at audit", value: `ET: ${formatEasternDateTime(post.postedAt)}\nUTC: ${post.postedAt.toISOString()}`, inline: false },
+      {
+        name: "Market window check",
+        value: `Inside active Polymarket window\nET: ${formatEasternDateTime(market.startAt)} to ${formatEasternDateTime(market.endAt)}`,
+        inline: false
+      }
+    ]
+  };
+}
+
+function isArchiveReTruth(...values: string[]): boolean {
+  const text = normalizeText(values.map((value) => htmlToText(value)).join(" "));
+  return /(?:^|["'\s])RT\s+@/i.test(text) || /\bRe-?Truth(?:ed)?\b/i.test(text) || /\breposted\b/i.test(text);
 }
 
 function dedupeSearchHits(hits: StrikeSearchHit[]): StrikeSearchHit[] {
@@ -773,6 +806,13 @@ function getWeekEndingRange(
 export function getActiveTrumpTruthMarket(markets: TrumpTruthMarket[], now = new Date()): TrumpTruthMarket | null {
   const nowMs = now.getTime();
   return markets.find((market) => nowMs >= new Date(market.startAt).getTime() && nowMs <= new Date(market.endAt).getTime()) ?? null;
+}
+
+export function isPostInTrumpTruthMarketWindow(post: EventMonitorPost, market: Pick<TrumpTruthMarket, "startAt" | "endAt">): boolean {
+  const postedAt = post.postedAt.getTime();
+  const startAt = new Date(market.startAt).getTime();
+  const endAt = new Date(market.endAt).getTime();
+  return [postedAt, startAt, endAt].every((value) => !Number.isNaN(value)) && postedAt >= startAt && postedAt <= endAt;
 }
 
 export function extractTrumpTruthGammaStrikeTerms(markets: GammaMarket[]): Pick<TrumpTruthMarket, "strikeTerms" | "resolvedTerms" | "activeStrikeTerms"> {
@@ -939,6 +979,30 @@ function formatEasternDate(date: Date): string {
     }).formatToParts(date).map((part) => [part.type, part.value])
   );
   return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function formatEasternDateTime(value: Date | string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) {
+    return "invalid date";
+  }
+
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    })
+      .formatToParts(date)
+      .map((part) => [part.type, part.value])
+  );
+  const hour = parts.hour === "24" ? "00" : parts.hour;
+  return `${parts.year}-${parts.month}-${parts.day} ${hour}:${parts.minute}:${parts.second} ET`;
 }
 
 function getEasternYear(date: Date): number {
