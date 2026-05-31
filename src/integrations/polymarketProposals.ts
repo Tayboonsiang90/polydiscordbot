@@ -335,6 +335,7 @@ export function normalizePolymarketProposalEvent(
 ): EventMonitorPost {
   const transactionUrl = `https://polygonscan.com/tx/${proposal.transactionHash}`;
   const polymarketUrl = market?.market_slug ? `https://polymarket.com/market/${market.market_slug}` : undefined;
+  const betmoarUrl = market?.market_slug ? `https://betmoar.fun/market/${market.market_slug}` : undefined;
   const question = market?.question;
   const matchedTags = tagMatch.matchedMarketTags.join(", ");
   const text = [
@@ -370,6 +371,7 @@ export function normalizePolymarketProposalEvent(
     prioritySummary: {
       question,
       questionUrl: polymarketUrl,
+      betmoarUrl,
       proposedOutcome: proposal.proposedOutcome,
       proposalExpirationAt: new Date(proposal.expirationTimestamp * 1_000).toISOString(),
       marketTags: market?.tags,

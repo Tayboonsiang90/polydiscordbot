@@ -82,6 +82,7 @@ export type EventPostImageAttachment = {
 export type EventPostPrioritySummary = {
   question?: string;
   questionUrl?: string;
+  betmoarUrl?: string;
   proposedOutcome?: string;
   proposalExpirationAt?: string;
   marketTags?: string[];

@@ -83,6 +83,7 @@ describe("Polymarket clarification parsing", () => {
     expect(post.prioritySummary).toMatchObject({
       question: "Trump kiss by May 31?",
       questionUrl: "https://polymarket.com/market/trump-kiss-by-may-31",
+      betmoarUrl: "https://betmoar.fun/market/trump-kiss-by-may-31",
       creator,
       clarification: "We are aware of the dispute on this market."
     });
@@ -100,7 +101,8 @@ describe("Polymarket clarification parsing", () => {
     ]);
     expect(embedFields[0]).toEqual({
       name: "Question",
-      value: "**[Trump kiss by May 31?](https://polymarket.com/market/trump-kiss-by-may-31)**",
+      value:
+        "**[Trump kiss by May 31?](https://polymarket.com/market/trump-kiss-by-may-31)** · [Betmoar](https://betmoar.fun/market/trump-kiss-by-may-31)",
       inline: false
     });
     expect(embedFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Creator", value: creator })]));

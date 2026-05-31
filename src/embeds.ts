@@ -501,7 +501,7 @@ function formatPrioritySummaryFields(
       ? [
           {
             name: "Question",
-            value: formatPriorityValue(summary.question, summary.questionUrl),
+            value: formatPriorityValue(summary.question, summary.questionUrl, summary.betmoarUrl),
             inline: false
           }
         ]
@@ -836,8 +836,9 @@ function formatAddressImportIssues(issues: AddressLabelImportIssue[]): string {
   );
 }
 
-function formatPriorityValue(label: string, url?: string): string {
-  return url ? `**${formatMarkdownLink(label, url)}**` : `**${label}**`;
+function formatPriorityValue(label: string, url?: string, betmoarUrl?: string): string {
+  const question = url ? `**${formatMarkdownLink(label, url)}**` : `**${label}**`;
+  return betmoarUrl ? `${question} · ${formatMarkdownLink("Betmoar", betmoarUrl)}` : question;
 }
 
 function formatMarkdownLink(label: string, url: string): string {

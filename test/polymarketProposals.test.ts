@@ -135,6 +135,7 @@ describe("fetchPolymarketProposalUpdates", () => {
     expect(result.posts[0].prioritySummary).toMatchObject({
       question: "Lakers win?",
       questionUrl: "https://polymarket.com/market/lakers-win",
+      betmoarUrl: "https://betmoar.fun/market/lakers-win",
       proposedOutcome: "NO (0)",
       marketTags: ["Sports", "NBA"],
       matchedTags: ["Sports"],
@@ -163,7 +164,7 @@ describe("fetchPolymarketProposalUpdates", () => {
     ]);
     expect(embedFields[0]).toEqual({
       name: "Question",
-      value: "**[Lakers win?](https://polymarket.com/market/lakers-win)**",
+      value: "**[Lakers win?](https://polymarket.com/market/lakers-win)** · [Betmoar](https://betmoar.fun/market/lakers-win)",
       inline: false
     });
     expect(embedFields[1]).toEqual({ name: "Proposed outcome", value: "**NO (0)**", inline: false });

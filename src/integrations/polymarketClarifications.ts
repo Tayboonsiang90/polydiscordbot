@@ -209,6 +209,7 @@ export function normalizePolymarketClarificationLog(log: PolygonLog, details: Qu
   const blockTimestamp = log.blockTimestamp ? parseHexQuantity(log.blockTimestamp) : null;
   const transactionUrl = `https://polygonscan.com/tx/${log.transactionHash}`;
   const polymarketUrl = details.slug ? `https://polymarket.com/market/${details.slug}` : undefined;
+  const betmoarUrl = details.slug ? `https://betmoar.fun/market/${details.slug}` : undefined;
   const question = details.question ?? details.title;
   const creator = details.creator ?? details.initializer ?? owner;
   const fields = [
@@ -235,6 +236,7 @@ export function normalizePolymarketClarificationLog(log: PolygonLog, details: Qu
     prioritySummary: {
       question,
       questionUrl: polymarketUrl,
+      betmoarUrl,
       marketTags: details.tags,
       creator,
       clarification: updateText
@@ -410,6 +412,7 @@ function normalizePolymarketPendingClarification(
 ): EventMonitorPost {
   const transactionUrl = `https://polygonscan.com/tx/${update.transactionHash}`;
   const polymarketUrl = details.slug ? `https://polymarket.com/market/${details.slug}` : undefined;
+  const betmoarUrl = details.slug ? `https://betmoar.fun/market/${details.slug}` : undefined;
   const question = details.question ?? details.title;
   const creator = details.creator ?? details.initializer ?? update.updater;
   const fields = [
@@ -437,6 +440,7 @@ function normalizePolymarketPendingClarification(
     prioritySummary: {
       question,
       questionUrl: polymarketUrl,
+      betmoarUrl,
       marketTags: details.tags,
       creator,
       clarification: update.text
