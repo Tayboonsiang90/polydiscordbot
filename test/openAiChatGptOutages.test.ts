@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractOpenAiChatGptComponentsFromStatusHtml,
   extractOpenAiIncidentComponentImpacts,
@@ -6,7 +6,8 @@ import {
   getOpenAiChatGptOutagePeriod,
   getOpenAiChatGptQualifyingOutages,
   openAiChatGptOutagesAdapter,
-  openAiChatGptOutagesShouldAlertOnChange
+  openAiChatGptOutagesShouldAlertOnChange,
+  refreshOpenAiChatGptOutagePolymarketQueue
 } from "../src/integrations/openAiChatGptOutages.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -24,6 +25,11 @@ const qualifyingDetailHtml = String.raw`
   {\"component_id\":\"chat-search\",\"end_at\":\"2026-06-03T02:00:00Z\",\"id\":\"impact-3\",\"start_at\":\"2026-06-03T01:00:00Z\",\"status\":\"degraded_performance\",\"status_page_incident_id\":\"incident-1\"}
   ]
 `;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("OpenAI ChatGPT outage adapter", () => {
   it("parses ChatGPT component ids from the OpenAI status page group", () => {
@@ -117,5 +123,52 @@ describe("OpenAI ChatGPT outage adapter", () => {
       label: "2026-07"
     });
     expect(openAiChatGptOutagesAdapter.supportsPeriod).toBe(true);
+  });
+
+  it("auto-discovers active monthly ChatGPT outage markets", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "of-chatgpt-outage-days-in-may-2026",
+              title: "# of ChatGPT Outage Days in May 2026?",
+              active: true,
+              closed: false,
+              tags: [{ slug: "chatgpt" }, { slug: "outage" }]
+            },
+            {
+              slug: "of-chatgpt-outage-days-in-june-2026",
+              title: "# of ChatGPT Outage Days in June 2026?",
+              active: true,
+              closed: false,
+              tags: [{ slug: "chatgpt" }, { slug: "outage" }]
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshOpenAiChatGptOutagePolymarketQueue(
+      {
+        settingsJson: null,
+        polymarketUrl: "https://polymarket.com/event/of-chatgpt-outage-days-in-may-2026"
+      } as Integration,
+      new Date("2026-05-31T12:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      year?: number;
+      month?: number;
+      polymarketMarkets?: Array<{ slug: string }>;
+    };
+
+    expect(result.activeUrl).toBe("https://polymarket.com/event/of-chatgpt-outage-days-in-may-2026");
+    expect(settings).toMatchObject({ year: 2026, month: 5 });
+    expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual([
+      "of-chatgpt-outage-days-in-may-2026",
+      "of-chatgpt-outage-days-in-june-2026"
+    ]);
   });
 });

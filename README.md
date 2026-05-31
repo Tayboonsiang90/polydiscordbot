@@ -28,7 +28,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `bls-cpi-releases` | `/blscpi` | `#blscpi-releases` | `BLS CPI Release Alerts` | `📈` | Monitors BLS CPI archived news releases hourly and alerts when the latest article changes. |
 | `cdc-fertility-rate` | `/fertility` | `#fertility` | `CDC Fertility Alerts` | `👶` | Monitors CDC natality dashboard 2026 Q1 general fertility rate publication. |
 | `cdc-measles` | `/measles` | `#measles` | `CDC Measles Alerts` | `🦠` | Monitors CDC's 2026 confirmed U.S. measles total cases counter. |
-| `openai-chatgpt-outages` | `/chatgptoutage` | `#chatgptoutage` | `ChatGPT Outage Alerts` | `🟠` | Monitors OpenAI Status for resolved ChatGPT partial/full outage days in the selected ET month. |
+| `openai-chatgpt-outages` | `/chatgptoutage` | `#chatgptoutage` | `ChatGPT Outage Alerts` | `🟠` | Monitors OpenAI Status for resolved ChatGPT partial/full outage days and auto-discovers monthly outage markets. |
 | `claude-code-commits` | `/claudecommits` | `#claudecommits` | `Claude Commits Alerts` | `💻` | Monitors Claude Code Commits Tracker daily data and alerts once when unresolved high/low targets are hit. |
 | `claude-downtime` | `/claudedown` | `#claudedown` | `Claude Downtime Alerts` | `🔴` | Monitors Claude Status claude.ai uptime boxes and alerts once for finalized non-green days. |
 | `cloudflare-critical-incidents` | `/cloudflare` | `#cloudflare-critical` | `Cloudflare Critical Alerts` | `🔴` | Monitors Cloudflare's official incidents API for Critical/red incidents. |
@@ -89,7 +89,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and stale dated URLs are cleared when no queued or undated market is active.
-- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, and NCEI Tornadoes have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
+- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, and NCEI Tornadoes have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 
@@ -158,7 +158,7 @@ Month/year integrations also support:
 - `/nycprecip period year:2026 month:5`
 - `/seattleprecip period year:2026 month:5`
 
-Monthly precipitation and Claude Downtime adapters auto-discover active next-month Polymarket URLs through Gamma public search and keep `year`/`month` settings synchronized with the active queued market.
+Monthly precipitation, ChatGPT Outage, and Claude Downtime adapters auto-discover active next-month Polymarket URLs through Gamma public search and keep `year`/`month` settings synchronized with the active queued market.
 
 Commands are intentionally channel-scoped. A command only executes in the channel owned by the matching adapter.
 Command replies and alerts display timestamps in Singapore local time.

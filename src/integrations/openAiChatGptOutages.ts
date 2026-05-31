@@ -2,6 +2,7 @@ import { fetchWithTimeout } from "../http.js";
 import { parseManualEasternDateTime } from "../marketEnd.js";
 import { parsePolymarketMonthWindow } from "../polymarketQueue.js";
 import { parseSettingsJson } from "../settingsJson.js";
+import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://status.openai.com/";
@@ -11,6 +12,13 @@ const defaultYear = 2026;
 const defaultMonth = 6;
 const easternTimeZone = "America/New_York";
 const qualifyingComponentStatuses = new Set(["partial_outage", "full_outage"]);
+const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
+  searchQuery: "chatgpt outage days",
+  slugPrefix: "of-chatgpt-outage-days-in-",
+  titlePrefix: "# of ChatGPT Outage Days in",
+  lastDiscoveryAtKey: "lastChatGptOutageDiscoveryAt",
+  requiredTagSlugs: ["chatgpt", "outage"]
+};
 
 export type OpenAiChatGptOutageSettings = {
   year: number;
@@ -71,6 +79,9 @@ export const openAiChatGptOutagesAdapter: WebsiteAdapter = {
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
   shouldAlertOnChange: openAiChatGptOutagesShouldAlertOnChange,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshOpenAiChatGptOutagePolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const observedAt = new Date();
     const period = getOpenAiChatGptOutagePeriod(integration);
@@ -109,6 +120,13 @@ export const openAiChatGptOutagesAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export async function refreshOpenAiChatGptOutagePolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  return refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig, now);
+}
 
 export function extractOpenAiChatGptComponentsFromStatusHtml(html: string): OpenAiStatusComponent[] {
   const nameMarker = '\\"name\\":\\"ChatGPT\\"';

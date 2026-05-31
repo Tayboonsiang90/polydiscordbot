@@ -104,6 +104,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("nycprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("seattleprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("claudedown").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("chatgptoutage").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("discord").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
