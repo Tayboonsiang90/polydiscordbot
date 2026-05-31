@@ -593,15 +593,42 @@ async function recognizeImageText(imageUrl: string | undefined): Promise<NytOcrR
       return { text: "", words: [], imageBuffer: Buffer.alloc(0) };
     }
 
-    const imageBuffer = Buffer.from(await response.arrayBuffer());
-    const result = await Tesseract.recognize(imageBuffer, "eng");
+    const ocrImageBuffer = Buffer.from(await response.arrayBuffer());
+    const highlightImageBuffer = await fetchNytHighlightImageBuffer(imageUrl, ocrImageBuffer);
+    const result = await recognizeNytImageWithBlocks(ocrImageBuffer);
     const text = result.data.text.replace(/\s+/g, " ").trim();
     const words = normalizeNytOcrWords(collectTesseractWords(result.data));
-    const ocrResult = { text, words, imageBuffer };
+    const ocrResult = { text, words, imageBuffer: highlightImageBuffer };
     ocrCache.set(imageUrl, ocrResult);
     return ocrResult;
   } catch {
     return { text: "", words: [], imageBuffer: Buffer.alloc(0) };
+  }
+}
+
+async function fetchNytHighlightImageBuffer(imageUrl: string, fallbackBuffer: Buffer): Promise<Buffer> {
+  try {
+    const response = await fetchWithTimeout(
+      imageUrl,
+      { headers: { "user-agent": "Mozilla/5.0", referer: sourceUrl } },
+      30_000
+    );
+    if (!response.ok) {
+      return fallbackBuffer;
+    }
+    const imageBuffer = Buffer.from(await response.arrayBuffer());
+    return imageBuffer.length ? imageBuffer : fallbackBuffer;
+  } catch {
+    return fallbackBuffer;
+  }
+}
+
+async function recognizeNytImageWithBlocks(imageBuffer: Buffer): Promise<Tesseract.RecognizeResult> {
+  const worker = await Tesseract.createWorker("eng");
+  try {
+    return await worker.recognize(imageBuffer, {}, { text: true, blocks: true });
+  } finally {
+    await worker.terminate();
   }
 }
 
@@ -848,6 +875,8 @@ function hasJsonLdType(node: JsonLdNode, type: string): boolean {
 
 function normalizePageImageUrl(value: string, issueDate?: string): string {
   const url = new URL(value);
+  url.searchParams.delete("v");
+  url.searchParams.delete("ver");
   if (issueDate) {
     url.searchParams.set("date", issueDate.replaceAll("-", ""));
   }

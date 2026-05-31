@@ -21,7 +21,7 @@ function pageHtml(): string {
               {
                 "@type": "PublicationIssue",
                 datePublished: "2026-05-18T04:20:00.0000000",
-                thumbnailUrl: "https://t.prcdn.co/img?cid=8302&amp;page=1&amp;date=20260531&amp;width=190"
+                thumbnailUrl: "https://t.prcdn.co/img?cid=8302&amp;page=1&amp;date=20260531&amp;v=51&amp;ver=0&amp;width=190"
               },
               {
                 "@type": "NewsArticle",
