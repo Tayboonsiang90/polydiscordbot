@@ -434,7 +434,7 @@ export function extractNytFrontPageIssue(html: string, pageUrl: string): NytFron
     id: `nyt-front-page-${date}`,
     date,
     pageUrl,
-    pageImageUrl: normalizePageImageUrl(decodeHtmlEntities(thumbnailUrl)),
+    pageImageUrl: normalizePageImageUrl(decodeHtmlEntities(thumbnailUrl), date),
     headlines
   };
 }
@@ -846,8 +846,11 @@ function hasJsonLdType(node: JsonLdNode, type: string): boolean {
   return Array.isArray(node["@type"]) ? node["@type"].includes(type) : node["@type"] === type;
 }
 
-function normalizePageImageUrl(value: string): string {
+function normalizePageImageUrl(value: string, issueDate?: string): string {
   const url = new URL(value);
+  if (issueDate) {
+    url.searchParams.set("date", issueDate.replaceAll("-", ""));
+  }
   url.searchParams.set("width", String(pageImageWidth));
   return url.toString();
 }
