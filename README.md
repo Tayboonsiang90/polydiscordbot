@@ -74,7 +74,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
 | `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
 | `ncei-tornadoes` | `/tornadoes` | `#tornadoes` | `NCEI Tornado Alerts` | `🌪️` | Monitors NCEI U.S. Tornadoes monthly time-series counts and auto-discovers monthly tornado markets. |
-| `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `📰` | Monitors the daily New York print front page on PressReader, OCRs page one, highlights matched strike words, and auto-discovers weekly NYT headline markets. |
+| `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `📰` | Monitors the daily New York print front page, OCRs/highlights matched strike words, and scans the active weekly window on manual checks. |
 
 ## Agent Quick Context
 
@@ -291,7 +291,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Trump Schedule monitors Roll Call's Factba.se calendar for today's ET public schedule, stores a compact daily digest with lid/travel/press/remarks flags, and polls every 15 minutes during 7:00 AM-10:00 PM ET.
 - Trump Truth uses the reachable `https://www.trumpstruth.org/feed` archive feed because direct Truth Social access is Cloudflare-blocked locally; alerts include original Truth Social URLs and an Open Truth link button for verification.
 - Trump Truth parses weekly Polymarket strike terms into `settingsJson`, stores the latest seen Truth Social post ID in `lastValue`, checks archive image descriptions, alt text, and basic OCR output for image-only strike review, auto-discovers upcoming weekly markets, supports active-window archive search with `/trumptruth search`, and only role-tags strike hits.
-- NYT Front Page auto-discovers active weekly NYT headline markets through Gamma search, OCRs the page-one image, and attaches a highlighted PNG when OCR word boxes line up with matched strike terms; if OCR cannot locate the exact word box, the alert still includes the original image and matched text.
+- NYT Front Page auto-discovers active weekly NYT headline markets through Gamma search; scheduled polling checks the latest page, while `/nytfront check` scans every issue date in the active market window and posts highlighted matched pages.
 - TSA passengers parses the date range from the active Polymarket URL slug, sums official TSA daily checkpoint throughput rows for that range, and auto-discovers upcoming weekly TSA markets into the shared queue.
 - Generic dated Polymarket queueing lives in `src/polymarketQueue.ts`; prefer it over adapter-specific queue fields unless the adapter needs extra parsed market state.
 

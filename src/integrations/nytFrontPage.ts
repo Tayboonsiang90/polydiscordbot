@@ -10,7 +10,7 @@ import {
   type PolymarketQueueMarket
 } from "../polymarketQueue.js";
 import { findMatchedStrikeTerms } from "./trumpTruth.js";
-import type { AdapterValue, EventMonitorPost, EventMonitorResult, Integration, WebsiteAdapter } from "./types.js";
+import type { AdapterValue, EventMonitorOptions, EventMonitorPost, EventMonitorResult, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://nytimes.pressreader.com/the-new-york-times/";
 const defaultPolymarketUrl = "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24";
@@ -100,6 +100,7 @@ export const nytFrontPageAdapter: WebsiteAdapter = {
   defaultChannelName: "nytfront",
   alertRoleName: "NYT Front Page Alerts",
   alertRoleEmoji: "\uD83D\uDCF0",
+  manualCheckMode: "historical",
   supportsStrikes: true,
   getPollIntervalMinutes: () => 60,
   getPollIntervalReason: () => "Fixed hourly check for the latest NYT New York print front page",
@@ -111,14 +112,19 @@ export const nytFrontPageAdapter: WebsiteAdapter = {
     const value = formatNytFrontPageValue(enriched);
     return { value, rawValue: value, unit: "NYT New York print front page", observedAt: new Date() };
   },
-  async fetchEventUpdates(integration: Integration): Promise<EventMonitorResult> {
+  async fetchEventUpdates(integration: Integration, options?: EventMonitorOptions): Promise<EventMonitorResult> {
     const settings = parseNytFrontPageSettings(integration.settingsJson);
     const strikeTerms = settings.nytStrikeTerms ?? [];
-    const post = await fetchLatestNytFrontPagePost(strikeTerms, settings.nytParsedFromUrl ?? integration.polymarketUrl ?? defaultPolymarketUrl);
+    const polymarketUrl = settings.nytParsedFromUrl ?? integration.polymarketUrl ?? defaultPolymarketUrl;
+    if (options?.historicalCheck) {
+      return fetchHistoricalNytFrontPageCheck(strikeTerms, polymarketUrl);
+    }
+
+    const post = await fetchLatestNytFrontPagePost(strikeTerms, polymarketUrl);
     return {
       posts: [post],
       strikeTerms,
-      polymarketUrl: settings.nytParsedFromUrl ?? integration.polymarketUrl ?? defaultPolymarketUrl,
+      polymarketUrl,
       observedAt: new Date()
     };
   },
@@ -453,6 +459,79 @@ export async function enrichNytFrontPagePostWithOcr(post: EventMonitorPost, stri
 
 async function fetchLatestNytFrontPagePost(strikeTerms: string[], polymarketUrl: string): Promise<EventMonitorPost> {
   const issueDate = await fetchLatestIssueDate();
+  return fetchNytFrontPagePostForDate(issueDate, strikeTerms, polymarketUrl);
+}
+
+async function fetchHistoricalNytFrontPageCheck(strikeTerms: string[], polymarketUrl: string): Promise<EventMonitorResult> {
+  const issueDates = getNytFrontPageMarketIssueDates(polymarketUrl);
+  if (!issueDates.length) {
+    throw new Error(`Could not parse NYT market date window from Polymarket URL: ${polymarketUrl}`);
+  }
+
+  const posts: EventMonitorPost[] = [];
+  const failures: string[] = [];
+  for (const issueDate of issueDates) {
+    try {
+      const post = await fetchNytFrontPagePostForDate(issueDate, strikeTerms, polymarketUrl);
+      posts.push(await enrichNytFrontPagePostWithOcr(post, strikeTerms));
+    } catch (error) {
+      failures.push(`${issueDate}: ${formatErrorMessage(error)}`);
+    }
+  }
+
+  if (!posts.length) {
+    throw new Error(`Could not fetch any NYT front pages for ${issueDates[0]} to ${issueDates.at(-1)}.`);
+  }
+
+  const newestFirstPosts = posts.sort((left, right) => right.postedAt.getTime() - left.postedAt.getTime());
+  const matchedPosts = posts.filter((post) => post.matchedTerms.length > 0).sort((left, right) => left.postedAt.getTime() - right.postedAt.getTime());
+
+  return {
+    posts: newestFirstPosts,
+    postsAreEnriched: true,
+    strikeTerms,
+    polymarketUrl,
+    checkTitle: "Historical strike check",
+    checkFields: [
+      { name: "Window", value: `${issueDates[0]} to ${issueDates.at(-1)}`, inline: false },
+      { name: "Issues checked", value: String(posts.length), inline: true },
+      { name: "Strike matches", value: String(matchedPosts.length), inline: true },
+      { name: "Strike terms", value: formatStrikeTermsForCheck(strikeTerms), inline: false },
+      {
+        name: "Matches by date",
+        value: matchedPosts.length
+          ? matchedPosts.map((post) => `${formatNytPostIssueDate(post)} — ${post.matchedTerms.join(", ")}\n${post.url}`).join("\n")
+          : "No strike matches found in the checked front pages.",
+        inline: false
+      },
+      ...(failures.length
+        ? [{ name: "Skipped dates", value: failures.slice(0, 5).join("\n"), inline: false }]
+        : [])
+    ],
+    observedAt: new Date()
+  };
+}
+
+export function getNytFrontPageMarketIssueDates(polymarketUrl: string, now = new Date()): string[] {
+  const window = parsePolymarketDateRangeWindow(polymarketUrl, now);
+  if (!window) {
+    return [];
+  }
+
+  const start = getEasternDateParts(new Date(window.startAt));
+  const end = getEasternDateParts(new Date(window.endAt));
+  const dates: string[] = [];
+  const cursor = new Date(Date.UTC(start.year, start.month - 1, start.day));
+  const endDate = new Date(Date.UTC(end.year, end.month - 1, end.day));
+  while (cursor.getTime() <= endDate.getTime()) {
+    dates.push(formatUtcDate(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
+async function fetchNytFrontPagePostForDate(issueDate: string, strikeTerms: string[], polymarketUrl: string): Promise<EventMonitorPost> {
   const pageUrl = `${sourceUrl.replace(/\/$/, "")}/${issueDate.replaceAll("-", "")}/page/1`;
   const response = await fetchWithTimeout(pageUrl, {
     headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
@@ -465,12 +544,15 @@ async function fetchLatestNytFrontPagePost(strikeTerms: string[], polymarketUrl:
   const text = issue.headlines.join("\n");
   return {
     id: issue.id,
-    type: "Front page",
+    type: "NYT front page",
+    sourceLabel: "NYT front page",
+    textFieldName: "Headlines",
     text,
     qualifyingText: text,
     postedAt: new Date(`${issue.date}T04:20:00.000Z`),
     url: issue.pageUrl,
     polymarketUrl,
+    fields: [{ name: "Issue date", value: issue.date, inline: true }],
     imageUrls: [issue.pageImageUrl],
     imageText: "",
     matchedTerms: findMatchedStrikeTerms(text, strikeTerms),
@@ -710,6 +792,37 @@ function formatNytFrontPageValue(post: EventMonitorPost): string {
     post.imageText ? `OCR text:\n${post.imageText}` : "OCR text: none",
     `URL: ${post.url}`
   ].join("\n");
+}
+
+function formatStrikeTermsForCheck(strikeTerms: string[]): string {
+  return strikeTerms.length ? strikeTerms.join(", ") : "none parsed";
+}
+
+function formatNytPostIssueDate(post: EventMonitorPost): string {
+  return post.id.replace("nyt-front-page-", "");
+}
+
+function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getEasternDateParts(date: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day)
+  };
+}
+
+function formatUtcDate(date: Date): string {
+  return `${date.getUTCFullYear()}-${padNumber(date.getUTCMonth() + 1)}-${padNumber(date.getUTCDate())}`;
 }
 
 function extractJsonLdNodes($: cheerio.CheerioAPI): JsonLdNode[] {

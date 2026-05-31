@@ -100,9 +100,14 @@ export type EventMonitorResult = {
   strikeTerms: string[];
   polymarketUrl?: string;
   settingsJson?: string;
+  postsAreEnriched?: boolean;
   checkTitle?: string;
   checkFields?: Array<{ name: string; value: string; inline?: boolean }>;
   observedAt: Date;
+};
+
+export type EventMonitorOptions = {
+  historicalCheck?: boolean;
 };
 
 export type StrikeSearchHit = {
@@ -227,6 +232,7 @@ export type WebsiteAdapter = {
     windowMinutes: number;
     label: string;
   };
+  manualCheckMode?: "latest" | "historical";
   supportsStrikes?: boolean;
   getPollIntervalMinutes?(integration: Integration, now?: Date): number;
   getPollIntervalReason?(integration: Integration, now?: Date): string;
@@ -237,7 +243,7 @@ export type WebsiteAdapter = {
     url: string
   ): { settingsJson: string | null; activeUrl: string | null } | Promise<{ settingsJson: string | null; activeUrl: string | null }>;
   fetchCurrentValue(integration?: Integration): Promise<AdapterValue>;
-  fetchEventUpdates?(integration: Integration): Promise<EventMonitorResult>;
+  fetchEventUpdates?(integration: Integration, options?: EventMonitorOptions): Promise<EventMonitorResult>;
   enrichEventPost?(post: EventMonitorPost, strikeTerms: string[]): Promise<EventMonitorPost>;
   shouldAlertOnEventPost?(post: EventMonitorPost): boolean;
   resolveEventPostChannelIds?(integration: Integration, post: EventMonitorPost): string[];

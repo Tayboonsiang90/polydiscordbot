@@ -50,6 +50,7 @@ export type EventCheckResult = {
 
 export type EventCheckOptions = {
   queueAlerts?: boolean;
+  historicalCheck?: boolean;
 };
 
 const maxEventSeenPostIds = 100;
@@ -128,7 +129,7 @@ export async function checkEventIntegration(
     refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson
       ? database.setSettingsJson(integration.id, refreshedSettingsJson)
       : integration;
-  const result = await adapter.fetchEventUpdates(settingsIntegration);
+  const result = await adapter.fetchEventUpdates(settingsIntegration, { historicalCheck: options.historicalCheck });
   const activeIntegration =
     result.polymarketUrl && result.polymarketUrl !== settingsIntegration.polymarketUrl
       ? database.setPolymarketUrl(settingsIntegration.id, result.polymarketUrl)
@@ -138,8 +139,12 @@ export async function checkEventIntegration(
   const baseSettingsJson = mergeEventSeenPostIds(result.settingsJson ?? activeIntegration.settingsJson, currentIntegration.settingsJson);
   const eventSelection = selectNewEventPosts(result.posts, currentIntegration.lastValue, baseSettingsJson);
   const candidatePosts =
-    currentIntegration.lastValue === null && adapter.shouldAlertOnEventPost ? result.posts.slice(0, 1) : eventSelection.newPosts;
-  const enrichedNewPosts = adapter.enrichEventPost
+    options.historicalCheck
+      ? [...result.posts].reverse()
+      : currentIntegration.lastValue === null && adapter.shouldAlertOnEventPost
+        ? result.posts.slice(0, 1)
+        : eventSelection.newPosts;
+  const enrichedNewPosts = adapter.enrichEventPost && !result.postsAreEnriched
     ? await enrichEventPosts(adapter, candidatePosts, result.strikeTerms)
     : candidatePosts;
   const alertPosts = adapter.shouldAlertOnEventPost

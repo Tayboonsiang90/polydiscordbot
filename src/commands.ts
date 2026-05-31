@@ -8,6 +8,7 @@ import {
   buildClearEmbed,
   buildClearErrorsEmbed,
   buildCheckEmbed,
+  buildEventPostMessagePayload,
   buildEventCheckEmbed,
   buildIntegrationSummaryEmbeds,
   buildIntervalUpdatedEmbed,
@@ -806,8 +807,15 @@ export async function handleAdapterCommand(
     await interaction.deferReply();
     await interaction.editReply(`Checking ${integration.displayName}...`);
     if (adapter.fetchEventUpdates) {
-      const result = await checkEventIntegration(database, integration);
+      const historicalCheck = adapter.manualCheckMode === "historical";
+      const result = await checkEventIntegration(database, integration, { historicalCheck });
       await interaction.editReply({ content: "", embeds: [buildEventCheckEmbed(result)] });
+      if (historicalCheck && result.newPosts.length > 0) {
+        const noPingIntegration = { ...result.integration, alertRoleId: null };
+        for (const post of result.newPosts.slice(0, 10)) {
+          await interaction.followUp(buildEventPostMessagePayload(noPingIntegration, { ...post, mentionAlertRole: false }));
+        }
+      }
     } else {
       const result = await checkIntegration(database, integration);
       await interaction.editReply({ content: "", embeds: [buildCheckEmbed(result)] });

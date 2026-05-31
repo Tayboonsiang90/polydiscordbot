@@ -4,6 +4,7 @@ import {
   extractNytFrontPageIssue,
   extractNytStrikeTermsFromQuestion,
   findNytStrikeTermBoxes,
+  getNytFrontPageMarketIssueDates,
   parseNytFrontPageSettings,
   refreshNytFrontPagePolymarketQueue
 } from "../src/integrations/nytFrontPage.js";
@@ -192,6 +193,15 @@ describe("NYT front page adapter", () => {
       "what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31"
     ]);
     expect(result.activeUrl).toBe("https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24");
+  });
+
+  it("derives all issue dates from a weekly NYT Polymarket URL", () => {
+    expect(
+      getNytFrontPageMarketIssueDates(
+        "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31",
+        new Date("2026-05-31T12:00:00.000Z")
+      )
+    ).toEqual(["2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-05-30", "2026-05-31"]);
   });
 
   it("discovers and activates the current NYT market after the stored week expires", async () => {
