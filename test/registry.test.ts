@@ -11,6 +11,7 @@ const expectedCommandIds = [
   ["basedrevenue", "based-revenue"],
   ["bea", "bea-current-releases"],
   ["blscpi", "bls-cpi-releases"],
+  ["jobsadded", "bls-jobs-added"],
   ["bonbast", "bonbast-usd-irr"],
   ["fertility", "cdc-fertility-rate"],
   ["measles", "cdc-measles"],
@@ -113,6 +114,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("umaproposals").updateTagFilters).toBeDefined();
     expect(getAdapterByCommandName("umadispute").updateAddressLabels).toBeDefined();
     expect(getAdapterByCommandName("eia").getPollIntervalMinutes?.({} as never, new Date("2026-05-12T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("jobsadded").getPollIntervalMinutes?.({ polymarketUrl: "https://polymarket.com/event/how-many-jobs-added-in-may-945" } as never, new Date("2026-06-04T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("trumpschedule").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T13:00:00.000Z"))).toBe(15);
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
