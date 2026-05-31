@@ -15,6 +15,8 @@ export const naturalGasConfig = {
   displayName: "Pyth Natural Gas Strikes",
   search: "NGD",
   feedNamePattern: /^NGD[A-Z]\d$/i,
+  marketSlugPrefix: "what-price-will-ng-hit-in-",
+  marketSearchQuery: "what price will ng hit",
   defaultPolymarketUrl: "https://polymarket.com/event/what-price-will-ng-hit-in-may-2026",
   defaultChannelName: "ngprice",
   alertRoleName: "NG Price Alerts",

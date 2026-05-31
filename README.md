@@ -47,10 +47,10 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `polymarket-clarifications` | `/umaclarifications` | `#uma-clarifications` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
 | `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
 | `polymarket-proposals` | `/umaproposals` | `#uma-proposals` | `UMA Proposal Alerts` | `📨` | Alerts when Polymarket UMA resolution proposals open on-chain for configured Polymarket tags. |
-| `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker and alerts only when live price crosses parsed Polymarket strikes. |
-| `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker and alerts only when live price crosses parsed Polymarket strikes. |
-| `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed and alerts only when live price crosses parsed Polymarket strikes. |
-| `pyth-xauusd-strikes` | `/xauusd` | `#xauusd` | `XAUUSD Price Alerts` | `🥇` | Monitors the Pyth XAUUSD feed and alerts only when live price crosses parsed Polymarket strikes. |
+| `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker, alerts only on strike crossings, and auto-discovers monthly NG price markets. |
+| `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker, alerts only on strike crossings, and auto-discovers monthly WTI price markets. |
+| `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed, alerts only on strike crossings, and auto-discovers monthly silver price markets. |
+| `pyth-xauusd-strikes` | `/xauusd` | `#xauusd` | `XAUUSD Price Alerts` | `🥇` | Monitors the Pyth XAUUSD feed, alerts only on strike crossings, and auto-discovers monthly gold price markets. |
 | `spotify-top-50-usa` | `/spotifyusa` | `#spotifyusa` | `Spotify USA Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - USA for Polymarket resolution checks. |
 | `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global for Polymarket resolution checks. |
 | `strategy-bitcoin-purchases` | `/strategybtc` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active Polymarket date range. |
@@ -90,7 +90,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and stale dated URLs are cleared when no queued or undated market is active.
-- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, and NCEI Tornadoes have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
+- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, NCEI Tornadoes, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 
@@ -265,7 +265,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - UMA Proposal Alerts subscribes to UMA OptimisticOracle `ProposePrice` events on Polygon, watches current and legacy oracle contracts, filters requester addresses to Polymarket UMA requester contracts including the bulletin board adapter, enriches each proposal through CLOB `markets-by-question-id`, and alerts only when the returned market tags match configured `/umaproposals tags` filters.
 - UMA proposal alerts keep question, outcome, market tags, proposer, and times visible; transaction, condition ID, question ID, oracle, requester, request timestamp, and block are behind `Show more`.
 - UMA clarification, proposal, and dispute question fields include a Betmoar market link when the Polymarket market slug is known.
-- Pyth Natural Gas, WTI, XAGUSD, and XAUUSD parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.
+- Pyth Natural Gas, WTI, XAGUSD, and XAUUSD auto-discover matching monthly Polymarket markets, parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.
 - AWS monitors the public AWS Health Dashboard history events JSON and treats status code `3` as the disrupted severity classification.
 - CDC fertility monitors the natality dashboard CSV for the 2026 Q1 general fertility rate row.
 - Cloudflare monitors the official Statuspage incidents API and returns a stable no-critical value unless a Critical/red incident appears.

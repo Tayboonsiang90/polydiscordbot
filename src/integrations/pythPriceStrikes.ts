@@ -1,5 +1,12 @@
 import { fetchWithTimeout } from "../http.js";
+import { parsePolymarketDateRangeWindow, resolveIntegrationPolymarketQueue, type PolymarketQueueMarket, upsertPolymarketQueueUrl } from "../polymarketQueue.js";
+import { parseSettingsJson } from "../settingsJson.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
+
+const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
+const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
+const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
+const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 
 export type PythPriceStrikeConfig = {
   id: string;
@@ -9,6 +16,8 @@ export type PythPriceStrikeConfig = {
   sourceUrl?: string;
   priceFeedsQuery?: string;
   feedNamePattern: RegExp;
+  marketSlugPrefix: string;
+  marketSearchQuery: string;
   defaultPolymarketUrl: string;
   defaultChannelName: string;
   alertRoleName: string;
@@ -51,6 +60,23 @@ type GammaEvent = {
   }[];
 };
 
+type GammaSearchResponse = {
+  events?: GammaSearchEvent[];
+};
+
+type GammaSearchEvent = {
+  slug?: unknown;
+  title?: unknown;
+  active?: unknown;
+  closed?: unknown;
+  archived?: unknown;
+};
+
+type PythPriceDiscoverySettings = {
+  polymarketMarkets?: PolymarketQueueMarket[];
+  lastPythPriceMarketDiscoveryAt?: string;
+};
+
 export function createPythPriceStrikeAdapter(config: PythPriceStrikeConfig): WebsiteAdapter {
   const sourceUrl = config.sourceUrl ?? buildPythExploreUrl(config.search);
   return {
@@ -66,6 +92,16 @@ export function createPythPriceStrikeAdapter(config: PythPriceStrikeConfig): Web
     getPollIntervalReason: () => "Fixed 1-minute live crossing watch; normal price changes do not alert",
     getErrorNoticeWindowMinutes: () => 30,
     shouldAlertOnChange: pythPriceStrikeShouldAlertOnChange,
+    async refreshSettings(integration: Integration, options?: { force?: boolean }): Promise<string> {
+      return (
+        await refreshPythPricePolymarketQueue(integration, config, new Date(), {
+          force: options?.force ?? false
+        })
+      ).settingsJson ?? integration.settingsJson ?? "{}";
+    },
+    upsertPolymarketMarket(integration: Integration, url: string): { settingsJson: string | null; activeUrl: string | null } {
+      return upsertPolymarketQueueUrl(integration, url);
+    },
     async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
       const value = await fetchPythPriceStrikeMonitorValue(config, integration);
       return {
@@ -76,6 +112,44 @@ export function createPythPriceStrikeAdapter(config: PythPriceStrikeConfig): Web
       };
     }
   };
+}
+
+export async function refreshPythPricePolymarketQueue(
+  integration: Integration,
+  config: PythPriceStrikeConfig,
+  now = new Date(),
+  options: { force?: boolean } = {}
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  let resolved = resolveIntegrationPolymarketQueue(integration, now);
+  let settings = parsePythPriceDiscoverySettings(resolved.settingsJson);
+  if (!options.force && !shouldDiscoverPythPriceMarkets(settings, now)) {
+    return resolved;
+  }
+
+  settings = { ...settings, lastPythPriceMarketDiscoveryAt: now.toISOString() };
+  resolved = {
+    settingsJson: JSON.stringify(settings),
+    activeUrl: resolved.activeUrl
+  };
+
+  try {
+    const candidates = await fetchPythPriceMarketSearchCandidates(config, now);
+    for (const candidate of candidates) {
+      resolved = upsertPolymarketQueueUrl(
+        {
+          ...integration,
+          settingsJson: resolved.settingsJson,
+          polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
+        },
+        candidate.url,
+        now
+      );
+    }
+
+    return resolved;
+  } catch {
+    return resolved;
+  }
 }
 
 export async function fetchPythPriceStrikeMonitorValue(
@@ -161,6 +235,30 @@ export function extractPythCandles(data: unknown): PythCandle[] {
     .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
 }
 
+export function normalizePythPriceMarketSearchEvent(
+  event: GammaSearchEvent,
+  config: PythPriceStrikeConfig,
+  now = new Date()
+): { slug: string; url: string } | null {
+  if (
+    event.active === false ||
+    event.closed === true ||
+    event.archived === true ||
+    !isNonEmptyString(event.slug) ||
+    !isNonEmptyString(event.title)
+  ) {
+    return null;
+  }
+
+  const slug = event.slug.toLowerCase();
+  if (!slug.startsWith(config.marketSlugPrefix)) {
+    return null;
+  }
+
+  const url = `https://polymarket.com/event/${event.slug}`;
+  return parsePolymarketDateRangeWindow(url, now) ? { slug: event.slug, url } : null;
+}
+
 export function findPythStrikeCrossings(
   strikes: PythStrike[],
   feed: PythPriceFeed,
@@ -232,6 +330,28 @@ export function filterNewPythStrikeCrossings(
   };
 }
 
+async function fetchPythPriceMarketSearchCandidates(
+  config: PythPriceStrikeConfig,
+  now: Date
+): Promise<Array<{ slug: string; url: string }>> {
+  const searchUrl = new URL(gammaSearchUrl);
+  searchUrl.searchParams.set("q", config.marketSearchQuery);
+  searchUrl.searchParams.set("events_status", "active");
+  searchUrl.searchParams.set("limit_per_type", "20");
+
+  const response = await fetchWithTimeout(searchUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GammaSearchResponse;
+  return (payload.events ?? [])
+    .map((event) => normalizePythPriceMarketSearchEvent(event, config, now))
+    .filter((candidate): candidate is { slug: string; url: string } => candidate !== null);
+}
+
 function isResolvedGammaMarket(market: NonNullable<GammaEvent["markets"]>[number]): boolean {
   if (market.closed || market.archived || market.active === false) {
     return true;
@@ -247,6 +367,88 @@ function isResolvedGammaMarket(market: NonNullable<GammaEvent["markets"]>[number
   } catch {
     return false;
   }
+}
+
+function shouldDiscoverPythPriceMarkets(settings: PythPriceDiscoverySettings, now: Date): boolean {
+  const markets = normalizePythPriceQueueMarkets(settings.polymarketMarkets);
+  if (hasQueuedFutureMarket(markets, now)) {
+    return false;
+  }
+
+  const activeMarket = getActiveMarket(markets, now);
+  const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
+  if (!isDiscoveryIntervalDue(settings.lastPythPriceMarketDiscoveryAt, now, intervalMs)) {
+    return false;
+  }
+
+  if (!activeMarket) {
+    return true;
+  }
+
+  return Date.parse(activeMarket.endAt ?? "") - now.getTime() <= marketDiscoveryLookaheadMs;
+}
+
+function parsePythPriceDiscoverySettings(settingsJson: string | null): PythPriceDiscoverySettings {
+  const settings = parseSettingsJson(settingsJson) as PythPriceDiscoverySettings;
+  return {
+    ...settings,
+    polymarketMarkets: normalizePythPriceQueueMarkets(settings.polymarketMarkets),
+    lastPythPriceMarketDiscoveryAt:
+      typeof settings.lastPythPriceMarketDiscoveryAt === "string" ? settings.lastPythPriceMarketDiscoveryAt : undefined
+  };
+}
+
+function normalizePythPriceQueueMarkets(value: unknown): PolymarketQueueMarket[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const market = item as Partial<PolymarketQueueMarket>;
+    if (!isNonEmptyString(market.url) || !isNonEmptyString(market.slug)) {
+      return [];
+    }
+
+    return [
+      {
+        url: market.url,
+        slug: market.slug,
+        startAt: typeof market.startAt === "string" ? market.startAt : null,
+        endAt: typeof market.endAt === "string" ? market.endAt : null,
+        addedAt: typeof market.addedAt === "string" ? market.addedAt : new Date(0).toISOString()
+      }
+    ];
+  });
+}
+
+function hasQueuedFutureMarket(markets: PolymarketQueueMarket[], now: Date): boolean {
+  return markets.some((market) => Boolean(market.startAt && Date.parse(market.startAt) > now.getTime()));
+}
+
+function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): PolymarketQueueMarket | null {
+  const nowMs = now.getTime();
+  return (
+    markets.find((market) => {
+      if (!market.startAt || !market.endAt) {
+        return false;
+      }
+
+      return nowMs >= Date.parse(market.startAt) && nowMs <= Date.parse(market.endAt);
+    }) ?? null
+  );
+}
+
+function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, intervalMs: number): boolean {
+  if (!lastDiscoveryAt) {
+    return true;
+  }
+
+  const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
+  return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
 }
 
 async function fetchPythStrikes(polymarketUrl: string, fallbackStrikes: PythStrike[] = []): Promise<PythStrike[]> {
@@ -496,4 +698,8 @@ function formatPrice(value: number): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }

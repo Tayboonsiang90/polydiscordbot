@@ -8,6 +8,8 @@ export const xauUsdConfig = {
   sourceUrl: "https://pythdata.app/explore/Metal.XAU%2FUSD",
   priceFeedsQuery: "Metal.XAU/USD",
   feedNamePattern: /^XAUUSD$/i,
+  marketSlugPrefix: "what-price-will-xauusd-hit-in-",
+  marketSearchQuery: "what price will xauusd hit",
   defaultPolymarketUrl: "https://polymarket.com/event/what-price-will-xauusd-hit-in-may-2026",
   defaultChannelName: "xauusd",
   alertRoleName: "XAUUSD Price Alerts",
