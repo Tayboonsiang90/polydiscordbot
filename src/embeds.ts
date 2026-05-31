@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "disc
 import { formatAddressWithLabel, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
 import type { CheckResult, EventCheckResult, SnapshotResult } from "./poller.js";
 import type {
+  AddressLabelImportIssue,
   AddressLabelUpdateResult,
   EventMonitorPost,
   Integration,
@@ -218,13 +219,34 @@ export function buildTagBlocklistEmbed(integration: Integration, result: TagBloc
 }
 
 export function buildAddressLabelsEmbed(integration: Integration, result: AddressLabelUpdateResult): EmbedBuilder {
+  const summaryFields = result.importSummary
+    ? [
+        { name: "Import summary", value: formatAddressImportSummary(result.importSummary), inline: false },
+        ...(result.importSummary.invalidRows.length
+          ? [{ name: "Invalid rows", value: formatAddressImportIssues(result.importSummary.invalidRows), inline: false }]
+          : []),
+        ...(result.importSummary.duplicateRows.length
+          ? [{ name: "Duplicate rows", value: formatAddressImportIssues(result.importSummary.duplicateRows), inline: false }]
+          : []),
+        {
+          name: result.importSummary.dryRun ? "Next step" : "Stored labels",
+          value: result.importSummary.dryRun
+            ? "Rerun with `dry-run:false` to apply these changes."
+            : `${result.addressLabels.length} address label(s) configured.`,
+          inline: false
+        }
+      ]
+    : [
+        ...(result.matchedLabel ? [{ name: "Address", value: formatAddressLabelEntry(result.matchedLabel), inline: false }] : []),
+        { name: "Current labels", value: formatAddressLabelEntries(result.addressLabels), inline: false }
+      ];
+
   return baseEmbed(integration, "Address labels")
     .addFields(
       { name: "Action", value: result.action, inline: true },
       { name: "Changed", value: result.changed ? "yes" : "no", inline: true },
       { name: "Result", value: result.message, inline: false },
-      ...(result.matchedLabel ? [{ name: "Address", value: formatAddressLabelEntry(result.matchedLabel), inline: false }] : []),
-      { name: "Current labels", value: formatAddressLabelEntries(result.addressLabels), inline: false }
+      ...summaryFields
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 }
@@ -638,6 +660,31 @@ function formatAddressLabelEntries(labels: Array<{ address: string; label: strin
 
 function formatAddressLabelEntry(label: { address: string; label: string }): string {
   return `${label.label} | ${label.address}`;
+}
+
+function formatAddressImportSummary(summary: NonNullable<AddressLabelUpdateResult["importSummary"]>): string {
+  return [
+    `Rows read: ${summary.totalRows}`,
+    `Valid rows: ${summary.validRows}`,
+    `Unique labels: ${summary.uniqueLabels}`,
+    `Added: ${summary.added}`,
+    `Updated: ${summary.updated}`,
+    `Unchanged: ${summary.unchanged}`,
+    `Invalid rows: ${summary.invalidRows.length}`,
+    `Duplicate rows: ${summary.duplicateRows.length}`
+  ].join("\n");
+}
+
+function formatAddressImportIssues(issues: AddressLabelImportIssue[]): string {
+  return truncateEmbedValue(
+    issues
+      .slice(0, 10)
+      .map((issue) => {
+        const duplicate = issue.previousLineNumber ? `; previous line ${issue.previousLineNumber}` : "";
+        return `Line ${issue.lineNumber}: ${issue.reason}${duplicate} - ${issue.value}`;
+      })
+      .join("\n") + (issues.length > 10 ? `\n...and ${issues.length - 10} more` : "")
+  );
 }
 
 function formatPriorityValue(label: string, url?: string): string {

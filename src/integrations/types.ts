@@ -153,7 +153,7 @@ export type TagBlocklistUpdateResult = {
   settingsJson: string;
 };
 
-export type AddressLabelAction = "add" | "remove" | "list" | "clear";
+export type AddressLabelAction = "add" | "remove" | "list" | "clear" | "import" | "export";
 
 export type AddressLabelEntry = {
   address: string;
@@ -175,7 +175,33 @@ export type AddressLabelUpdateResult = {
   message: string;
   matchedLabel?: AddressLabelEntry;
   addressLabels: AddressLabelEntry[];
+  importSummary?: AddressLabelImportSummary;
   settingsJson: string;
+};
+
+export type AddressLabelImportIssue = {
+  lineNumber: number;
+  reason: string;
+  value: string;
+  address?: string;
+  previousLineNumber?: number;
+};
+
+export type AddressLabelImportSummary = {
+  dryRun: boolean;
+  totalRows: number;
+  validRows: number;
+  uniqueLabels: number;
+  added: number;
+  updated: number;
+  unchanged: number;
+  invalidRows: AddressLabelImportIssue[];
+  duplicateRows: AddressLabelImportIssue[];
+};
+
+export type AddressLabelUpdateOptions = {
+  importText?: string;
+  dryRun?: boolean;
 };
 
 export type WebsiteAdapter = {
@@ -228,7 +254,8 @@ export type WebsiteAdapter = {
     integration: Integration,
     action: AddressLabelAction,
     addressQuery?: string,
-    labelQuery?: string
+    labelQuery?: string,
+    options?: AddressLabelUpdateOptions
   ): Promise<AddressLabelUpdateResult>;
   getTagFilters?(integration: Integration): TagFilterEntry[];
 };

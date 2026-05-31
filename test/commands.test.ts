@@ -98,6 +98,29 @@ describe("adapter commands", () => {
       expect(options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "analysis" })]));
     }
   });
+
+  it("registers UMA address bulk import and export options", () => {
+    type CommandJson = { name: string; options?: Array<{ name: string; options?: Array<{ name: string; choices?: Array<{ value: string }> }> }> };
+    const command = buildAdapterCommands().find((candidate) => candidate.name === "umaproposals")?.toJSON() as CommandJson | undefined;
+    const addresses = command?.options?.find((option) => option.name === "addresses");
+    const tags = command?.options?.find((option) => option.name === "tags");
+    const tagblocks = command?.options?.find((option) => option.name === "tagblocks");
+    const addressOptions = addresses?.options ?? [];
+    const action = addressOptions.find((option) => option.name === "action");
+    const tagAction = tags?.options?.find((option) => option.name === "action");
+    const tagblockAction = tagblocks?.options?.find((option) => option.name === "action");
+
+    expect(action?.choices?.map((choice) => choice.value)).toEqual(expect.arrayContaining(["add", "remove", "list", "clear", "import", "export"]));
+    expect(tagAction?.choices?.map((choice) => choice.value)).toEqual(["add", "remove", "list", "clear"]);
+    expect(tagblockAction?.choices?.map((choice) => choice.value)).toEqual(["add", "remove", "list", "clear"]);
+    expect(addressOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "file" }),
+        expect.objectContaining({ name: "dry-run" })
+      ])
+    );
+  });
+
   it("formats the last stored value with retrieval time", () => {
     const embed = buildLastEmbed(checkedIntegration).toJSON();
 

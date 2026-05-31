@@ -1,5 +1,6 @@
 ﻿import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction, type TextChannel } from "discord.js";
 import type { BotDatabase } from "./database.js";
+import { AttachmentBuilder, type Attachment } from "discord.js";
 import type { Guild } from "discord.js";
 import type { Message } from "discord.js";
 import {
@@ -22,6 +23,7 @@ import {
   buildTagSearchEmbed,
   buildStatusEmbed
 } from "./embeds.js";
+import { exportAddressLabelsCsv, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
 import { getAdapter, getAdapterByCommandName, listAdapters } from "./integrations/registry.js";
 import {
   getPolymarketProposalTagFilterByChannelId,
@@ -34,6 +36,7 @@ import {
 import { parseTrumpTruthSettings, upsertTrumpTruthPolymarketMarket } from "./integrations/trumpTruth.js";
 import type {
   AddressLabelAction,
+  AddressLabelUpdateOptions,
   Integration,
   TagFilterAction,
   TagFilterEntry,
@@ -54,6 +57,8 @@ import {
 
 const roleChannelName = "market-alert-roles";
 const checkFailedTitleSuffix = " - Check failed";
+const maxAddressImportBytes = 256_000;
+const addressImportDownloadTimeoutMs = 10_000;
 
 export function buildAdapterCommands() {
   return listAdapters().map((adapter) => {
@@ -253,7 +258,9 @@ export function buildAdapterCommands() {
                 { name: "add", value: "add" },
                 { name: "remove", value: "remove" },
                 { name: "list", value: "list" },
-                { name: "clear", value: "clear" }
+                { name: "clear", value: "clear" },
+                { name: "import", value: "import" },
+                { name: "export", value: "export" }
               )
           )
           .addStringOption((option) =>
@@ -271,6 +278,12 @@ export function buildAdapterCommands() {
               .setRequired(false)
               .setMinLength(1)
               .setMaxLength(80)
+          )
+          .addAttachmentOption((option) =>
+            option.setName("file").setDescription("CSV or text file for bulk import").setRequired(false)
+          )
+          .addBooleanOption((option) =>
+            option.setName("dry-run").setDescription("Preview import without saving. Defaults to true.").setRequired(false)
           )
       );
     }
@@ -556,6 +569,51 @@ export async function handleAdapterCommand(
     const action = interaction.options.getString("action", true) as AddressLabelAction;
     const addressQuery = interaction.options.getString("address")?.trim();
     const labelQuery = interaction.options.getString("name")?.trim();
+    if (action === "export") {
+      const result = await adapter.updateAddressLabels(integration, action);
+      const csv = exportAddressLabelsCsv(getAddressLabelsFromSettingsJson(integration.settingsJson));
+      const attachment = new AttachmentBuilder(Buffer.from(csv, "utf8"), { name: "uma-address-labels.csv" });
+      await interaction.reply({
+        embeds: [buildAddressLabelsEmbed(integration, { ...result, message: `Exported ${result.addressLabels.length} address label(s).` })],
+        files: [attachment],
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    let updateOptions: AddressLabelUpdateOptions | undefined;
+    if (action === "import") {
+      const attachment = interaction.options.getAttachment("file");
+      if (!attachment) {
+        await interaction.reply({ content: "`import` needs a CSV or text file attachment.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+
+      const dryRun = interaction.options.getBoolean("dry-run") ?? true;
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      updateOptions = {
+        importText: await fetchAddressImportAttachmentText(attachment),
+        dryRun
+      };
+      const result = await adapter.updateAddressLabels(integration, action, undefined, undefined, updateOptions);
+      const updated =
+        !dryRun && result.settingsJson !== integration.settingsJson
+          ? database.setSettingsJson(integration.id, result.settingsJson)
+          : integration;
+      const syncedCount = dryRun
+        ? 1
+        : await syncUmaAddressLabels(database, interaction.guild.id, updated.id, action, undefined, undefined, updateOptions);
+      await interaction.editReply({
+        embeds: [
+          buildAddressLabelsEmbed(updated, {
+            ...result,
+            message: syncedCount > 1 ? `${result.message} Synced across ${syncedCount} UMA integrations.` : result.message
+          })
+        ]
+      });
+      return;
+    }
+
     if ((action === "add" || action === "remove") && !addressQuery) {
       await interaction.reply({ content: "`add` and `remove` need an EVM address.", flags: MessageFlags.Ephemeral });
       return;
@@ -909,6 +967,26 @@ async function fetchTextChannelById(guild: Guild, channelId: string): Promise<Te
   return channel?.type === ChannelType.GuildText ? channel : null;
 }
 
+async function fetchAddressImportAttachmentText(attachment: Attachment): Promise<string> {
+  if (attachment.size > maxAddressImportBytes) {
+    throw new Error(`Import file is too large. Keep it under ${Math.floor(maxAddressImportBytes / 1024)} KB.`);
+  }
+
+  const response = await fetch(attachment.url, {
+    headers: { "user-agent": "PolymarketResolutionMonitorBot/0.1" },
+    signal: AbortSignal.timeout(addressImportDownloadTimeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`Could not download import file: HTTP ${response.status}`);
+  }
+
+  const text = await response.text();
+  if (Buffer.byteLength(text, "utf8") > maxAddressImportBytes) {
+    throw new Error(`Import file is too large. Keep it under ${Math.floor(maxAddressImportBytes / 1024)} KB.`);
+  }
+  return text;
+}
+
 function findTextChannelByName(guild: Guild, channelName: string): TextChannel | undefined {
   return guild.channels.cache.find((channel) => channel.type === ChannelType.GuildText && channel.name === channelName) as
     | TextChannel
@@ -926,7 +1004,8 @@ async function syncUmaAddressLabels(
   sourceIntegrationId: number,
   action: AddressLabelAction,
   addressQuery?: string,
-  labelQuery?: string
+  labelQuery?: string,
+  options?: AddressLabelUpdateOptions
 ): Promise<number> {
   let syncedCount = 1;
   for (const integration of database.listIntegrations()) {
@@ -939,7 +1018,7 @@ async function syncUmaAddressLabels(
       continue;
     }
 
-    const result = await adapter.updateAddressLabels(integration, action, addressQuery, labelQuery);
+    const result = await adapter.updateAddressLabels(integration, action, addressQuery, labelQuery, options);
     if (result.settingsJson !== integration.settingsJson) {
       database.setSettingsJson(integration.id, result.settingsJson);
     }

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  exportAddressLabelsCsv,
   fetchPolymarketAddressProfileStatus,
   formatAddressWithLabel,
   getAddressLabelsFromSettingsJson,
+  importAddressLabelsInSettingsJson,
   testOnlyAddressLabelHelpers,
   updateAddressLabelsInSettingsJson
 } from "../src/addressLabels.js";
@@ -60,6 +62,65 @@ describe("address labels", () => {
         })
       )
     ).toEqual([{ address: "0x2222222222222222222222222222222222222222", label: "Known Disputer" }]);
+  });
+
+  it("previews and applies bulk address label imports", () => {
+    const existingSettingsJson = JSON.stringify({
+      lastScannedBlock: 100,
+      addressLabels: [
+        { address: "0x1111111111111111111111111111111111111111", label: "Old Maker" },
+        { address: "0x5555555555555555555555555555555555555555", label: "Existing Only" }
+      ]
+    });
+    const importText = [
+      "name,address",
+      "Wintermute,0x2222222222222222222222222222222222222222",
+      "0x1111111111111111111111111111111111111111, Updated Maker",
+      "not valid",
+      "0x3333333333333333333333333333333333333333",
+      "GSR = 0x4444444444444444444444444444444444444444",
+      "Dupe One 0x2222222222222222222222222222222222222222",
+      "Dupe Final 0x2222222222222222222222222222222222222222"
+    ].join("\n");
+
+    const preview = importAddressLabelsInSettingsJson(existingSettingsJson, importText);
+
+    expect(preview.changed).toBe(false);
+    expect(preview.addressLabels).toEqual([
+      { address: "0x5555555555555555555555555555555555555555", label: "Existing Only" },
+      { address: "0x1111111111111111111111111111111111111111", label: "Old Maker" }
+    ]);
+    expect(preview.importSummary).toMatchObject({
+      dryRun: true,
+      totalRows: 7,
+      validRows: 5,
+      uniqueLabels: 3,
+      added: 2,
+      updated: 1,
+      unchanged: 0
+    });
+    expect(preview.importSummary?.invalidRows.map((row) => row.reason)).toEqual(["missing 0x address", "missing nickname"]);
+    expect(preview.importSummary?.duplicateRows).toHaveLength(2);
+
+    const applied = importAddressLabelsInSettingsJson(existingSettingsJson, importText, { dryRun: false });
+
+    expect(applied.changed).toBe(true);
+    expect(JSON.parse(applied.settingsJson)).toMatchObject({ lastScannedBlock: 100 });
+    expect(applied.addressLabels).toEqual([
+      { address: "0x2222222222222222222222222222222222222222", label: "Dupe Final" },
+      { address: "0x5555555555555555555555555555555555555555", label: "Existing Only" },
+      { address: "0x4444444444444444444444444444444444444444", label: "GSR" },
+      { address: "0x1111111111111111111111111111111111111111", label: "Updated Maker" }
+    ]);
+  });
+
+  it("exports address labels as CSV", () => {
+    expect(
+      exportAddressLabelsCsv([
+        { address: "0x1111111111111111111111111111111111111111", label: 'Maker, "One"' },
+        { address: "0x2222222222222222222222222222222222222222", label: "Simple Maker" }
+      ])
+    ).toBe('name,address\n"Maker, ""One""",0x1111111111111111111111111111111111111111\nSimple Maker,0x2222222222222222222222222222222222222222\n');
   });
 
   it("checks Polymarket Data API trades before adding a profile link", async () => {

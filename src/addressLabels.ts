@@ -1,6 +1,9 @@
 import type {
   AddressLabelAction,
   AddressLabelEntry,
+  AddressLabelImportIssue,
+  AddressLabelImportSummary,
+  AddressLabelUpdateOptions,
   AddressLabelUpdateResult,
   AddressProfileStatus,
   EventMonitorPost
@@ -29,19 +32,31 @@ export function updateAddressLabelsInSettingsJson(
   settingsJson: string | null,
   action: AddressLabelAction,
   addressQuery?: string,
-  labelQuery?: string
+  labelQuery?: string,
+  options: AddressLabelUpdateOptions = {}
 ): AddressLabelUpdateResult {
   const settings = parseSettingsJson(settingsJson);
   const addressLabels = getAddressLabelsFromSettings(settings);
 
-  if (action === "list") {
+  if (action === "list" || action === "export") {
     return {
       action,
       changed: false,
-      message: addressLabels.length ? `${addressLabels.length} address label(s) configured.` : "No address labels configured.",
+      message: addressLabels.length
+        ? `${addressLabels.length} address label(s) configured.`
+        : action === "export"
+          ? "No address labels configured; exported an empty CSV template."
+          : "No address labels configured.",
       addressLabels,
       settingsJson: settingsJson ?? JSON.stringify({ ...settings, addressLabels })
     };
+  }
+
+  if (action === "import") {
+    if (options.importText === undefined) {
+      throw new Error("Import needs an attached CSV or text file.");
+    }
+    return importAddressLabelsInSettingsJson(settingsJson, options.importText, { dryRun: options.dryRun ?? true });
   }
 
   if (action === "clear") {
@@ -94,6 +109,69 @@ export function updateAddressLabelsInSettingsJson(
   }
 
   throw new Error(`Unsupported address label action: ${action}`);
+}
+
+export function importAddressLabelsInSettingsJson(
+  settingsJson: string | null,
+  importText: string,
+  options: { dryRun?: boolean } = {}
+): AddressLabelUpdateResult {
+  const settings = parseSettingsJson(settingsJson);
+  const addressLabels = getAddressLabelsFromSettings(settings);
+  const dryRun = options.dryRun ?? true;
+  const parsed = parseAddressLabelImport(importText);
+  const existingByAddress = new Map(addressLabels.map((entry) => [entry.address, entry]));
+  const importedByAddress = new Map(parsed.labels.map((entry) => [entry.address, entry]));
+
+  let added = 0;
+  let updated = 0;
+  let unchanged = 0;
+  for (const entry of importedByAddress.values()) {
+    const existing = existingByAddress.get(entry.address);
+    if (!existing) {
+      added += 1;
+    } else if (existing.label !== entry.label) {
+      updated += 1;
+    } else {
+      unchanged += 1;
+    }
+  }
+
+  const nextLabels = uniqueAddressLabels([
+    ...addressLabels.filter((entry) => !importedByAddress.has(entry.address)),
+    ...importedByAddress.values()
+  ]).sort(compareAddressLabels);
+  const summary: AddressLabelImportSummary = {
+    dryRun,
+    totalRows: parsed.totalRows,
+    validRows: parsed.validRows,
+    uniqueLabels: importedByAddress.size,
+    added,
+    updated,
+    unchanged,
+    invalidRows: parsed.invalidRows,
+    duplicateRows: parsed.duplicateRows
+  };
+  const changed = added + updated > 0;
+  const changeText = `${added} add, ${updated} update, ${unchanged} unchanged`;
+
+  return {
+    action: "import",
+    changed: !dryRun && changed,
+    message: dryRun
+      ? `Import preview: ${changeText}. Rerun with dry-run:false to apply.`
+      : changed
+        ? `Imported address labels: ${changeText}.`
+        : `Import completed: ${changeText}.`,
+    addressLabels: dryRun ? addressLabels : nextLabels,
+    importSummary: summary,
+    settingsJson: dryRun ? settingsJson ?? JSON.stringify({ ...settings, addressLabels }) : JSON.stringify({ ...settings, addressLabels: nextLabels })
+  };
+}
+
+export function exportAddressLabelsCsv(labels: AddressLabelEntry[]): string {
+  const lines = ["name,address", ...labels.map((entry) => `${escapeCsvValue(entry.label)},${entry.address}`)];
+  return `${lines.join("\n")}\n`;
 }
 
 export async function enrichEventPostAddressProfiles(post: EventMonitorPost): Promise<EventMonitorPost> {
@@ -207,6 +285,100 @@ function sanitizeAddressLabel(value: unknown): AddressLabelEntry | null {
   return address && label ? { address, label } : null;
 }
 
+function parseAddressLabelImport(importText: string): {
+  labels: AddressLabelEntry[];
+  totalRows: number;
+  validRows: number;
+  invalidRows: AddressLabelImportIssue[];
+  duplicateRows: AddressLabelImportIssue[];
+} {
+  const labelsByAddress = new Map<string, AddressLabelEntry>();
+  const lineByAddress = new Map<string, number>();
+  const invalidRows: AddressLabelImportIssue[] = [];
+  const duplicateRows: AddressLabelImportIssue[] = [];
+  let totalRows = 0;
+  let validRows = 0;
+
+  const lines = importText.replace(/^\uFEFF/, "").split(/\r?\n/);
+  for (const [index, rawLine] of lines.entries()) {
+    const lineNumber = index + 1;
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    if (isAddressImportHeader(line)) {
+      continue;
+    }
+
+    totalRows += 1;
+    const addressMatches = [...line.matchAll(/0x[0-9a-fA-F]{40}/g)];
+    if (addressMatches.length === 0) {
+      invalidRows.push({ lineNumber, reason: "missing 0x address", value: truncateIssueValue(line) });
+      continue;
+    }
+    if (addressMatches.length > 1) {
+      invalidRows.push({ lineNumber, reason: "multiple 0x addresses", value: truncateIssueValue(line) });
+      continue;
+    }
+
+    const match = addressMatches[0];
+    const address = normalizeAddress(match[0]);
+    const label = normalizeLabel(extractImportLabel(line, match.index ?? 0, match[0].length));
+    if (!address) {
+      invalidRows.push({ lineNumber, reason: "invalid 0x address", value: truncateIssueValue(line) });
+      continue;
+    }
+    if (!label) {
+      invalidRows.push({ lineNumber, reason: "missing nickname", value: truncateIssueValue(line), address });
+      continue;
+    }
+
+    validRows += 1;
+    const previousLineNumber = lineByAddress.get(address);
+    if (previousLineNumber !== undefined) {
+      duplicateRows.push({
+        lineNumber,
+        previousLineNumber,
+        reason: "duplicate address; last row wins",
+        value: truncateIssueValue(line),
+        address
+      });
+    }
+    labelsByAddress.set(address, { address, label });
+    lineByAddress.set(address, lineNumber);
+  }
+
+  return {
+    labels: [...labelsByAddress.values()].sort(compareAddressLabels),
+    totalRows,
+    validRows,
+    invalidRows,
+    duplicateRows
+  };
+}
+
+function isAddressImportHeader(line: string): boolean {
+  const normalized = line.toLowerCase();
+  return !addressPattern.test(line) && normalized.includes("address") && /(name|nickname|label)/i.test(normalized);
+}
+
+function extractImportLabel(line: string, addressStart: number, addressLength: number): string {
+  return `${line.slice(0, addressStart)} ${line.slice(addressStart + addressLength)}`
+    .trim()
+    .replace(/^[\s,;:=|\-"'`]+|[\s,;:=|\-"'`]+$/g, "")
+    .replace(/^name\s*[:=]\s*/i, "")
+    .replace(/^nickname\s*[:=]\s*/i, "")
+    .replace(/^label\s*[:=]\s*/i, "")
+    .replace(/[\t ]+/g, " ")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+}
+
+function truncateIssueValue(value: string): string {
+  return value.length > 140 ? `${value.slice(0, 137)}...` : value;
+}
+
 function normalizeAddressOrThrow(address: string | undefined): string {
   const normalized = normalizeAddress(address);
   if (!normalized) {
@@ -246,6 +418,10 @@ function compareAddressLabels(left: AddressLabelEntry, right: AddressLabelEntry)
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function escapeCsvValue(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 export const testOnlyAddressLabelHelpers = {

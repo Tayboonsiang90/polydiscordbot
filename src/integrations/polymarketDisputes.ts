@@ -12,6 +12,7 @@ import {
 import type {
   AdapterValue,
   AddressLabelAction,
+  AddressLabelUpdateOptions,
   AddressLabelUpdateResult,
   EventMonitorPost,
   EventMonitorResult,
@@ -127,9 +128,10 @@ export const polymarketDisputesAdapter: WebsiteAdapter = {
     integration: Integration,
     action: AddressLabelAction,
     addressQuery?: string,
-    labelQuery?: string
+    labelQuery?: string,
+    options?: AddressLabelUpdateOptions
   ): Promise<AddressLabelUpdateResult> {
-    return updateAddressLabelsInSettingsJson(integration.settingsJson, action, addressQuery, labelQuery);
+    return updateAddressLabelsInSettingsJson(integration.settingsJson, action, addressQuery, labelQuery, options);
   }
 };
 
