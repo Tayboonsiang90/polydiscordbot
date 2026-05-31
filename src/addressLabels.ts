@@ -14,6 +14,7 @@ const addressPattern = /^0x[0-9a-fA-F]{40}$/;
 const polymarketTradesApiUrl = "https://data-api.polymarket.com/trades";
 const polymarketProfileBaseUrl = "https://polymarket.com";
 const profileCacheMs = 10 * 60_000;
+const profileErrorCacheMs = 60_000;
 const profileLookupTimeoutMs = 2_500;
 
 type ProfileCacheEntry = {
@@ -232,12 +233,15 @@ export async function fetchPolymarketAddressProfileStatus(
     }
 
     const payload = (await response.json()) as unknown;
-    status = { ...baseStatus, hasTrades: Array.isArray(payload) && payload.length > 0 };
+    if (!Array.isArray(payload)) {
+      throw new Error("Unexpected Polymarket trades response");
+    }
+    status = { ...baseStatus, hasTrades: payload.length > 0 };
   } catch (error) {
     status = { ...baseStatus, error: formatError(error) };
   }
 
-  profileCache.set(normalized, { status, expiresAtMs: now.getTime() + profileCacheMs });
+  profileCache.set(normalized, { status, expiresAtMs: now.getTime() + (status.error ? profileErrorCacheMs : profileCacheMs) });
   return status;
 }
 
@@ -260,8 +264,6 @@ export function formatAddressWithLabel(
   }
   if (profileForAddress?.hasTrades === false) {
     lines.push("Polymarket: no trades found");
-  } else if (profileForAddress?.error) {
-    lines.push("Polymarket: profile check failed");
   }
   return lines.join("\n");
 }

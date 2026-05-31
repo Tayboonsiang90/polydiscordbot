@@ -157,4 +157,25 @@ describe("address labels", () => {
       "Known Trader ([Polymarket](https://polymarket.com/0x3333333333333333333333333333333333333333))\n0x3333333333333333333333333333333333333333"
     );
   });
+
+  it("does not show transient Polymarket profile check failures in alert address fields", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("service unavailable", { status: 503 }))
+    );
+
+    const status = await fetchPolymarketAddressProfileStatus("0x4444444444444444444444444444444444444444");
+
+    expect(status).toMatchObject({
+      address: "0x4444444444444444444444444444444444444444",
+      error: "HTTP 503"
+    });
+    expect(
+      formatAddressWithLabel(
+        "0x4444444444444444444444444444444444444444",
+        [{ address: "0x4444444444444444444444444444444444444444", label: "Known Trader" }],
+        status
+      )
+    ).toBe("Known Trader\n0x4444444444444444444444444444444444444444");
+  });
 });
