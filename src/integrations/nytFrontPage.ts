@@ -483,8 +483,9 @@ async function fetchHistoricalNytFrontPageCheck(strikeTerms: string[], polymarke
     throw new Error(`Could not fetch any NYT front pages for ${issueDates[0]} to ${issueDates.at(-1)}.`);
   }
 
-  const newestFirstPosts = posts.sort((left, right) => right.postedAt.getTime() - left.postedAt.getTime());
-  const matchedPosts = posts.filter((post) => post.matchedTerms.length > 0).sort((left, right) => left.postedAt.getTime() - right.postedAt.getTime());
+  const newestFirstPosts = [...posts].sort((left, right) => right.postedAt.getTime() - left.postedAt.getTime());
+  const chronologicalPosts = [...posts].sort((left, right) => left.postedAt.getTime() - right.postedAt.getTime());
+  const matchedPosts = chronologicalPosts.filter((post) => post.matchedTerms.length > 0);
 
   return {
     posts: newestFirstPosts,
@@ -497,19 +498,26 @@ async function fetchHistoricalNytFrontPageCheck(strikeTerms: string[], polymarke
       { name: "Issues checked", value: String(posts.length), inline: true },
       { name: "Strike matches", value: String(matchedPosts.length), inline: true },
       { name: "Strike terms", value: formatStrikeTermsForCheck(strikeTerms), inline: false },
-      {
-        name: "Matches by date",
-        value: matchedPosts.length
-          ? matchedPosts.map((post) => `${formatNytPostIssueDate(post)} — ${post.matchedTerms.join(", ")}\n${post.url}`).join("\n")
-          : "No strike matches found in the checked front pages.",
-        inline: false
-      },
+      { name: "Checked dates", value: formatNytHistoricalIssueRows(chronologicalPosts), inline: false },
       ...(failures.length
         ? [{ name: "Skipped dates", value: failures.slice(0, 5).join("\n"), inline: false }]
         : [])
     ],
     observedAt: new Date()
   };
+}
+
+export function formatNytHistoricalIssueRows(posts: EventMonitorPost[]): string {
+  if (!posts.length) {
+    return "No front pages checked.";
+  }
+
+  return posts
+    .map((post) => {
+      const matches = post.matchedTerms.length ? post.matchedTerms.join(", ") : "no matches";
+      return `${formatNytPostIssueDateWithWeekday(post)} - ${matches}\n${post.url}`;
+    })
+    .join("\n");
 }
 
 export function getNytFrontPageMarketIssueDates(polymarketUrl: string, now = new Date()): string[] {
@@ -827,6 +835,18 @@ function formatStrikeTermsForCheck(strikeTerms: string[]): string {
 
 function formatNytPostIssueDate(post: EventMonitorPost): string {
   return post.id.replace("nyt-front-page-", "");
+}
+
+function formatNytPostIssueDateWithWeekday(post: EventMonitorPost): string {
+  const issueDate = formatNytPostIssueDate(post);
+  return `${issueDate} (${formatUtcWeekday(issueDate)})`;
+}
+
+function formatUtcWeekday(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long" }).format(
+    new Date(Date.UTC(year, month - 1, day, 12))
+  );
 }
 
 function formatErrorMessage(error: unknown): string {

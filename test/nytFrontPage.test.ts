@@ -4,6 +4,7 @@ import {
   extractNytFrontPageIssue,
   extractNytStrikeTermsFromQuestion,
   findNytStrikeTermBoxes,
+  formatNytHistoricalIssueRows,
   getNytFrontPageMarketIssueDates,
   parseNytFrontPageSettings,
   refreshNytFrontPagePolymarketQueue
@@ -202,6 +203,44 @@ describe("NYT front page adapter", () => {
         new Date("2026-05-31T12:00:00.000Z")
       )
     ).toEqual(["2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-05-30", "2026-05-31"]);
+  });
+
+  it("formats historical NYT checked dates with weekdays and no-match rows", () => {
+    expect(
+      formatNytHistoricalIssueRows([
+        {
+          id: "nyt-front-page-2026-05-28",
+          type: "NYT front page",
+          text: "",
+          qualifyingText: "",
+          postedAt: new Date("2026-05-28T04:20:00.000Z"),
+          url: "https://nytimes.pressreader.com/the-new-york-times/20260528/page/1",
+          imageUrls: [],
+          imageText: "",
+          matchedTerms: [],
+          strikeTerms: ["Garden"]
+        },
+        {
+          id: "nyt-front-page-2026-05-31",
+          type: "NYT front page",
+          text: "",
+          qualifyingText: "",
+          postedAt: new Date("2026-05-31T04:20:00.000Z"),
+          url: "https://nytimes.pressreader.com/the-new-york-times/20260531/page/1",
+          imageUrls: [],
+          imageText: "",
+          matchedTerms: ["Border", "Senate"],
+          strikeTerms: ["Border", "Senate"]
+        }
+      ])
+    ).toBe(
+      [
+        "2026-05-28 (Thursday) - no matches",
+        "https://nytimes.pressreader.com/the-new-york-times/20260528/page/1",
+        "2026-05-31 (Sunday) - Border, Senate",
+        "https://nytimes.pressreader.com/the-new-york-times/20260531/page/1"
+      ].join("\n")
+    );
   });
 
   it("discovers and activates the current NYT market after the stored week expires", async () => {
