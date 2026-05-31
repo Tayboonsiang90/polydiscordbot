@@ -97,6 +97,71 @@ describe("HKO Hong Kong precipitation adapter", () => {
     );
   });
 
+  it("carries previous alpha rainfall until Daily Extract catches up", () => {
+    const official = extractHkPrecipitationOfficialValue(
+      {
+        stn: {
+          data: [
+            {
+              month: 5,
+              dayData: [
+                ["28", "1008.1", "30.7", "28.0", "25.9", "25.0", "84", "88", "  0.0"],
+                ["Mean/Total", "1011.0", "27.7", "25.3", "23.8", "22.2", "83", "84", "215.0"]
+              ]
+            }
+          ]
+        }
+      },
+      { year: 2026, month: 5 }
+    );
+    const previousValue = [
+      "Current total: 227.2 mm (2026-05)",
+      "Data status: alpha daily report added",
+      "Official Daily Extract total: 215.0 mm",
+      "Official latest day: 28",
+      "Yesterday report rainfall: 12.2 mm (2026-05-29)"
+    ].join("\n");
+    const yesterday = extractHkoYesterdayRainfall(`
+      <span>Bulletin issued at 00:15 HKT 31/May/2026</span>
+      <pre>Rainfall                                    0.0 mm</pre>
+    `);
+
+    const value = buildHkPrecipitationAlphaValue(official, yesterday, { year: 2026, month: 5 }, previousValue);
+
+    expect(value).toContain("Current total: 227.2 mm (2026-05)");
+    expect(value).toContain("Alpha pending daily reports: 2026-05-29: 12.2 mm; 2026-05-30: 0.0 mm");
+  });
+
+  it("drops carried alpha rainfall after Daily Extract includes that day", () => {
+    const official = extractHkPrecipitationOfficialValue(
+      {
+        stn: {
+          data: [
+            {
+              month: 5,
+              dayData: [
+                ["29", "1008.1", "30.7", "28.0", "25.9", "25.0", "84", "88", "  12.2"],
+                ["Mean/Total", "1011.0", "27.7", "25.3", "23.8", "22.2", "83", "84", "227.2"]
+              ]
+            }
+          ]
+        }
+      },
+      { year: 2026, month: 5 }
+    );
+    const previousValue = "Alpha pending daily reports: 2026-05-29: 12.2 mm; 2026-05-30: 0.0 mm";
+    const yesterday = extractHkoYesterdayRainfall(`
+      <span>Bulletin issued at 00:15 HKT 31/May/2026</span>
+      <pre>Rainfall                                    0.0 mm</pre>
+    `);
+
+    const value = buildHkPrecipitationAlphaValue(official, yesterday, { year: 2026, month: 5 }, previousValue);
+
+    expect(value).toContain("Current total: 227.2 mm (2026-05)");
+    expect(value).toContain("Alpha pending daily reports: 2026-05-30: 0.0 mm");
+    expect(value).not.toContain("2026-05-29: 12.2 mm");
+  });
+
   it("does not alert when only HK alpha metadata changes", () => {
     expect(
       hkPrecipShouldAlertOnChange(

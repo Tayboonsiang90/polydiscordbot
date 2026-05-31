@@ -6,7 +6,7 @@ const singaporeFormatter = new Intl.DateTimeFormat("en-SG", {
   hour: "2-digit",
   minute: "2-digit",
   second: "2-digit",
-  hour12: false
+  hourCycle: "h23"
 });
 
 export function formatSingaporeDateTime(value: Date | string | null): string {

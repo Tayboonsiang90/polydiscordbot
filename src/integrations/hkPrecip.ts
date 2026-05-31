@@ -40,6 +40,12 @@ type HkPrecipOfficialValue = {
   value: string;
 };
 
+type HkoAlphaRainfallObservation = {
+  date: string;
+  rainfallText: string;
+  rainfall: number;
+};
+
 export type HkoYesterdayRainfall = {
   issuedDate: string;
   rainfallText: string;
@@ -122,21 +128,21 @@ export function extractHkoYesterdayRainfall(html: string): HkoYesterdayRainfall 
 export function buildHkPrecipitationAlphaValue(
   official: HkPrecipOfficialValue,
   yesterday: HkoYesterdayRainfall | null,
-  settings: HkPrecipSettings
+  settings: HkPrecipSettings,
+  previousValue: string | null = null
 ): string {
   const period = `${settings.year}-${padMonth(settings.month)}`;
-  const canAddYesterday =
-    official.total !== null &&
-    yesterday !== null &&
-    yesterday.rainfall !== null &&
-    shouldAddYesterdayRainfall(official, yesterday, settings);
-  const alphaTotal = canAddYesterday && yesterday ? (official.total! + yesterday.rainfall!).toFixed(1) : null;
+  const alphaObservations = getPendingAlphaObservations(previousValue, official, yesterday, settings);
+  const alphaRainfall = alphaObservations.reduce((sum, observation) => sum + observation.rainfall, 0);
+  const hasAlpha = official.total !== null && alphaObservations.length > 0;
+  const alphaTotal = hasAlpha ? (official.total! + alphaRainfall).toFixed(1) : null;
 
   return [
     `Current total: ${alphaTotal ?? official.totalText} mm (${period})`,
-    `Data status: ${alphaTotal ? "alpha daily report added" : "official daily extract"}`,
+    `Data status: ${hasAlpha ? "alpha daily reports added" : "official daily extract"}`,
     `Official Daily Extract total: ${official.totalText} mm`,
     `Official latest day: ${official.latestDay ?? "unknown"}`,
+    ...(hasAlpha ? [`Alpha pending daily reports: ${formatAlphaObservations(alphaObservations)}`] : []),
     `Yesterday report rainfall: ${yesterday ? `${yesterday.rainfallText} mm (${yesterday.yesterdayDate})` : "not available"}`,
     `Alpha source: ${alphaDailyReportUrl}`
   ].join("\n");
@@ -174,7 +180,7 @@ export const hkPrecipAdapter: WebsiteAdapter = {
 
     const json = (await response.json()) as HkoDailyExtractResponse;
     const official = extractHkPrecipitationOfficialValue(json, settings);
-    const value = buildHkPrecipitationAlphaValue(official, yesterdayReport, settings);
+    const value = buildHkPrecipitationAlphaValue(official, yesterdayReport, settings, integration?.lastValue ?? null);
     return {
       value,
       rawValue: value,
@@ -266,6 +272,81 @@ function shouldAddYesterdayRainfall(
 ): boolean {
   const [year, month, day] = yesterday.yesterdayDate.split("-").map(Number);
   return year === settings.year && month === settings.month && official.latestDay !== null && day > official.latestDay;
+}
+
+function getPendingAlphaObservations(
+  previousValue: string | null,
+  official: HkPrecipOfficialValue,
+  yesterday: HkoYesterdayRainfall | null,
+  settings: HkPrecipSettings
+): HkoAlphaRainfallObservation[] {
+  const observations = new Map<string, HkoAlphaRainfallObservation>();
+
+  for (const observation of parseStoredAlphaObservations(previousValue)) {
+    if (shouldKeepAlphaObservation(observation, official, settings)) {
+      observations.set(observation.date, observation);
+    }
+  }
+
+  if (yesterday && yesterday.rainfall !== null && shouldAddYesterdayRainfall(official, yesterday, settings)) {
+    observations.set(yesterday.yesterdayDate, {
+      date: yesterday.yesterdayDate,
+      rainfallText: yesterday.rainfallText,
+      rainfall: yesterday.rainfall
+    });
+  }
+
+  return [...observations.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function parseStoredAlphaObservations(value: string | null): HkoAlphaRainfallObservation[] {
+  if (!value) {
+    return [];
+  }
+
+  const observations: HkoAlphaRainfallObservation[] = [];
+  for (const match of value.matchAll(/^Alpha pending daily reports:\s*(.+)$/gim)) {
+    for (const entry of match[1].split(";")) {
+      const observation = parseAlphaObservationEntry(entry.trim());
+      if (observation) {
+        observations.push(observation);
+      }
+    }
+  }
+
+  for (const match of value.matchAll(/^Yesterday report rainfall:\s*((?:Trace)|(?:\d+(?:\.\d+)?))\s*mm\s*\((\d{4}-\d{2}-\d{2})\)/gim)) {
+    const rainfallText = normalizeRainfallValue(match[1]);
+    const rainfall = parseRainfallNumber(rainfallText);
+    if (rainfall !== null) {
+      observations.push({ date: match[2], rainfallText, rainfall });
+    }
+  }
+
+  return observations;
+}
+
+function parseAlphaObservationEntry(entry: string): HkoAlphaRainfallObservation | null {
+  const match = entry.match(/^(\d{4}-\d{2}-\d{2}):\s*((?:Trace)|(?:\d+(?:\.\d+)?))\s*mm$/i);
+  if (!match) {
+    return null;
+  }
+
+  const rainfallText = normalizeRainfallValue(match[2]);
+  const rainfall = parseRainfallNumber(rainfallText);
+  return rainfall === null ? null : { date: match[1], rainfallText, rainfall };
+}
+
+function shouldKeepAlphaObservation(
+  observation: HkoAlphaRainfallObservation,
+  official: HkPrecipOfficialValue,
+  settings: HkPrecipSettings
+): boolean {
+  const [year, month, day] = observation.date.split("-").map(Number);
+  return year === settings.year && month === settings.month && official.latestDay !== null && day > official.latestDay;
+}
+
+function formatAlphaObservations(observations: HkoAlphaRainfallObservation[]): string {
+  return observations.map((observation) => `${observation.date}: ${observation.rainfallText} mm`).join("; ");
 }
 
 function extractCurrentTotalLine(value: string | null): string | null {
