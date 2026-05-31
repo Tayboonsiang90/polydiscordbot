@@ -19,6 +19,7 @@ import {
   buildMarketEndManualUpdatedEmbed,
   buildStrikeSearchEmbed,
   buildStatusEmbed,
+  buildUpdateLogsEmbed,
   parseAddressLabelButtonCustomId,
   parseEventDetailsCustomId
 } from "../src/embeds.js";
@@ -66,7 +67,7 @@ describe("adapter commands", () => {
     const commandByName = new Map(
       buildAdapterCommands().map((command) => [command.name, command.toJSON() as CommandJson])
     );
-    const sharedSubcommands = ["status", "check", "test", "last", "clear", "polymarket", "interval", "enddate", "pause", "resume"];
+    const sharedSubcommands = ["status", "check", "test", "last", "updates", "clear", "polymarket", "interval", "enddate", "pause", "resume"];
 
     for (const adapter of listAdapters()) {
       const command = commandByName.get(adapter.commandName);
@@ -152,6 +153,44 @@ describe("adapter commands", () => {
 
     expect(embed.description).toBeUndefined();
     expect(embed.fields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Value", value: "not checked yet" })]));
+  });
+
+  it("formats update timing logs with SGT and ET patterns", () => {
+    const embed = buildUpdateLogsEmbed(checkedIntegration, [
+      {
+        id: 1,
+        integrationId: checkedIntegration.id,
+        adapterId: checkedIntegration.adapterId,
+        kind: "value_change",
+        dedupeKey: null,
+        title: "Value changed",
+        summary: "181300",
+        sourceAt: "2026-05-06T02:43:30.000Z",
+        detectedAt: "2026-05-06T02:43:30.000Z",
+        createdAt: "2026-05-06T02:43:30.000Z"
+      },
+      {
+        id: 2,
+        integrationId: checkedIntegration.id,
+        adapterId: checkedIntegration.adapterId,
+        kind: "event",
+        dedupeKey: "post-1",
+        title: "NYT front page",
+        summary: "Matched: Border",
+        sourceAt: "2026-05-05T04:20:00.000Z",
+        detectedAt: "2026-05-06T03:43:30.000Z",
+        createdAt: "2026-05-06T03:43:30.000Z"
+      }
+    ]).toJSON();
+
+    expect(embed.title).toBe("Bonbast USD/IRR - Update timing log");
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Recent updates", value: expect.stringContaining("Value changed") }),
+        expect.objectContaining({ name: "SGT hour pattern", value: expect.stringContaining("10:00 - 1") }),
+        expect.objectContaining({ name: "ET hour pattern", value: expect.stringContaining("22:00 - 1") })
+      ])
+    );
   });
 
   it("formats manually set market end dates", () => {

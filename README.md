@@ -137,6 +137,7 @@ Every integration uses the same command shape inside its own channel. Replace `/
 - `/bonbast check`
 - `/bonbast test`
 - `/bonbast last`
+- `/bonbast updates`
 - `/freeappstore snapshot`
 - `/paidappstore snapshot`
 - `/bonbast clear`
@@ -164,6 +165,7 @@ Monthly precipitation, ChatGPT Outage, and Claude Downtime adapters auto-discove
 Commands are intentionally channel-scoped. A command only executes in the channel owned by the matching adapter.
 Command replies and alerts display timestamps in Singapore local time.
 Status replies show both the configured base interval and the current effective interval. Dynamic polling integrations also show the current polling mode/reason.
+Use each channel's `updates` command to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
 Use `/bot clearerrors` to scan all integration channels and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
 Bonbast replies use Discord embeds with compact fields, colored status accents, and clickable links.

@@ -27,6 +27,30 @@ export type MarketEndMetadata = {
   missingWarnedAt: string | null;
 };
 
+export type IntegrationUpdateLog = {
+  id: number;
+  integrationId: number;
+  adapterId: string;
+  kind: string;
+  dedupeKey: string | null;
+  title: string;
+  summary: string;
+  sourceAt: string | null;
+  detectedAt: string;
+  createdAt: string;
+};
+
+export type IntegrationUpdateLogInput = {
+  integrationId: number;
+  adapterId: string;
+  kind: string;
+  dedupeKey?: string | null;
+  title: string;
+  summary: string;
+  sourceAt?: Date | string | null;
+  detectedAt: Date | string;
+};
+
 export type AlertRoleMetadataInput = {
   alertRoleId: string;
   roleMessageId: string;
@@ -189,6 +213,40 @@ export class BotDatabase {
     return this.getIntegrationById(id);
   }
 
+  recordUpdateLog(input: IntegrationUpdateLogInput): void {
+    const detectedAt = toIsoString(input.detectedAt);
+    const sourceAt = input.sourceAt ? toIsoString(input.sourceAt) : null;
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO integration_update_logs
+          (integrationId, adapterId, kind, dedupeKey, title, summary, sourceAt, detectedAt, createdAt)
+         VALUES
+          (@integrationId, @adapterId, @kind, @dedupeKey, @title, @summary, @sourceAt, @detectedAt, @detectedAt)`
+      )
+      .run({
+        integrationId: input.integrationId,
+        adapterId: input.adapterId,
+        kind: input.kind,
+        dedupeKey: input.dedupeKey ?? null,
+        title: normalizeLogText(input.title, 200),
+        summary: normalizeLogText(input.summary, 2000),
+        sourceAt,
+        detectedAt
+      });
+  }
+
+  listUpdateLogs(integrationId: number, limit = 20): IntegrationUpdateLog[] {
+    return this.db
+      .prepare(
+        `SELECT id, integrationId, adapterId, kind, dedupeKey, title, summary, sourceAt, detectedAt, createdAt
+         FROM integration_update_logs
+         WHERE integrationId = ?
+         ORDER BY detectedAt DESC, id DESC
+         LIMIT ?`
+      )
+      .all(integrationId, limit) as IntegrationUpdateLog[];
+  }
+
   claimEventAlert(integrationId: number, eventId: string, post: EventMonitorPost, now = new Date()): boolean {
     const timestamp = now.toISOString();
     const result = this.db
@@ -199,7 +257,22 @@ export class BotDatabase {
           (?, ?, ?, 'sending', ?, null, ?, ?)`
       )
       .run(integrationId, eventId, serializeEventPost(post), timestamp, timestamp, timestamp);
-    return result.changes > 0;
+    if (result.changes <= 0) {
+      return false;
+    }
+
+    const integration = this.getIntegrationById(integrationId);
+    this.recordUpdateLog({
+      integrationId,
+      adapterId: integration.adapterId,
+      kind: "event",
+      dedupeKey: eventId,
+      title: post.alertTitle ?? post.type,
+      summary: formatEventUpdateSummary(post),
+      sourceAt: post.postedAt,
+      detectedAt: now
+    });
+    return true;
   }
 
   claimPendingEventAlerts(
@@ -416,6 +489,23 @@ export class BotDatabase {
 
       CREATE INDEX IF NOT EXISTS event_alerts_pending_idx
         ON event_alerts (integrationId, status, lockedAt, createdAt);
+
+      CREATE TABLE IF NOT EXISTS integration_update_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        integrationId INTEGER NOT NULL,
+        adapterId TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        dedupeKey TEXT,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        sourceAt TEXT,
+        detectedAt TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        UNIQUE(integrationId, kind, dedupeKey)
+      );
+
+      CREATE INDEX IF NOT EXISTS integration_update_logs_integration_idx
+        ON integration_update_logs (integrationId, detectedAt DESC);
     `);
 
     if (!this.hasColumn("integrations", "polymarketUrl")) {
@@ -497,6 +587,25 @@ function keepFirstTwoLines(value: string | null): string | null {
   }
 
   return value.split(/\r?\n/).slice(0, 2).join("\n");
+}
+
+function toIsoString(value: Date | string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function normalizeLogText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+function formatEventUpdateSummary(post: EventMonitorPost): string {
+  const parts = [
+    post.matchedTerms.length ? `Matched: ${post.matchedTerms.join(", ")}` : "",
+    post.text,
+    post.url
+  ].filter(Boolean);
+  return parts.join("\n") || post.id;
 }
 
 function serializeEventPost(post: EventMonitorPost): string {

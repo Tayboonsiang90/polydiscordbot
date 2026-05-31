@@ -97,12 +97,24 @@ export async function checkIntegration(database: BotDatabase, integration: Integ
   }
 
   const adapterValue = await adapter.fetchCurrentValue(integration);
+  const detectedAt = new Date();
   const previousValue = integration.lastValue;
   const previousCheckedAt = integration.lastCheckedAt;
   const changed =
     hasValueChanged(previousValue, adapterValue.value) &&
     (adapter.shouldAlertOnChange ? adapter.shouldAlertOnChange(previousValue, adapterValue.value) : true);
   const updatedIntegration = database.recordCheck(integration.id, adapterValue.value, adapterValue.observedAt, changed);
+  if (changed) {
+    database.recordUpdateLog({
+      integrationId: updatedIntegration.id,
+      adapterId: updatedIntegration.adapterId,
+      kind: "value_change",
+      title: "Value changed",
+      summary: adapterValue.value,
+      sourceAt: adapterValue.observedAt,
+      detectedAt
+    });
+  }
 
   return {
     integration: updatedIntegration,
@@ -267,7 +279,21 @@ export async function captureDailySnapshot(
   }
 
   const adapterValue = await adapter.fetchCurrentValue(integration);
+  const detectedAt = new Date();
+  const snapshotChanged = integration.snapshotValue !== null && integration.snapshotValue !== adapterValue.value;
   const updatedIntegration = database.recordSnapshot(integration.id, adapterValue.value, adapterValue.observedAt, snapshotDate);
+  if (snapshotChanged) {
+    database.recordUpdateLog({
+      integrationId: updatedIntegration.id,
+      adapterId: updatedIntegration.adapterId,
+      kind: "daily_snapshot",
+      dedupeKey: snapshotDate,
+      title: "Daily snapshot changed",
+      summary: adapterValue.value,
+      sourceAt: adapterValue.observedAt,
+      detectedAt
+    });
+  }
   return {
     integration: updatedIntegration,
     snapshotDate,

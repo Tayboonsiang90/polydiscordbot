@@ -22,7 +22,8 @@ import {
   buildTagBlocklistEmbed,
   buildTagFiltersEmbed,
   buildTagSearchEmbed,
-  buildStatusEmbed
+  buildStatusEmbed,
+  buildUpdateLogsEmbed
 } from "./embeds.js";
 import { exportAddressLabelsCsv, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
 import { getAdapter, getAdapterByCommandName, listAdapters } from "./integrations/registry.js";
@@ -71,6 +72,7 @@ export function buildAdapterCommands() {
       .addSubcommand((subcommand) => subcommand.setName("check").setDescription("Fetch the current value now"))
       .addSubcommand((subcommand) => subcommand.setName("test").setDescription("Send a simulated value-change alert"))
       .addSubcommand((subcommand) => subcommand.setName("last").setDescription("Show the last stored value"))
+      .addSubcommand((subcommand) => subcommand.setName("updates").setDescription("Show recent source update timing logs"))
       .addSubcommand((subcommand) => subcommand.setName("clear").setDescription("Clear messages from this monitor channel"))
       .addSubcommand((subcommand) =>
         subcommand
@@ -431,6 +433,11 @@ export async function handleAdapterCommand(
 
   if (subcommand === "last") {
     await interaction.reply({ embeds: [buildLastEmbed(integration)] });
+    return;
+  }
+
+  if (subcommand === "updates") {
+    await interaction.reply({ embeds: [buildUpdateLogsEmbed(integration, database.listUpdateLogs(integration.id, 30))] });
     return;
   }
 

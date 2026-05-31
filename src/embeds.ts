@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
 import { formatAddressWithLabel, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
+import type { IntegrationUpdateLog } from "./database.js";
 import type { CheckResult, EventCheckResult, SnapshotResult } from "./poller.js";
 import type {
   AddressLabelImportIssue,
@@ -113,6 +114,22 @@ export function buildLastEmbed(integration: Integration): EmbedBuilder {
     .addFields(
       { name: "Value", value: formatValue(integration.lastValue), inline: true },
       { name: "Retrieved at", value: formatSingaporeDateTime(integration.lastCheckedAt), inline: false },
+      { name: "Links", value: formatLinks(integration), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildUpdateLogsEmbed(integration: Integration, logs: IntegrationUpdateLog[]): EmbedBuilder {
+  return baseEmbed(integration, "Update timing log")
+    .addFields(
+      { name: "Recent updates", value: formatUpdateLogEntries(logs), inline: false },
+      { name: "SGT hour pattern", value: formatUpdateHourPattern(logs, "Asia/Singapore"), inline: true },
+      { name: "ET hour pattern", value: formatUpdateHourPattern(logs, "America/New_York"), inline: true },
+      {
+        name: "Note",
+        value: "This log starts from when update logging was deployed; older alerts are not backfilled.",
+        inline: false
+      },
       { name: "Links", value: formatLinks(integration), inline: false }
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
@@ -834,6 +851,53 @@ function formatAddressImportIssues(issues: AddressLabelImportIssue[]): string {
       })
       .join("\n") + (issues.length > 10 ? `\n...and ${issues.length - 10} more` : "")
   );
+}
+
+function formatUpdateLogEntries(logs: IntegrationUpdateLog[]): string {
+  if (logs.length === 0) {
+    return "No updates logged yet.";
+  }
+
+  return truncateEmbedValue(
+    logs
+      .slice(0, 10)
+      .map((log, index) => {
+        const detected = `${formatSingaporeDateTime(log.detectedAt)} / ${formatEasternDateTime(new Date(log.detectedAt))} ET`;
+        const source =
+          log.sourceAt && log.sourceAt !== log.detectedAt
+            ? `\nSource time: ${formatSingaporeDateTime(log.sourceAt)} / ${formatEasternDateTime(new Date(log.sourceAt))} ET`
+            : "";
+        const summary = log.summary ? `\n${truncateEmbedValue(log.summary, 180)}` : "";
+        return `${index + 1}. ${detected}\n${log.title} (${formatUpdateLogKind(log.kind)})${source}${summary}`;
+      })
+      .join("\n\n"),
+    1000
+  );
+}
+
+function formatUpdateHourPattern(logs: IntegrationUpdateLog[], timeZone: string): string {
+  if (logs.length === 0) {
+    return "No data yet.";
+  }
+
+  const counts = new Map<string, number>();
+  for (const log of logs) {
+    const hour = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      hourCycle: "h23"
+    }).format(new Date(log.detectedAt));
+    counts.set(hour, (counts.get(hour) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([hour, count]) => `${hour}:00 - ${count}`)
+    .join("\n");
+}
+
+function formatUpdateLogKind(kind: string): string {
+  return kind.replace(/_/g, " ");
 }
 
 function formatPriorityValue(label: string, url?: string, betmoarUrl?: string): string {

@@ -154,6 +154,50 @@ describe("BotDatabase alert role metadata", () => {
     database.close();
   });
 
+  it("stores update timing logs and deduplicates event updates", () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "bonbast",
+      adapterId: "bonbast-usd-irr",
+      displayName: "Bonbast USD/IRR",
+      sourceUrl: "https://www.bonbast.com/graph/usd",
+      pollIntervalMinutes: 5
+    });
+    const post = buildEventPost("event-1");
+
+    database.recordUpdateLog({
+      integrationId: integration.id,
+      adapterId: integration.adapterId,
+      kind: "value_change",
+      title: "Value changed",
+      summary: "181300",
+      sourceAt: "2026-05-06T02:43:30.000Z",
+      detectedAt: "2026-05-06T02:43:30.000Z"
+    });
+    expect(database.claimEventAlert(integration.id, post.id, post, new Date("2026-05-06T03:00:00.000Z"))).toBe(true);
+    expect(database.claimEventAlert(integration.id, post.id, post, new Date("2026-05-06T03:01:00.000Z"))).toBe(false);
+
+    expect(database.listUpdateLogs(integration.id)).toMatchObject([
+      {
+        kind: "event",
+        dedupeKey: post.id,
+        title: "Polymarket clarification",
+        sourceAt: "2026-05-21T00:00:00.000Z",
+        detectedAt: "2026-05-06T03:00:00.000Z"
+      },
+      {
+        kind: "value_change",
+        dedupeKey: null,
+        title: "Value changed",
+        summary: "181300",
+        detectedAt: "2026-05-06T02:43:30.000Z"
+      }
+    ]);
+
+    database.close();
+  });
+
   it("deduplicates market end reminders by integration, URL, and reminder key", () => {
     const database = createTestDatabase();
     const integration = database.createIntegration({
