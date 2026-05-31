@@ -10,8 +10,20 @@ import {
 
 describe("MrBeast YouTube views adapter", () => {
   it("extracts total views from the YouTube about page metadata", () => {
+    const html = [
+      '"viewCountText":{"simpleText":"641,313,287 views"}',
+      '"subscriberCountText":"494M subscribers","viewCountText":"123,020,785,579 views","joinedDateText":{"content":"Joined Feb 19, 2012"}'
+    ].join(",");
+
+    expect(extractMrBeastTotalViews(html)).toBe(123_020_785_579);
     expect(extractMrBeastTotalViews('"viewCountText":"123,020,785,579 views"')).toBe(123_020_785_579);
     expect(extractMrBeastTotalViews('"viewCountText":{"simpleText":"123\u00a0020\u00a0785\u00a0579 views"}')).toBe(123_020_785_579);
+  });
+
+  it("rejects video-level view counts as channel totals", () => {
+    expect(() => extractMrBeastTotalViews('"viewCountText":{"simpleText":"641,313,287 views"}')).toThrow(
+      "Could not find MrBeast YouTube channel total views"
+    );
   });
 
   it("extracts billion-view market targets from Gamma child markets", () => {
@@ -97,5 +109,20 @@ describe("MrBeast YouTube views adapter", () => {
 
     expect(mrBeastViewsAdapter.shouldAlertOnChange?.(previous, currentProjectionOnly)).toBe(false);
     expect(mrBeastViewsAdapter.shouldAlertOnChange?.(previous, currentViewsChanged)).toBe(true);
+  });
+
+  it("suppresses one-time alert spam when recovering from a bad video-count parse", () => {
+    const previousBadVideoCount = [
+      "Metric: MrBeast YouTube channel total views",
+      "Total views: 641.3M",
+      "Needed by deadline: 4.044B/day"
+    ].join("\n");
+    const correctedChannelCount = [
+      "Metric: MrBeast YouTube channel total views",
+      "Total views: 126.211B",
+      "Needed by deadline: 25.5M/day"
+    ].join("\n");
+
+    expect(mrBeastViewsAdapter.shouldAlertOnChange?.(previousBadVideoCount, correctedChannelCount)).toBe(false);
   });
 });

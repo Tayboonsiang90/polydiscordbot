@@ -6,6 +6,8 @@ const sourceUrl = "https://www.youtube.com/@MrBeast/about";
 const defaultPolymarketUrl = "https://polymarket.com/event/will-mrbeast-hit-billion-views-by-june-30";
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
 const minimumDailyRateWindowMs = 60 * 60_000;
+const minimumPlausibleChannelViews = 10_000_000_000;
+const maximumAllowedChannelViewDropRatio = 0.05;
 
 type GammaEvent = {
   markets?: GammaMarket[];
@@ -34,17 +36,18 @@ export type MrBeastViewProjection = {
 };
 
 export function extractMrBeastTotalViews(html: string): number {
-  const patterns = [
-    /"viewCountText"\s*:\s*"([\d,\s\u00a0.]+)\s+views"/i,
-    /"viewCountText"\s*:\s*\{\s*"simpleText"\s*:\s*"([\d,\s\u00a0.]+)\s+views"/i
-  ];
+  const candidates = collectViewCountCandidates(html);
+  const channelStatsCandidate = candidates.find((candidate) => isChannelStatsViewCount(html, candidate.index));
+  if (channelStatsCandidate) {
+    return channelStatsCandidate.value;
+  }
 
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    const value = parseViewCount(match?.[1]);
-    if (value !== null) {
-      return value;
-    }
+  const largestCandidate = candidates.reduce<ViewCountCandidate | null>(
+    (largest, candidate) => (largest === null || candidate.value > largest.value ? candidate : largest),
+    null
+  );
+  if (largestCandidate && largestCandidate.value >= minimumPlausibleChannelViews) {
+    return largestCandidate.value;
   }
 
   throw new Error("Could not find MrBeast YouTube channel total views");
@@ -130,6 +133,10 @@ export const mrBeastViewsAdapter: WebsiteAdapter = {
   shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
     const previousViews = parseMrBeastStoredViews(previousValue);
     const currentViews = parseMrBeastStoredViews(currentValue);
+    if (isRecoveryFromBadStoredViewCount(previousViews, currentViews)) {
+      return false;
+    }
+
     return previousViews !== null && currentViews !== null ? previousViews !== currentViews : previousValue !== currentValue;
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
@@ -149,6 +156,15 @@ export const mrBeastViewsAdapter: WebsiteAdapter = {
 
     const currentViews = extractMrBeastTotalViews(await channelResponse.text());
     const previousViews = parseMrBeastStoredViews(integration?.lastValue ?? null);
+    if (isImplausibleViewDrop(currentViews, previousViews)) {
+      throw new Error(
+        `Parsed MrBeast views (${formatCompactCount(currentViews)}) are more than ${formatDecimal(
+          maximumAllowedChannelViewDropRatio * 100,
+          0
+        )}% below the last stored total (${formatCompactCount(previousViews ?? 0)}); refusing to overwrite stored channel total.`
+      );
+    }
+
     const previousChangedAt = integration?.lastChangedAt ? new Date(integration.lastChangedAt) : null;
     const observedAt = new Date();
     const dailyRate = calculateDailyRate(currentViews, previousViews, previousChangedAt, observedAt);
@@ -172,6 +188,53 @@ export const mrBeastViewsAdapter: WebsiteAdapter = {
     };
   }
 };
+
+type ViewCountCandidate = {
+  value: number;
+  index: number;
+};
+
+function collectViewCountCandidates(html: string): ViewCountCandidate[] {
+  const patterns = [
+    /"viewCountText"\s*:\s*"([\d,\s\u00a0.]+)\s+views"/gi,
+    /"viewCountText"\s*:\s*\{\s*"simpleText"\s*:\s*"([\d,\s\u00a0.]+)\s+views"/gi
+  ];
+  const candidates: ViewCountCandidate[] = [];
+
+  for (const pattern of patterns) {
+    for (const match of html.matchAll(pattern)) {
+      const value = parseViewCount(match[1]);
+      if (value !== null && match.index !== undefined) {
+        candidates.push({ value, index: match.index });
+      }
+    }
+  }
+
+  return candidates.sort((left, right) => left.index - right.index);
+}
+
+function isChannelStatsViewCount(html: string, index: number): boolean {
+  const before = html.slice(Math.max(0, index - 600), index);
+  const after = html.slice(index, Math.min(html.length, index + 900));
+  return /"subscriberCountText"/i.test(before) && /"joinedDateText"|"canonicalChannelUrl"|"channelId"/i.test(after);
+}
+
+function isImplausibleViewDrop(currentViews: number, previousViews: number | null): boolean {
+  return (
+    previousViews !== null &&
+    previousViews >= minimumPlausibleChannelViews &&
+    currentViews < previousViews * (1 - maximumAllowedChannelViewDropRatio)
+  );
+}
+
+function isRecoveryFromBadStoredViewCount(previousViews: number | null, currentViews: number | null): boolean {
+  return (
+    previousViews !== null &&
+    currentViews !== null &&
+    currentViews >= minimumPlausibleChannelViews &&
+    previousViews < currentViews * maximumAllowedChannelViewDropRatio
+  );
+}
 
 async function fetchMrBeastTargets(polymarketUrl: string | null): Promise<MrBeastViewTarget[]> {
   const slug = polymarketUrl ? getPolymarketSlug(polymarketUrl) : null;
