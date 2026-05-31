@@ -54,6 +54,7 @@ import {
   getPollIntervalReason,
   type CheckResult
 } from "./poller.js";
+import { syncUmaAddressLabels } from "./umaAddressLabels.js";
 
 const roleChannelName = "market-alert-roles";
 const checkFailedTitleSuffix = " - Check failed";
@@ -996,36 +997,6 @@ function findTextChannelByName(guild: Guild, channelName: string): TextChannel |
 function getIntegrationChannelParentId(guild: Guild, integration: Integration): string | undefined {
   const channel = guild.channels.cache.get(integration.channelId);
   return channel?.type === ChannelType.GuildText ? channel.parentId ?? undefined : undefined;
-}
-
-async function syncUmaAddressLabels(
-  database: BotDatabase,
-  guildId: string,
-  sourceIntegrationId: number,
-  action: AddressLabelAction,
-  addressQuery?: string,
-  labelQuery?: string,
-  options?: AddressLabelUpdateOptions
-): Promise<number> {
-  let syncedCount = 1;
-  for (const integration of database.listIntegrations()) {
-    if (integration.guildId !== guildId || integration.id === sourceIntegrationId) {
-      continue;
-    }
-
-    const adapter = getAdapter(integration.adapterId);
-    if (!adapter.updateAddressLabels) {
-      continue;
-    }
-
-    const result = await adapter.updateAddressLabels(integration, action, addressQuery, labelQuery, options);
-    if (result.settingsJson !== integration.settingsJson) {
-      database.setSettingsJson(integration.id, result.settingsJson);
-    }
-    syncedCount += 1;
-  }
-
-  return syncedCount;
 }
 
 export async function clearOldCheckFailedMessages(guild: Guild, database: BotDatabase, keepLatest = true) {

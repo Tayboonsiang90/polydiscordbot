@@ -20,6 +20,11 @@ const successColor = 0x2ecc71;
 const warningColor = 0xf1c40f;
 const errorColor = 0xe74c3c;
 const eventDetailsCustomIdPrefix = "event-details:";
+const addressLabelButtonCustomIdPrefix = "address-label:";
+const addressLabelModalCustomIdPrefix = "address-label-modal:";
+const addressPattern = /^0x[0-9a-fA-F]{40}$/;
+export const addressLabelModalNameInputId = "address-label-name";
+export type AddressLabelButtonRole = "proposer" | "disputer";
 
 export type StatusPollingInfo = {
   effectiveIntervalMinutes?: number;
@@ -464,6 +469,22 @@ export function parseEventDetailsCustomId(customId: string): { integrationId: nu
   return Number.isSafeInteger(integrationId) && integrationId > 0 && eventId ? { integrationId, eventId } : null;
 }
 
+export function parseAddressLabelButtonCustomId(
+  customId: string
+): { integrationId: number; role: AddressLabelButtonRole; address: string } | null {
+  return parseAddressLabelCustomId(customId, addressLabelButtonCustomIdPrefix);
+}
+
+export function parseAddressLabelModalCustomId(
+  customId: string
+): { integrationId: number; role: AddressLabelButtonRole; address: string } | null {
+  return parseAddressLabelCustomId(customId, addressLabelModalCustomIdPrefix);
+}
+
+export function buildAddressLabelModalCustomId(integrationId: number, role: AddressLabelButtonRole, address: string): string {
+  return `${addressLabelModalCustomIdPrefix}${integrationId}:${role}:${address}`;
+}
+
 function formatPrioritySummaryFields(
   integration: Integration,
   post: EventMonitorPost
@@ -619,18 +640,25 @@ function baseEmbed(integration: Integration, title: string): EmbedBuilder {
 }
 
 function buildEventPostComponents(integration: Integration, post: EventMonitorPost): ActionRowBuilder<ButtonBuilder>[] {
-  return [buildEventSourceLinkRow(post.url, post.buttonLabel, buildEventDetailsButton(integration, post))];
+  return [
+    buildEventSourceLinkRow(post.url, post.buttonLabel, [
+      buildEventDetailsButton(integration, post),
+      ...buildEventAddressLabelButtons(integration, post)
+    ])
+  ];
 }
 
-function buildEventSourceLinkRow(url: string, labelOverride?: string, extraButton?: ButtonBuilder | null): ActionRowBuilder<ButtonBuilder> {
+function buildEventSourceLinkRow(url: string, labelOverride?: string, extraButtons: Array<ButtonBuilder | null> = []): ActionRowBuilder<ButtonBuilder> {
   const label =
     labelOverride ??
     (url.includes("truthsocial.com") ? "Open Truth" : url.includes("polygonscan.com") ? "Open transaction" : "Open source");
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url)
   );
-  if (extraButton) {
-    row.addComponents(extraButton);
+  for (const button of extraButtons) {
+    if (button) {
+      row.addComponents(button);
+    }
   }
 
   return row;
@@ -650,6 +678,63 @@ function buildEventDetailsButton(integration: Integration, post: EventMonitorPos
     .setCustomId(customId)
     .setLabel("Show more")
     .setStyle(ButtonStyle.Secondary);
+}
+
+function buildEventAddressLabelButtons(integration: Integration, post: EventMonitorPost): ButtonBuilder[] {
+  const summary = post.prioritySummary;
+  if (!summary) {
+    return [];
+  }
+
+  const buttons: ButtonBuilder[] = [];
+  const proposerButton = buildAddressLabelButton(integration, "proposer", summary.proposer);
+  const disputerButton = buildAddressLabelButton(integration, "disputer", summary.disputer);
+  if (proposerButton) {
+    buttons.push(proposerButton);
+  }
+  if (disputerButton) {
+    buttons.push(disputerButton);
+  }
+
+  return buttons;
+}
+
+function buildAddressLabelButton(integration: Integration, role: AddressLabelButtonRole, address?: string): ButtonBuilder | null {
+  if (!addressPattern.test(address ?? "")) {
+    return null;
+  }
+
+  const customId = `${addressLabelButtonCustomIdPrefix}${integration.id}:${role}:${address!.toLowerCase()}`;
+  if (customId.length > 100) {
+    return null;
+  }
+
+  return new ButtonBuilder()
+    .setCustomId(customId)
+    .setLabel(role === "proposer" ? "Label proposer" : "Label disputer")
+    .setStyle(ButtonStyle.Secondary);
+}
+
+function parseAddressLabelCustomId(
+  customId: string,
+  prefix: string
+): { integrationId: number; role: AddressLabelButtonRole; address: string } | null {
+  if (!customId.startsWith(prefix)) {
+    return null;
+  }
+
+  const [integrationIdText, role, address] = customId.slice(prefix.length).split(":");
+  const integrationId = Number(integrationIdText);
+  if (
+    !Number.isSafeInteger(integrationId) ||
+    integrationId <= 0 ||
+    (role !== "proposer" && role !== "disputer") ||
+    !addressPattern.test(address)
+  ) {
+    return null;
+  }
+
+  return { integrationId, role, address: address.toLowerCase() };
 }
 
 function formatEventPostMessageContent(integration: Integration, post: EventMonitorPost): string | undefined {

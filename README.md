@@ -213,6 +213,7 @@ UMA Proposal and Dispute Alerts also support address labels:
 - `/umaproposals addresses action:export`
 
 The same `addresses` subcommand is available on `/umadispute`. Adding, removing, clearing, or importing labels syncs across the configured UMA proposal and dispute integrations so proposer and disputer fields can show names above the raw address. Bulk import accepts CSV or loose text where each nonblank row contains one nickname and one `0x` address; dry-run defaults to true so imports can be previewed before saving. Export returns the current shared address book as CSV. Alerts check Polymarket's public Data API trades endpoint for each proposer/disputer address; addresses with at least one trade get a Polymarket profile link, while addresses with no returned trades are marked as no trades found.
+UMA proposal/dispute alerts also include `Label proposer` and `Label disputer` buttons when those addresses are present. Clicking one opens a private nickname form and saves the label through the same synced address-label storage.
 
 App Store integrations have one extra command:
 

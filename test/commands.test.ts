@@ -19,6 +19,7 @@ import {
   buildMarketEndManualUpdatedEmbed,
   buildStrikeSearchEmbed,
   buildStatusEmbed,
+  parseAddressLabelButtonCustomId,
   parseEventDetailsCustomId
 } from "../src/embeds.js";
 import type { EventMonitorPost, Integration } from "../src/integrations/types.js";
@@ -431,6 +432,45 @@ describe("adapter commands", () => {
     const customId = showMoreButton?.custom_id;
     expect(parseEventDetailsCustomId(String(customId))).toEqual({ integrationId: checkedIntegration.id, eventId: post.id });
     expect(detailsEmbed.fields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Condition ID", value: "0xcondition" })]));
+  });
+
+  it("adds address label buttons for UMA proposer and disputer fields", () => {
+    const proposer = "0x1111111111111111111111111111111111111111";
+    const disputer = "0x2222222222222222222222222222222222222222";
+    const post: EventMonitorPost = {
+      id: "0xtx:0x2",
+      type: "Polymarket UMA dispute",
+      alertTitle: "Polymarket UMA dispute",
+      sourceLabel: "On-chain tx",
+      buttonLabel: "Open transaction",
+      mentionAlertRole: true,
+      text: "Dispute opened.",
+      qualifyingText: "Dispute opened.",
+      postedAt: new Date("2026-05-20T00:00:00.000Z"),
+      url: "https://polygonscan.com/tx/0xtx",
+      prioritySummary: { proposer, disputer },
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: []
+    };
+    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "polymarket-disputes" }, post);
+    const components = payload.components[0].toJSON().components;
+
+    expect(components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Label proposer", style: 2 }),
+        expect.objectContaining({ label: "Label disputer", style: 2 })
+      ])
+    );
+    const proposerCustomId = components.find((component) => "custom_id" in component && component.label === "Label proposer") as
+      | { custom_id?: string }
+      | undefined;
+    expect(parseAddressLabelButtonCustomId(String(proposerCustomId?.custom_id))).toEqual({
+      integrationId: checkedIntegration.id,
+      role: "proposer",
+      address: proposer
+    });
   });
 
   it("attaches highlighted event images when provided", () => {

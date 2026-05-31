@@ -1,8 +1,17 @@
-import { Client, Events, GatewayIntentBits, MessageFlags, Partials, type ButtonInteraction, type ChatInputCommandInteraction } from "discord.js";
+import {
+  Client,
+  Events,
+  GatewayIntentBits,
+  MessageFlags,
+  Partials,
+  type ButtonInteraction,
+  type ChatInputCommandInteraction,
+  type ModalSubmitInteraction
+} from "discord.js";
 import { loadConfig } from "./config.js";
 import { handleAdapterCommand, handleBotCommand, isAdapterCommand, isBotCommand } from "./commands.js";
 import { BotDatabase } from "./database.js";
-import { handleEventDetailsButton } from "./eventDetails.js";
+import { handleEventDetailsButton, handleEventDetailsModalSubmit } from "./eventDetails.js";
 import { PollScheduler } from "./poller.js";
 import { IntegrationProvisioner } from "./provisioner.js";
 import { handleReactionRoleChange } from "./reactionRoles.js";
@@ -65,6 +74,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isButton()) {
     try {
       await handleEventDetailsButton(interaction, database);
+    } catch (error) {
+      await sendInteractionFailure(interaction, error);
+    }
+    return;
+  }
+
+  if (interaction.isModalSubmit()) {
+    try {
+      await handleEventDetailsModalSubmit(interaction, database);
     } catch (error) {
       await sendInteractionFailure(interaction, error);
     }
@@ -139,7 +157,10 @@ try {
   process.exit(1);
 }
 
-async function sendInteractionFailure(interaction: ChatInputCommandInteraction | ButtonInteraction, error: unknown): Promise<void> {
+async function sendInteractionFailure(
+  interaction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
+  error: unknown
+): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   try {
     if (interaction.deferred || interaction.replied) {
