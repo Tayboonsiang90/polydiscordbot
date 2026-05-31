@@ -64,6 +64,7 @@ export type EventMonitorPost = {
   hideLinksField?: boolean;
   hideTextField?: boolean;
   fields?: Array<{ name: string; value: string; inline?: boolean }>;
+  hiddenFields?: Array<{ name: string; value: string; inline?: boolean }>;
   imageUrls: string[];
   imageAttachments?: EventPostImageAttachment[];
   imageText: string;

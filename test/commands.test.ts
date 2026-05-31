@@ -11,13 +11,15 @@ import { buildAlertMessagePayload } from "../src/poller.js";
 import {
   buildCheckEmbed,
   buildClearErrorsEmbed,
+  buildEventPostDetailsEmbed,
   buildEventPostMessagePayload,
   buildGroupedRoleSelectorEmbed,
   buildIntegrationSummaryEmbeds,
   buildLastEmbed,
   buildMarketEndManualUpdatedEmbed,
   buildStrikeSearchEmbed,
-  buildStatusEmbed
+  buildStatusEmbed,
+  parseEventDetailsCustomId
 } from "../src/embeds.js";
 import type { EventMonitorPost, Integration } from "../src/integrations/types.js";
 
@@ -389,6 +391,46 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "Question", value: "Test market" })
       ])
     );
+  });
+
+  it("keeps event technical details behind a Show more button", () => {
+    const post: EventMonitorPost = {
+      id: "0x3333333333333333333333333333333333333333333333333333333333333333:0x5",
+      type: "Polymarket UMA proposal",
+      alertTitle: "Polymarket UMA proposal",
+      sourceLabel: "On-chain tx",
+      buttonLabel: "Open transaction",
+      mentionAlertRole: true,
+      text: "Proposal opened.",
+      qualifyingText: "Proposal opened.",
+      postedAt: new Date("2026-05-20T00:00:00.000Z"),
+      url: "https://polygonscan.com/tx/0xtx",
+      polymarketUrl: "https://polymarket.com/market/test",
+      prioritySummary: { question: "Test market?", proposedOutcome: "YES (1)" },
+      hiddenFields: [{ name: "Condition ID", value: "0xcondition", inline: false }],
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: []
+    };
+    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "polymarket-proposals" }, post);
+    const embed = payload.embeds[0].toJSON();
+    const components = payload.components[0].toJSON().components;
+    const detailsEmbed = buildEventPostDetailsEmbed({ ...checkedIntegration, adapterId: "polymarket-proposals" }, post).toJSON();
+
+    expect(embed.fields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Condition ID" })]));
+    expect(components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Open transaction", style: 5, url: post.url }),
+        expect.objectContaining({ label: "Show more", style: 2 })
+      ])
+    );
+    const showMoreButton = components.find((component) => "custom_id" in component && component.label === "Show more") as
+      | { custom_id?: string }
+      | undefined;
+    const customId = showMoreButton?.custom_id;
+    expect(parseEventDetailsCustomId(String(customId))).toEqual({ integrationId: checkedIntegration.id, eventId: post.id });
+    expect(detailsEmbed.fields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Condition ID", value: "0xcondition" })]));
   });
 
   it("attaches highlighted event images when provided", () => {

@@ -19,6 +19,7 @@ import { formatSingaporeDateTime, nowSingaporeDateTime } from "./time.js";
 const successColor = 0x2ecc71;
 const warningColor = 0xf1c40f;
 const errorColor = 0xe74c3c;
+const eventDetailsCustomIdPrefix = "event-details:";
 
 export type StatusPollingInfo = {
   effectiveIntervalMinutes?: number;
@@ -420,9 +421,47 @@ export function buildEventPostMessagePayload(integration: Integration, post: Eve
       name: attachment.name,
       description: attachment.description
     })),
-    components: [buildEventSourceLinkRow(post.url, post.buttonLabel)],
+    components: buildEventPostComponents(integration, post),
     allowedMentions: content && integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
   };
+}
+
+export function buildEventPostDetailsEmbed(integration: Integration, post: EventMonitorPost): EmbedBuilder {
+  const fields = [
+    ...(post.hiddenFields ?? []).map((field) => ({
+      name: field.name,
+      value: truncateEmbedValue(field.value),
+      inline: field.inline ?? false
+    })),
+    {
+      name: "Links",
+      value: [
+        `Original: ${post.url}`,
+        `Polymarket: ${post.polymarketUrl ?? formatPolymarketValue(integration)}`
+      ].join("\n"),
+      inline: false
+    }
+  ];
+
+  return baseEmbed(integration, `${post.type} details`)
+    .addFields(fields)
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function parseEventDetailsCustomId(customId: string): { integrationId: number; eventId: string } | null {
+  if (!customId.startsWith(eventDetailsCustomIdPrefix)) {
+    return null;
+  }
+
+  const payload = customId.slice(eventDetailsCustomIdPrefix.length);
+  const separatorIndex = payload.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex === payload.length - 1) {
+    return null;
+  }
+
+  const integrationId = Number(payload.slice(0, separatorIndex));
+  const eventId = payload.slice(separatorIndex + 1);
+  return Number.isSafeInteger(integrationId) && integrationId > 0 && eventId ? { integrationId, eventId } : null;
 }
 
 function formatPrioritySummaryFields(
@@ -579,13 +618,38 @@ function baseEmbed(integration: Integration, title: string): EmbedBuilder {
     .setTitle(`${integration.displayName} - ${title}`);
 }
 
-function buildEventSourceLinkRow(url: string, labelOverride?: string): ActionRowBuilder<ButtonBuilder> {
+function buildEventPostComponents(integration: Integration, post: EventMonitorPost): ActionRowBuilder<ButtonBuilder>[] {
+  return [buildEventSourceLinkRow(post.url, post.buttonLabel, buildEventDetailsButton(integration, post))];
+}
+
+function buildEventSourceLinkRow(url: string, labelOverride?: string, extraButton?: ButtonBuilder | null): ActionRowBuilder<ButtonBuilder> {
   const label =
     labelOverride ??
     (url.includes("truthsocial.com") ? "Open Truth" : url.includes("polygonscan.com") ? "Open transaction" : "Open source");
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url)
   );
+  if (extraButton) {
+    row.addComponents(extraButton);
+  }
+
+  return row;
+}
+
+function buildEventDetailsButton(integration: Integration, post: EventMonitorPost): ButtonBuilder | null {
+  if (!post.hiddenFields?.length) {
+    return null;
+  }
+
+  const customId = `${eventDetailsCustomIdPrefix}${integration.id}:${post.id}`;
+  if (customId.length > 100) {
+    return null;
+  }
+
+  return new ButtonBuilder()
+    .setCustomId(customId)
+    .setLabel("Show more")
+    .setStyle(ButtonStyle.Secondary);
 }
 
 function formatEventPostMessageContent(integration: Integration, post: EventMonitorPost): string | undefined {

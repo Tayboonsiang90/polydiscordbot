@@ -342,7 +342,7 @@ export function normalizePolymarketProposalEvent(
     `Proposed outcome: ${proposal.proposedOutcome}`,
     `Matched tags: ${matchedTags}`
   ].join("\n");
-  const fields = [
+  const hiddenFields = [
     { name: "Event type", value: "Polymarket UMA proposal", inline: true },
     { name: "On-chain tx", value: transactionUrl, inline: false },
     { name: matchedTagsFieldName, value: matchedTags, inline: false },
@@ -379,7 +379,7 @@ export function normalizePolymarketProposalEvent(
     hideDefaultEventFields: true,
     hideLinksField: true,
     hideTextField: true,
-    fields,
+    hiddenFields,
     imageUrls: [],
     imageText: "",
     matchedTerms: [],
@@ -896,7 +896,7 @@ function findProposalTagMatch(marketTags: string[], tagFilters: ProposalTagFilte
 
 function getPostMatchedTagKeys(post: EventMonitorPost): Set<string> {
   const summaryMatchedTags = post.prioritySummary?.matchedTags ?? [];
-  const value = post.fields?.find((field) => field.name === matchedTagsFieldName)?.value ?? "";
+  const value = getPostFieldValue(post, matchedTagsFieldName) ?? "";
   return new Set(
     [...summaryMatchedTags, ...value.split(",")]
       .map((tag) => normalizeTagText(tag))
@@ -906,7 +906,7 @@ function getPostMatchedTagKeys(post: EventMonitorPost): Set<string> {
 
 function getPostMarketTagKeys(post: EventMonitorPost): Set<string> {
   const summaryMarketTags = post.prioritySummary?.marketTags ?? [];
-  const value = post.fields?.find((field) => field.name === "Market tags")?.value ?? "";
+  const value = getPostFieldValue(post, "Market tags") ?? "";
   return new Set(
     [...summaryMarketTags, ...value.split(",")]
       .map((tag) => normalizeTagText(tag.replace(/\*/g, "")))
@@ -1222,8 +1222,8 @@ function formatTagCandidates(tags: TagFilterEntry[]): string {
 function compareProposalPostsDescending(left: EventMonitorPost, right: EventMonitorPost): number {
   const [leftTransactionHash, leftLogIndex] = left.id.split(":");
   const [rightTransactionHash, rightLogIndex] = right.id.split(":");
-  const leftBlock = Number(left.fields?.find((field) => field.name === "Block")?.value ?? 0);
-  const rightBlock = Number(right.fields?.find((field) => field.name === "Block")?.value ?? 0);
+  const leftBlock = Number(getPostFieldValue(left, "Block") ?? 0);
+  const rightBlock = Number(getPostFieldValue(right, "Block") ?? 0);
   if (leftBlock !== rightBlock) {
     return rightBlock - leftBlock;
   }
@@ -1235,6 +1235,10 @@ function compareProposalPostsDescending(left: EventMonitorPost, right: EventMoni
   }
 
   return (rightTransactionHash ?? "").localeCompare(leftTransactionHash ?? "");
+}
+
+function getPostFieldValue(post: EventMonitorPost, name: string): string | undefined {
+  return [...(post.fields ?? []), ...(post.hiddenFields ?? [])].find((field) => field.name === name)?.value;
 }
 
 export const testOnlyPolymarketProposalHelpers = {

@@ -126,7 +126,7 @@ describe("fetchPolymarketProposalUpdates", () => {
       textFieldName: "Proposal",
       polymarketUrl: "https://polymarket.com/market/lakers-win"
     });
-    expect(result.posts[0].fields).toEqual(
+    expect(result.posts[0].hiddenFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Matched tags", value: "Sports" }),
         expect.objectContaining({ name: "On-chain tx", value: `https://polygonscan.com/tx/${transactionHash}` })
@@ -145,13 +145,13 @@ describe("fetchPolymarketProposalUpdates", () => {
         hasTrades: true
       })
     });
-    expect(result.posts[0].fields?.some((field) => field.name === "Currency")).toBe(false);
-    expect(result.posts[0].fields?.some((field) => field.name === "Proposed outcome")).toBe(false);
+    expect(result.posts[0].fields?.some((field) => field.name === "Currency") ?? false).toBe(false);
+    expect(result.posts[0].hiddenFields?.some((field) => field.name === "Proposed outcome") ?? false).toBe(false);
     const embedFields = buildEventPostEmbed(
       buildIntegration(JSON.stringify({ addressLabels: [{ address: proposer, label: "Known Proposer" }] })),
       result.posts[0]
     )[0].data.fields ?? [];
-    expect(embedFields.slice(0, 9).map((field) => field.name)).toEqual([
+    expect(embedFields.slice(0, 8).map((field) => field.name)).toEqual([
       "Question",
       "Proposed outcome",
       "Posted at (SGT)",
@@ -159,8 +159,7 @@ describe("fetchPolymarketProposalUpdates", () => {
       "Posted at (ET)",
       "Proposal expiration (ET)",
       "Market tags",
-      "Proposer",
-      "Event type"
+      "Proposer"
     ]);
     expect(embedFields[0]).toEqual({
       name: "Question",
@@ -178,6 +177,7 @@ describe("fetchPolymarketProposalUpdates", () => {
       ])
     );
     expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Links" })]));
+    expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "On-chain tx" })]));
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       rpcUrl,
       lastScannedBlock: 1000,
