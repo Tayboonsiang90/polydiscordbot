@@ -74,7 +74,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
 | `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
 | `ncei-tornadoes` | `/tornadoes` | `#tornadoes` | `NCEI Tornado Alerts` | `🌪️` | Monitors NCEI U.S. Tornadoes monthly time-series counts and auto-discovers monthly tornado markets. |
-| `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `📰` | Monitors the daily New York print front page on PressReader, OCRs page one, and highlights matched strike words on alert images. |
+| `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `📰` | Monitors the daily New York print front page on PressReader, OCRs page one, highlights matched strike words, and auto-discovers weekly NYT headline markets. |
 
 ## Agent Quick Context
 
@@ -89,7 +89,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and stale dated URLs are cleared when no queued or undated market is active.
-- Trump Truth, All-In Podcast, monthly precipitation, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, and NCEI Tornadoes have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
+- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, and NCEI Tornadoes have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 
@@ -175,7 +175,7 @@ Use `/bonbast test` to preview the exact role ping and alert embed without fetch
 
 For most integrations, `/... polymarket url:<url>` appends or updates a queued Polymarket URL in `settingsJson.polymarketMarkets`. If the URL slug contains a date range such as `may-18-may-24`, the bot derives an ET window, keeps the current market active until the new window starts, switches automatically on the next poll/check, and prunes expired queued URLs after rollover. When no queued dated market is active and there is no undated fallback, the bot clears the active Polymarket URL so stale expired markets stop driving checks and reminders.
 
-If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. TSA and USGS Earthquakes use the shared queue plus adapter-specific auto-discovery for upcoming weekly markets. Tesla Deliveries uses the shared queue plus adapter-specific auto-discovery for upcoming quarterly delivery markets. NCEI Tornadoes uses adapter-specific monthly windows with Gamma `endDate` because monthly markets overlap the next month until the NCEI release date.
+If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. NYT Front Page, TSA, and USGS Earthquakes use the shared queue plus adapter-specific auto-discovery for upcoming weekly markets. Tesla Deliveries uses the shared queue plus adapter-specific auto-discovery for upcoming quarterly delivery markets. NCEI Tornadoes uses adapter-specific monthly windows with Gamma `endDate` because monthly markets overlap the next month until the NCEI release date.
 
 Trump Truth and NYT Front Page also support:
 
@@ -287,7 +287,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Trump Schedule monitors Roll Call's Factba.se calendar for today's ET public schedule, stores a compact daily digest with lid/travel/press/remarks flags, and polls every 15 minutes during 7:00 AM-10:00 PM ET.
 - Trump Truth uses the reachable `https://www.trumpstruth.org/feed` archive feed because direct Truth Social access is Cloudflare-blocked locally; alerts include original Truth Social URLs and an Open Truth link button for verification.
 - Trump Truth parses weekly Polymarket strike terms into `settingsJson`, stores the latest seen Truth Social post ID in `lastValue`, checks archive image descriptions, alt text, and basic OCR output for image-only strike review, auto-discovers upcoming weekly markets, supports active-window archive search with `/trumptruth search`, and only role-tags strike hits.
-- NYT Front Page OCRs the page-one image and attaches a highlighted PNG when OCR word boxes line up with matched strike terms; if OCR cannot locate the exact word box, the alert still includes the original image and matched text.
+- NYT Front Page auto-discovers active weekly NYT headline markets through Gamma search, OCRs the page-one image, and attaches a highlighted PNG when OCR word boxes line up with matched strike terms; if OCR cannot locate the exact word box, the alert still includes the original image and matched text.
 - TSA passengers parses the date range from the active Polymarket URL slug, sums official TSA daily checkpoint throughput rows for that range, and auto-discovers upcoming weekly TSA markets into the shared queue.
 - Generic dated Polymarket queueing lives in `src/polymarketQueue.ts`; prefer it over adapter-specific queue fields unless the adapter needs extra parsed market state.
 

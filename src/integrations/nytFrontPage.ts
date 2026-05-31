@@ -3,13 +3,24 @@ import { Jimp, rgbaToInt } from "jimp";
 import Tesseract from "tesseract.js";
 import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlug } from "../marketEnd.js";
+import {
+  parsePolymarketDateRangeWindow,
+  resolveIntegrationPolymarketQueue,
+  upsertPolymarketQueueUrl,
+  type PolymarketQueueMarket
+} from "../polymarketQueue.js";
 import { findMatchedStrikeTerms } from "./trumpTruth.js";
 import type { AdapterValue, EventMonitorPost, EventMonitorResult, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://nytimes.pressreader.com/the-new-york-times/";
 const defaultPolymarketUrl = "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24";
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
+const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
+const nytMarketSearchQuery = "NYT front page headlines";
 const strikeRefreshIntervalMs = 5 * 60_000;
+const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
+const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
+const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 const pageImageWidth = 1200;
 const ocrCache = new Map<string, NytOcrResult>();
 
@@ -17,10 +28,23 @@ export type NytFrontPageSettings = {
   nytStrikeTerms?: string[];
   nytParsedFromUrl?: string;
   nytLastParsedAt?: string;
+  polymarketMarkets?: PolymarketQueueMarket[];
+  lastNytDiscoveryAt?: string;
 };
 
 type GammaEvent = {
   markets?: GammaMarket[];
+};
+
+type GammaSearchResponse = {
+  events?: GammaSearchEvent[];
+};
+
+type GammaSearchEvent = {
+  slug?: unknown;
+  title?: unknown;
+  active?: unknown;
+  closed?: unknown;
 };
 
 type GammaMarket = {
@@ -122,8 +146,9 @@ export async function refreshNytFrontPageSettings(
   force = false,
   now = new Date()
 ): Promise<Record<string, unknown> & NytFrontPageSettings> {
-  const settings = parseRawSettings(integration.settingsJson);
-  const polymarketUrl = integration.polymarketUrl ?? defaultPolymarketUrl;
+  const resolvedQueue = await refreshNytFrontPagePolymarketQueue(integration, now);
+  const settings = parseRawSettings(resolvedQueue.settingsJson);
+  const polymarketUrl = resolvedQueue.activeUrl ?? integration.polymarketUrl ?? defaultPolymarketUrl;
   const lastParsedAt = typeof settings.nytLastParsedAt === "string" ? new Date(settings.nytLastParsedAt).getTime() : NaN;
   const shouldRefresh =
     force ||
@@ -148,6 +173,48 @@ export async function refreshNytFrontPageSettings(
       throw error;
     }
     return settings;
+  }
+}
+
+export async function refreshNytFrontPagePolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  let resolved = resolveIntegrationPolymarketQueue(integration, now);
+  let settings = parseNytDiscoverySettings(resolved.settingsJson);
+  if (!shouldDiscoverNytMarkets(settings, now)) {
+    return resolved;
+  }
+
+  settings = { ...settings, lastNytDiscoveryAt: now.toISOString() };
+  resolved = {
+    settingsJson: JSON.stringify(settings),
+    activeUrl: resolved.activeUrl
+  };
+
+  try {
+    const candidates = await fetchNytMarketSearchCandidates(now);
+    const existingSlugs = new Set((settings.polymarketMarkets ?? []).map((market) => market.slug));
+    for (const candidate of candidates) {
+      if (existingSlugs.has(candidate.slug)) {
+        continue;
+      }
+
+      resolved = upsertPolymarketQueueUrl(
+        {
+          ...integration,
+          settingsJson: resolved.settingsJson,
+          polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
+        },
+        candidate.url,
+        now
+      );
+      existingSlugs.add(candidate.slug);
+    }
+
+    return resolved;
+  } catch {
+    return resolved;
   }
 }
 
@@ -194,6 +261,128 @@ export function extractNytFrontPageGammaStrikeTerms(markets: GammaMarket[]): str
   }
 
   return [...strikeTerms].filter((term) => !resolvedTerms.has(term)).sort((left, right) => left.localeCompare(right));
+}
+
+function shouldDiscoverNytMarkets(settings: NytFrontPageSettings, now: Date): boolean {
+  const markets = normalizeNytQueueMarkets(settings.polymarketMarkets);
+  if (hasQueuedFutureMarket(markets, now)) {
+    return false;
+  }
+
+  const activeMarket = getActiveMarket(markets, now);
+  const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
+  if (!isDiscoveryIntervalDue(settings.lastNytDiscoveryAt, now, intervalMs)) {
+    return false;
+  }
+
+  if (!activeMarket) {
+    return true;
+  }
+
+  return Date.parse(activeMarket.endAt ?? "") - now.getTime() <= marketDiscoveryLookaheadMs;
+}
+
+async function fetchNytMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const searchUrl = new URL(gammaSearchUrl);
+  searchUrl.searchParams.set("q", nytMarketSearchQuery);
+  searchUrl.searchParams.set("events_status", "active");
+  searchUrl.searchParams.set("limit_per_type", "10");
+
+  const response = await fetchWithTimeout(searchUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GammaSearchResponse;
+  return (payload.events ?? []).map((event) => normalizeNytSearchEvent(event, now)).filter((candidate) => candidate !== null);
+}
+
+function normalizeNytSearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
+  if (event.active === false || event.closed === true || !isNonEmptyString(event.slug) || !isNonEmptyString(event.title)) {
+    return null;
+  }
+
+  const title = event.title.toLowerCase();
+  if (
+    !event.slug.startsWith("what-will-the-nyt-front-page-headlines-say-this-week-") ||
+    (!title.startsWith("what will the nyt front-page headlines say this week") &&
+      !title.startsWith("what will the nyt front page headlines say this week"))
+  ) {
+    return null;
+  }
+
+  const url = `https://polymarket.com/event/${event.slug}`;
+  return parsePolymarketDateRangeWindow(url, now) ? { slug: event.slug, url } : null;
+}
+
+function parseNytDiscoverySettings(settingsJson: string | null): NytFrontPageSettings {
+  const settings = parseRawSettings(settingsJson);
+  return {
+    ...settings,
+    polymarketMarkets: normalizeNytQueueMarkets(settings.polymarketMarkets),
+    lastNytDiscoveryAt: typeof settings.lastNytDiscoveryAt === "string" ? settings.lastNytDiscoveryAt : undefined
+  };
+}
+
+function normalizeNytQueueMarkets(value: unknown): PolymarketQueueMarket[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((market) => {
+    if (!market || typeof market !== "object") {
+      return [];
+    }
+
+    const candidate = market as Partial<PolymarketQueueMarket>;
+    if (!isNonEmptyString(candidate.url)) {
+      return [];
+    }
+
+    const slug = isNonEmptyString(candidate.slug) ? candidate.slug : getPolymarketSlug(candidate.url);
+    if (!slug) {
+      return [];
+    }
+
+    return [
+      {
+        url: candidate.url,
+        slug,
+        startAt: typeof candidate.startAt === "string" ? candidate.startAt : null,
+        endAt: typeof candidate.endAt === "string" ? candidate.endAt : null,
+        addedAt: typeof candidate.addedAt === "string" ? candidate.addedAt : new Date(0).toISOString()
+      }
+    ];
+  });
+}
+
+function hasQueuedFutureMarket(markets: PolymarketQueueMarket[], now: Date): boolean {
+  const nowMs = now.getTime();
+  return markets.some((market) => Boolean(market.startAt) && Date.parse(market.startAt!) > nowMs);
+}
+
+function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): PolymarketQueueMarket | null {
+  const nowMs = now.getTime();
+  return (
+    markets.find((market) => {
+      if (!market.startAt || !market.endAt) {
+        return false;
+      }
+
+      return nowMs >= Date.parse(market.startAt) && nowMs <= Date.parse(market.endAt);
+    }) ?? null
+  );
+}
+
+function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, intervalMs: number): boolean {
+  if (!lastDiscoveryAt) {
+    return true;
+  }
+
+  const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
+  return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
 }
 
 export function extractNytStrikeTermsFromQuestion(question: string): string[] {

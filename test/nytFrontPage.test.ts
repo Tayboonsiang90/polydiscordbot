@@ -1,11 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractNytFrontPageGammaStrikeTerms,
   extractNytFrontPageIssue,
   extractNytStrikeTermsFromQuestion,
   findNytStrikeTermBoxes,
-  parseNytFrontPageSettings
+  parseNytFrontPageSettings,
+  refreshNytFrontPagePolymarketQueue
 } from "../src/integrations/nytFrontPage.js";
+import type { Integration } from "../src/integrations/types.js";
 
 function pageHtml(): string {
   return `
@@ -37,6 +39,10 @@ function pageHtml(): string {
 }
 
 describe("NYT front page adapter", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("extracts strike terms from NYT Gamma questions", () => {
     expect(extractNytStrikeTermsFromQuestion('Will the NYT front page headlines say "Federal Reserve" this week?')).toEqual([
       "Federal Reserve"
@@ -132,6 +138,99 @@ describe("NYT front page adapter", () => {
       nytParsedFromUrl: "https://polymarket.com/event/test",
       nytLastParsedAt: "2026-05-18T00:00:00.000Z"
     });
+  });
+
+  it("discovers and queues the next weekly NYT market when the active week is near expiry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31",
+              title: "What will the NYT front-page headlines say this week? (May 25 - May 31)",
+              active: true,
+              closed: false
+            },
+            {
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24",
+              title: "What will the NYT front-page headlines say this week? (May 18 - May 24)",
+              active: true,
+              closed: false
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshNytFrontPagePolymarketQueue(
+      {
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24",
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24",
+              startAt: "2026-05-18T04:00:00.000Z",
+              endAt: "2026-05-25T03:59:00.000Z",
+              addedAt: "2026-05-18T04:00:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24"
+      } as Integration,
+      new Date("2026-05-23T12:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      lastNytDiscoveryAt?: string;
+      polymarketMarkets?: Array<{ slug: string }>;
+    };
+
+    expect(settings.lastNytDiscoveryAt).toBe("2026-05-23T12:00:00.000Z");
+    expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual([
+      "what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24",
+      "what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31"
+    ]);
+    expect(result.activeUrl).toBe("https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24");
+  });
+
+  it("discovers and activates the current NYT market after the stored week expires", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31",
+              title: "What will the NYT front-page headlines say this week? (May 25 - May 31)",
+              active: true,
+              closed: false
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshNytFrontPagePolymarketQueue(
+      {
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24",
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24",
+              startAt: "2026-05-18T04:00:00.000Z",
+              endAt: "2026-05-25T03:59:00.000Z",
+              addedAt: "2026-05-18T04:00:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24"
+      } as Integration,
+      new Date("2026-05-25T12:00:00.000Z")
+    );
+
+    expect(result.activeUrl).toBe("https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31");
   });
 
   it("finds OCR boxes for single and multi-word strike terms", () => {
