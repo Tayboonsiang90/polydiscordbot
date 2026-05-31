@@ -1,4 +1,5 @@
 import { aaaRegularGasAdapter } from "./aaaGas.js";
+import { alignedLayerSaleAdapter } from "./alignedLayerSale.js";
 import { allInPodcastAdapter } from "./allInPodcast.js";
 import { artistSongReleasesAdapter, kpopSongReleasesAdapter } from "./appleSongReleases.js";
 import { arenaAiLeaderboardAdapter } from "./arenaAiLeaderboard.js";
@@ -59,6 +60,7 @@ import { whiteHouseTweetsAdapter } from "./whiteHouseTweets.js";
 
 const adapters = new Map<string, WebsiteAdapter>([
   [aaaRegularGasAdapter.id, aaaRegularGasAdapter],
+  [alignedLayerSaleAdapter.id, alignedLayerSaleAdapter],
   [allInPodcastAdapter.id, allInPodcastAdapter],
   [artistSongReleasesAdapter.id, artistSongReleasesAdapter],
   [arenaAiLeaderboardAdapter.id, arenaAiLeaderboardAdapter],

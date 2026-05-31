@@ -3,6 +3,7 @@ import { getAdapterByCommandName, listAdapters } from "../src/integrations/regis
 
 const expectedCommandIds = [
   ["aaa", "aaa-regular-gas"],
+  ["alignedsale", "aligned-layer-sale"],
   ["allin", "all-in-podcast"],
   ["songreleases", "apple-artist-song-releases"],
   ["arenaai", "arena-ai-no-style-control"],

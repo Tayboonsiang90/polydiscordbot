@@ -97,6 +97,11 @@ describe("adapter commands", () => {
       }
       expect(options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "analysis" })]));
     }
+
+    expect(commandByName.get("alignedsale")).toMatchObject({
+      name: "alignedsale",
+      description: "Manage Aligned Layer Sale"
+    });
   });
 
   it("registers UMA address bulk import and export options", () => {

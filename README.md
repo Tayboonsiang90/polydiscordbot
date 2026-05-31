@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, ChatGPT Outage Days, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Alien Arrests NYC, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Aligned Layer Sale, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, CDC General Fertility Rate, CDC Measles Cases, ChatGPT Outage Days, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Alien Arrests NYC, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -19,6 +19,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `bonbast-usd-irr` | `/bonbast` | `#bonbast-usd-irr` | `Bonbast Alerts` | `💱` | Monitors Bonbast USD/IRR values for Polymarket resolution checks. |
 | `aaa-regular-gas` | `/aaa` | `#aaa-regular-gas` | `AAA Gas Alerts` | `⛽` | Monitors AAA national Current Avg. Regular gas price for Polymarket resolution checks. |
 | `all-in-podcast` | `/allin` | `#allinpod` | `All-In Podcast Alerts` | `🎧` | Monitors allin.com episodes for the latest All-In Podcast release and auto-discovers active weekly All-In Polymarket markets. |
+| `aligned-layer-sale` | `/alignedsale` | `#alignedsale` | `Aligned Sale Alerts` | `⏸️` | Temporary monitor for sale.alignedlayer.com page and app-bundle changes while the token sale is on hold. |
 | `apple-artist-song-releases` | `/songreleases` | `#songreleases` | `Artist Song Release Alerts` | `🎶` | Monitors Apple Music/iTunes for new 2026 songs by unresolved artists parsed from the Polymarket market. |
 | `arena-ai-no-style-control` | `/arenaai` | `#arenaai` | `Arena AI Alerts` | `🤖` | Monitors the top 3 models on Arena AI's overall no-style-control leaderboard. |
 | `aws-disrupted-events` | `/aws` | `#aws-disrupted` | `AWS Disrupted Alerts` | `⚠` | Monitors AWS Health Dashboard history events for disrupted service interruption events in the June 30 market window. |
@@ -235,6 +236,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Use `defaultSettings` and `supportsPeriod` for month/year-driven sources; keep settings in adapter-owned JSON rather than one-off tables.
 - Use the shared command set and embeds; do not create one-off Discord UI per integration.
 - Do not add integration-specific command handlers unless the shared command model cannot express the behavior.
+- Temporary integrations should still be normal adapters with full command/channel/role metadata; mark the temporary purpose in this README and remove or pause the adapter once the market no longer needs monitoring.
 - Add focused tests for parser extraction, adapter registry metadata, command registration, and embed output.
 - Keep README Current Integrations metadata in sync with `listAdapters()`; `test/documentation.test.ts` checks adapter id, command, channel, alert role, and emoji.
 - Keep links in this exact embed field format:
@@ -247,6 +249,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 ## Development
 
 - Add new websites under `src/integrations/`.
+- Aligned Layer Sale is a temporary page-change monitor for `sale.alignedlayer.com`; it stores the HTML shell, app asset paths, and sale-status phrases so an app deployment or sale-state wording change triggers a normal value-change alert.
 - EIA monitors weekly SPR crude oil reserve stocks; it polls hourly except on Tuesday/Wednesday ET, when it polls every minute around the normal release window.
 - FRED eggs monitors April 2026 egg-price data; it polls hourly except on the day before and day of the parsed next release date, when it polls every minute.
 - FRED beef monitors the latest 2026 ground beef price; it polls hourly except on the day before and day of the parsed next release date, when it polls every minute.
