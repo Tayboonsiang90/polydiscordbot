@@ -5,6 +5,7 @@ import {
   formatOpenAiChatGptOutageValue,
   getOpenAiChatGptOutagePeriod,
   getOpenAiChatGptQualifyingOutages,
+  getOpenAiReviewOutages,
   openAiChatGptOutagesAdapter,
   openAiChatGptOutagesShouldAlertOnChange,
   refreshOpenAiChatGptOutagePolymarketQueue
@@ -23,6 +24,12 @@ const qualifyingDetailHtml = String.raw`
   {\"component_id\":\"chat-conv\",\"end_at\":\"2026-06-03T05:30:00Z\",\"id\":\"impact-1\",\"start_at\":\"2026-06-02T23:30:00Z\",\"status\":\"partial_outage\",\"status_page_incident_id\":\"incident-1\"},
   {\"component_id\":\"api-responses\",\"end_at\":\"2026-06-03T01:00:00Z\",\"id\":\"impact-2\",\"start_at\":\"2026-06-03T00:00:00Z\",\"status\":\"partial_outage\",\"status_page_incident_id\":\"incident-1\"},
   {\"component_id\":\"chat-search\",\"end_at\":\"2026-06-03T02:00:00Z\",\"id\":\"impact-3\",\"start_at\":\"2026-06-03T01:00:00Z\",\"status\":\"degraded_performance\",\"status_page_incident_id\":\"incident-1\"}
+  ]
+`;
+
+const apiOnlyPartialOutageHtml = String.raw`
+  \"component_impacts\":[
+  {\"component_id\":\"api-responses\",\"end_at\":\"2026-05-09T00:40:00Z\",\"id\":\"impact-api\",\"start_at\":\"2026-05-08T23:05:00Z\",\"status\":\"partial_outage\",\"status_page_incident_id\":\"incident-api\"}
   ]
 `;
 
@@ -114,6 +121,34 @@ describe("OpenAI ChatGPT outage adapter", () => {
     expect(value).toContain("Days: 2026-06-02, 2026-06-03");
     expect(openAiChatGptOutagesShouldAlertOnChange(null, value)).toBe(true);
     expect(openAiChatGptOutagesShouldAlertOnChange(value, value)).toBe(false);
+  });
+
+  it("includes non-ChatGPT partial/full outages as review-only items", () => {
+    const period = getOpenAiChatGptOutagePeriod({ settingsJson: JSON.stringify({ year: 2026, month: 5 }) } as Integration);
+    const input = {
+      incidents: [
+        {
+          id: "incident-api",
+          name: "Elevated errors for Responses API",
+          status: "resolved",
+          created_at: "2026-05-08T23:05:00Z",
+          resolved_at: "2026-05-09T00:08:01Z"
+        }
+      ],
+      detailHtmlByIncidentId: new Map([["incident-api", apiOnlyPartialOutageHtml]]),
+      chatGptComponents: extractOpenAiChatGptComponentsFromStatusHtml(statusHtml),
+      period
+    };
+    const qualifyingOutages = getOpenAiChatGptQualifyingOutages(input);
+    const reviewOutages = getOpenAiReviewOutages(input);
+    const value = formatOpenAiChatGptOutageValue(qualifyingOutages, period, reviewOutages);
+
+    expect(qualifyingOutages).toEqual([]);
+    expect(reviewOutages).toEqual([expect.objectContaining({ id: "incident-api", isChatGptAffected: false })]);
+    expect(value).toContain("Qualifying days: 0");
+    expect(value).toContain("REVIEW: 2026-05-08 — Elevated errors for Responses API");
+    expect(value).toContain("Components: api-responses");
+    expect(openAiChatGptOutagesShouldAlertOnChange(null, value)).toBe(false);
   });
 
   it("uses month/year settings and exposes the period command", () => {

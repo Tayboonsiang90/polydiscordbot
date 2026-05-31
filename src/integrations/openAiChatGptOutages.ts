@@ -61,6 +61,10 @@ export type OpenAiChatGptOutageIncident = {
   outageDatesEt: string[];
 };
 
+export type OpenAiReviewOutageIncident = OpenAiChatGptOutageIncident & {
+  isChatGptAffected: boolean;
+};
+
 type OpenAiOutagePeriod = OpenAiChatGptOutageSettings & {
   label: string;
   startAt: Date;
@@ -104,13 +108,15 @@ export const openAiChatGptOutagesAdapter: WebsiteAdapter = {
     const chatGptComponents = extractOpenAiChatGptComponentsFromStatusHtml(await statusPageResponse.text());
     const incidentsPayload = (await incidentsResponse.json()) as OpenAiStatusIncidentsResponse;
     const detailHtmlByIncidentId = await fetchOpenAiIncidentDetailHtml(incidentsPayload.incidents ?? [], period);
-    const outages = getOpenAiChatGptQualifyingOutages({
+    const outageInput = {
       incidents: incidentsPayload.incidents ?? [],
       detailHtmlByIncidentId,
       chatGptComponents,
       period
-    });
-    const value = formatOpenAiChatGptOutageValue(outages, period);
+    };
+    const outages = getOpenAiChatGptQualifyingOutages(outageInput);
+    const reviewOutages = getOpenAiReviewOutages(outageInput);
+    const value = formatOpenAiChatGptOutageValue(outages, period, reviewOutages);
 
     return {
       value,
@@ -203,7 +209,52 @@ export function getOpenAiChatGptQualifyingOutages(input: {
     .sort((left, right) => left.resolvedAt.localeCompare(right.resolvedAt));
 }
 
-export function formatOpenAiChatGptOutageValue(outages: OpenAiChatGptOutageIncident[], period: OpenAiOutagePeriod): string {
+export function getOpenAiReviewOutages(input: {
+  incidents: OpenAiStatusIncident[];
+  detailHtmlByIncidentId: Map<string, string>;
+  chatGptComponents: OpenAiStatusComponent[];
+  period: OpenAiOutagePeriod;
+}): OpenAiReviewOutageIncident[] {
+  const chatGptComponentIds = new Set(input.chatGptComponents.map((component) => component.id));
+  return input.incidents
+    .flatMap((incident) => {
+      if (!isResolvedIncident(incident) || !incident.id || !incident.resolved_at) {
+        return [];
+      }
+
+      const html = input.detailHtmlByIncidentId.get(incident.id);
+      if (!html) {
+        return [];
+      }
+
+      const impacts = extractOpenAiIncidentComponentImpacts(html).filter((impact) => qualifyingComponentStatuses.has(impact.status));
+      const outageDatesEt = [...new Set(impacts.flatMap((impact) => getOutageDatesEt(impact.startAt, impact.endAt, input.period)))].sort();
+      if (!outageDatesEt.length) {
+        return [];
+      }
+
+      const componentIds = [...new Set(impacts.map((impact) => impact.componentId))].sort();
+      return [
+        {
+          id: incident.id,
+          name: incident.name?.trim() || "Unnamed incident",
+          resolvedAt: incident.resolved_at,
+          url: buildIncidentUrl(incident.id),
+          componentNames: componentIds,
+          componentStatuses: [...new Set(impacts.map((impact) => impact.status))].sort(),
+          outageDatesEt,
+          isChatGptAffected: componentIds.some((componentId) => chatGptComponentIds.has(componentId))
+        }
+      ];
+    })
+    .sort((left, right) => left.resolvedAt.localeCompare(right.resolvedAt));
+}
+
+export function formatOpenAiChatGptOutageValue(
+  outages: OpenAiChatGptOutageIncident[],
+  period: OpenAiOutagePeriod,
+  reviewOutages: OpenAiReviewOutageIncident[] = outages.map((outage) => ({ ...outage, isChatGptAffected: true }))
+): string {
   const outageDates = getUniqueOutageDates(outages);
   return [
     "Metric: OpenAI ChatGPT Partial/Full Outage days",
@@ -212,6 +263,8 @@ export function formatOpenAiChatGptOutageValue(outages: OpenAiChatGptOutageIncid
     `Days: ${outageDates.length ? outageDates.join(", ") : "none"}`,
     "Qualifying resolved incidents:",
     outages.length ? outages.map(formatOutageIncident).join("\n") : "none",
+    "Review-only Partial/Full Outage incidents:",
+    reviewOutages.length ? reviewOutages.map(formatReviewOutageIncident).join("\n") : "none",
     `Resolution: ${sourceUrl}`
   ].join("\n");
 }
@@ -334,6 +387,16 @@ function getUniqueOutageDates(outages: OpenAiChatGptOutageIncident[]): string[] 
 function formatOutageIncident(incident: OpenAiChatGptOutageIncident): string {
   return [
     `${incident.outageDatesEt.join(", ")} — ${incident.name}`,
+    `Status: ${incident.componentStatuses.map(formatComponentStatus).join(", ")}`,
+    `Components: ${incident.componentNames.join(", ")}`,
+    `Resolved: ${incident.resolvedAt}`,
+    `Link: ${incident.url}`
+  ].join(" | ");
+}
+
+function formatReviewOutageIncident(incident: OpenAiReviewOutageIncident): string {
+  return [
+    `${incident.isChatGptAffected ? "COUNTED" : "REVIEW"}: ${incident.outageDatesEt.join(", ")} — ${incident.name}`,
     `Status: ${incident.componentStatuses.map(formatComponentStatus).join(", ")}`,
     `Components: ${incident.componentNames.join(", ")}`,
     `Resolved: ${incident.resolvedAt}`,
