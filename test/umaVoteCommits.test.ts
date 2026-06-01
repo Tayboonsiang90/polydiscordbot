@@ -128,7 +128,7 @@ describe("UMA vote commit adapter", () => {
       alertTitle: "Large UMA vote commits/recommits",
       type: "UMA vote commits/recommits",
       mentionAlertRole: true,
-      text: expect.stringContaining("Will the highest temperature in Moscow be 4C or below on May 29?")
+      text: "0x7baa3b328603535006d76d7b80af7260fd8a946a committed 2 requests above threshold in 1 round."
     });
     expect(result.posts[0].summaryFields).toEqual(
       expect.arrayContaining([
@@ -136,6 +136,10 @@ describe("UMA vote commit adapter", () => {
         expect.objectContaining({ name: "Recommits", value: "1" }),
         expect.objectContaining({ name: "Estimated stake", value: "400,000 UMA" })
       ])
+    );
+    expect(result.posts[0].summaryFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Commits" })]));
+    expect(result.posts[0].hiddenFields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "Committed requests", value: expect.stringContaining("recommit #2") })])
     );
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       lastScannedBlock: 23737650,

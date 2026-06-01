@@ -377,11 +377,6 @@ async function normalizeUmaVoteCommitPosts(
 
 function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresholdWei: bigint): EventMonitorPost {
   const sortedItems = [...items].sort((left, right) => compareCommitEventsDescending(left.event, right.event));
-  if (sortedItems.length === 1) {
-    const item = sortedItems[0]!;
-    return normalizeUmaVoteCommitPost(item.event, item.stakeWei, thresholdWei, item.postedAt, item.roundAnswer);
-  }
-
   const latest = sortedItems[0]!;
   const event = latest.event;
   const transactionUrl = `https://etherscan.io/tx/${event.transactionHash}`;
@@ -389,12 +384,23 @@ function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresho
   const stakeValues = uniqueStrings(sortedItems.map((item) => `${formatUmaTokenAmount(item.stakeWei)} UMA`));
   const rounds = uniqueStrings(sortedItems.map((item) => String(item.event.roundId)));
   const commitLines = sortedItems.map(formatCommitGroupLine);
-  const title = recommitCount > 0 ? "Large UMA vote commits/recommits" : "Large UMA vote commits";
-  const type = recommitCount > 0 ? "UMA vote commits/recommits" : "UMA vote commits";
-  const text = [
-    `${event.voter} committed ${sortedItems.length} answers above threshold in ${formatPlural(rounds.length, "round")}.`,
-    ...commitLines.slice(0, 5)
-  ].join("\n");
+  const title =
+    sortedItems.length === 1
+      ? recommitCount > 0
+        ? "Large UMA vote recommit"
+        : "Large UMA vote commit"
+      : recommitCount > 0
+        ? "Large UMA vote commits/recommits"
+        : "Large UMA vote commits";
+  const type =
+    sortedItems.length === 1
+      ? recommitCount > 0
+        ? "UMA vote recommit"
+        : "UMA vote commit"
+      : recommitCount > 0
+        ? "UMA vote commits/recommits"
+        : "UMA vote commits";
+  const text = `${event.voter} committed ${formatPlural(sortedItems.length, "request")} above threshold in ${formatPlural(rounds.length, "round")}.`;
 
   return {
     id: event.id,
@@ -416,7 +422,6 @@ function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresho
       { name: "Recommits", value: String(recommitCount), inline: true },
       { name: stakeValues.length === 1 ? "Estimated stake" : "Estimated stakes", value: truncateFieldValue(stakeValues.join("\n")), inline: true },
       { name: "Rounds", value: rounds.join(", "), inline: true },
-      { name: "Commits", value: truncateFieldValue(commitLines.join("\n")), inline: false },
       { name: "Threshold", value: `${formatUmaTokenAmount(thresholdWei)} UMA`, inline: true }
     ],
     hiddenFields: [
@@ -424,6 +429,7 @@ function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresho
       { name: "Block", value: String(event.blockNumber), inline: true },
       { name: "Log index", value: String(event.logIndex), inline: true },
       { name: "Included commit logs", value: truncateFieldValue(sortedItems.map((item) => item.event.id).join("\n")), inline: false },
+      { name: "Committed requests", value: truncateFieldValue(commitLines.join("\n")), inline: false },
       { name: "Latest commit key", value: event.commitKey, inline: false },
       { name: "Latest raw estimated stake", value: latest.stakeWei.toString(), inline: false },
       { name: "Latest ancillary data", value: truncateFieldValue(event.ancillaryDataText || event.ancillaryDataHex), inline: false },
