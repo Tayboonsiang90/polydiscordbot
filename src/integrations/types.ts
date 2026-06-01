@@ -84,6 +84,7 @@ export type EventPostPrioritySummary = {
   questionUrl?: string;
   betmoarUrl?: string;
   proposedOutcome?: string;
+  proposedSideLiquidity?: string;
   proposalExpirationAt?: string;
   marketTags?: string[];
   matchedTags?: string[];

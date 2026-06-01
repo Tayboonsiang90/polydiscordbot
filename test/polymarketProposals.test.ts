@@ -192,6 +192,89 @@ describe("fetchPolymarketProposalUpdates", () => {
     );
   });
 
+  it("marks proposal alerts when proposed-side shares are available on the CLOB book", async () => {
+    const rpcUrl = "https://rpc.example";
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const target = url.toString();
+      if (target === rpcUrl) {
+        const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, unknown>> };
+        if (body.method === "eth_blockNumber") {
+          return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+        }
+        if (body.method === "eth_getLogs") {
+          return jsonResponse({
+            jsonrpc: "2.0",
+            id: 1,
+            result: body.params[0].address === optimisticOracleV2Address ? [buildProposalLog(0n)] : []
+          });
+        }
+      }
+
+      if (target.startsWith("https://clob.polymarket.com/markets-by-question-id/")) {
+        return jsonResponse({
+          question: "Lakers win?",
+          market_slug: "lakers-win",
+          condition_id: "0xcondition",
+          tags: ["Sports", "NBA"],
+          tokens: [
+            { token_id: "yes-token", outcome: "Yes" },
+            { token_id: "no-token", outcome: "No" }
+          ]
+        });
+      }
+
+      if (target.startsWith("https://clob.polymarket.com/book?")) {
+        const bookUrl = new URL(target);
+        expect(bookUrl.searchParams.get("token_id")).toBe("no-token");
+        return jsonResponse({
+          asks: [
+            { price: "0.050", size: "100" },
+            { price: "0.037", size: "12.5" }
+          ],
+          bids: []
+        });
+      }
+
+      if (target.startsWith("https://data-api.polymarket.com/trades")) {
+        return jsonResponse([]);
+      }
+
+      throw new Error(`Unexpected fetch: ${target}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketProposalUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          lastScannedBlock: 980,
+          tagFilters: [{ id: "1", label: "Sports", slug: "sports" }]
+        })
+      } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0].alertTitle).toBe("Polymarket UMA proposal - proposed-side shares available");
+    expect(result.posts[0].text).toContain("Penny pick liquidity: NO shares available | best ask $0.037");
+    expect(result.posts[0].prioritySummary).toMatchObject({
+      proposedOutcome: "NO (0)",
+      proposedSideLiquidity: "**NO shares available** | best ask $0.037 | 12.5 shares at best | 112.5 shares total asks"
+    });
+
+    const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
+    expect(embedFields.slice(0, 3).map((field) => field.name)).toEqual([
+      "Question",
+      "Proposed outcome",
+      "Penny pick liquidity"
+    ]);
+    expect(embedFields[2]).toEqual({
+      name: "Penny pick liquidity",
+      value: "**NO shares available** | best ask $0.037 | 12.5 shares at best | 112.5 shares total asks",
+      inline: false
+    });
+  });
+
   it("does not alert proposals when no tag filters are configured", async () => {
     const rpcUrl = "https://rpc.example";
     vi.stubGlobal(

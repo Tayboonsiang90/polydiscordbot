@@ -34,6 +34,7 @@ export const proposePriceEventSignature = "ProposePrice(address,address,bytes32,
 export const proposePriceTopic = keccakTopic(proposePriceEventSignature);
 
 const clobMarketByQuestionIdUrl = "https://clob.polymarket.com/markets-by-question-id";
+const clobOrderBookUrl = "https://clob.polymarket.com/book";
 const gammaTagsUrl = "https://gamma-api.polymarket.com/tags";
 const defaultConfirmations = 0;
 const defaultInitialLookbackBlocks = 250;
@@ -45,8 +46,12 @@ const maxTagSearchResults = 20;
 const maxGammaTagPages = 120;
 const gammaTagPageSize = 100;
 const gammaTagCacheMs = 10 * 60_000;
+const clobOrderBookTimeoutMs = 2_500;
 const proposalTagChannelPrefix = "uma-proposals-";
 const matchedTagsFieldName = "Matched tags";
+const umaOnePrice = 10n ** 18n;
+const umaHalfPrice = umaOnePrice / 2n;
+const umaIgnorePrice = -(1n << 255n);
 
 type JsonRpcResponse<T> = {
   result?: T;
@@ -63,6 +68,30 @@ type ClobMarket = {
   market_slug?: string;
   condition_id?: string;
   tags?: string[];
+  tokens?: ClobMarketToken[];
+};
+
+type ClobMarketToken = {
+  tokenId: string;
+  outcome: string;
+};
+
+type ClobOrderBook = {
+  asks: ClobOrderLevel[];
+};
+
+type ClobOrderLevel = {
+  price: number;
+  size: number;
+};
+
+type ProposedSideLiquidity = {
+  outcome: string;
+  tokenId: string;
+  bestAsk: number;
+  bestAskSize: number;
+  totalAskSize: number;
+  askCount: number;
 };
 
 type GammaTag = {
@@ -211,6 +240,7 @@ export async function fetchPolymarketProposalUpdates(
   const logs = logsResult.result;
   activeRpcUrl = logsResult.rpcUrl;
   const marketByQuestionId = new Map<string, ClobMarket | null>();
+  const liquidityByTokenId = new Map<string, ProposedSideLiquidity | null>();
   const posts: EventMonitorPost[] = [];
   let decodedProposalCount = 0;
   let matchedProposalCount = 0;
@@ -238,7 +268,8 @@ export async function fetchPolymarketProposalUpdates(
     }
 
     matchedProposalCount += 1;
-    posts.push(await enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch)));
+    const liquidity = await fetchProposedSideLiquidity(proposal, market, liquidityByTokenId).catch(() => null);
+    posts.push(await enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch, liquidity)));
   }
 
   posts.sort(compareProposalPostsDescending);
@@ -285,7 +316,12 @@ export async function buildPolymarketProposalPostFromLog(
 
   const market = await fetchClobMarketByQuestionId(proposal.questionId).catch(() => null);
   const tagMatch = findProposalTagMatch(market?.tags ?? [], tagFilters);
-  return tagMatch ? enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch)) : null;
+  if (!tagMatch) {
+    return null;
+  }
+
+  const liquidity = await fetchProposedSideLiquidity(proposal, market).catch(() => null);
+  return enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch, liquidity));
 }
 
 export function decodeProposePriceLog(log: PolygonLog): PolymarketProposalEvent | null {
@@ -331,18 +367,21 @@ export function decodeProposePriceLog(log: PolygonLog): PolymarketProposalEvent 
 export function normalizePolymarketProposalEvent(
   proposal: PolymarketProposalEvent,
   market: ClobMarket | null,
-  tagMatch: ProposalTagMatch
+  tagMatch: ProposalTagMatch,
+  liquidity: ProposedSideLiquidity | null = null
 ): EventMonitorPost {
   const transactionUrl = `https://polygonscan.com/tx/${proposal.transactionHash}`;
   const polymarketUrl = market?.market_slug ? `https://polymarket.com/market/${market.market_slug}` : undefined;
   const betmoarUrl = market?.market_slug ? `https://betmoar.fun/market/${market.market_slug}` : undefined;
   const question = market?.question;
   const matchedTags = tagMatch.matchedMarketTags.join(", ");
+  const liquidityText = liquidity ? formatProposedSideLiquidity(liquidity) : undefined;
   const text = [
     question ? `Proposal opened for: ${question}` : "A Polymarket UMA resolution proposal was opened.",
     `Proposed outcome: ${proposal.proposedOutcome}`,
+    liquidityText ? `Penny pick liquidity: ${liquidityText.replace(/\*\*/g, "")}` : "",
     `Matched tags: ${matchedTags}`
-  ].join("\n");
+  ].filter(Boolean).join("\n");
   const hiddenFields = [
     { name: "Event type", value: "Polymarket UMA proposal", inline: true },
     { name: "On-chain tx", value: transactionUrl, inline: false },
@@ -358,7 +397,7 @@ export function normalizePolymarketProposalEvent(
   return {
     id: proposal.id,
     type: "Polymarket UMA proposal",
-    alertTitle: "Polymarket UMA proposal",
+    alertTitle: liquidity ? "Polymarket UMA proposal - proposed-side shares available" : "Polymarket UMA proposal",
     sourceLabel: "On-chain tx",
     buttonLabel: "Open transaction",
     mentionAlertRole: true,
@@ -373,6 +412,7 @@ export function normalizePolymarketProposalEvent(
       questionUrl: polymarketUrl,
       betmoarUrl,
       proposedOutcome: proposal.proposedOutcome,
+      proposedSideLiquidity: liquidityText,
       proposalExpirationAt: new Date(proposal.expirationTimestamp * 1_000).toISOString(),
       marketTags: market?.tags,
       matchedTags: tagMatch.matchedMarketTags,
@@ -714,7 +754,7 @@ async function fetchClobMarketByQuestionId(questionId: string): Promise<ClobMark
     return null;
   }
 
-  const payload = (await response.json()) as ClobMarket;
+  const payload = (await response.json()) as Record<string, unknown>;
   if (!payload || typeof payload !== "object") {
     return null;
   }
@@ -723,8 +763,155 @@ async function fetchClobMarketByQuestionId(questionId: string): Promise<ClobMark
     question: typeof payload.question === "string" ? payload.question : undefined,
     market_slug: typeof payload.market_slug === "string" ? payload.market_slug : undefined,
     condition_id: typeof payload.condition_id === "string" ? payload.condition_id : undefined,
-    tags: Array.isArray(payload.tags) ? payload.tags.filter((tag): tag is string => typeof tag === "string") : []
+    tags: Array.isArray(payload.tags) ? payload.tags.filter((tag): tag is string => typeof tag === "string") : [],
+    tokens: parseClobMarketTokens(payload)
   };
+}
+
+async function fetchProposedSideLiquidity(
+  proposal: PolymarketProposalEvent,
+  market: ClobMarket | null,
+  cache = new Map<string, ProposedSideLiquidity | null>()
+): Promise<ProposedSideLiquidity | null> {
+  const token = findProposedOutcomeToken(proposal.proposedPrice, market);
+  if (!token) {
+    return null;
+  }
+
+  if (cache.has(token.tokenId)) {
+    return cache.get(token.tokenId) ?? null;
+  }
+
+  const book = await fetchClobOrderBook(token.tokenId);
+  const asks = book?.asks.filter((ask) => ask.price > 0 && ask.price < 1 && ask.size > 0) ?? [];
+  const liquidity = asks.length
+    ? {
+        outcome: token.outcome,
+        tokenId: token.tokenId,
+        bestAsk: asks[0].price,
+        bestAskSize: asks[0].size,
+        totalAskSize: asks.reduce((sum, ask) => sum + ask.size, 0),
+        askCount: asks.length
+      }
+    : null;
+
+  cache.set(token.tokenId, liquidity);
+  return liquidity;
+}
+
+async function fetchClobOrderBook(tokenId: string): Promise<ClobOrderBook | null> {
+  const url = new URL(clobOrderBookUrl);
+  url.searchParams.set("token_id", tokenId);
+
+  const response = await fetch(url.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" },
+    signal: AbortSignal.timeout(clobOrderBookTimeoutMs)
+  });
+  if (!response.ok) {
+    return null;
+  }
+
+  return parseClobOrderBook((await response.json()) as unknown);
+}
+
+function parseClobMarketTokens(payload: Record<string, unknown>): ClobMarketToken[] {
+  if (Array.isArray(payload.tokens)) {
+    return payload.tokens.map(toClobMarketToken).filter(isClobMarketToken);
+  }
+
+  const tokenIds = parseStringArray(payload.clobTokenIds ?? payload.clob_token_ids);
+  const outcomes = parseStringArray(payload.outcomes);
+  return tokenIds
+    .map((tokenId, index) => ({ tokenId, outcome: outcomes[index] ?? defaultOutcomeName(index) }))
+    .filter(isClobMarketToken);
+}
+
+function toClobMarketToken(value: unknown): ClobMarketToken | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const token = value as Record<string, unknown>;
+  const tokenId = firstNonEmptyString(token.token_id, token.tokenId, token.asset_id, token.assetId, token.id);
+  const outcome = firstNonEmptyString(token.outcome, token.name, token.label);
+  return tokenId && outcome ? { tokenId, outcome } : null;
+}
+
+function parseClobOrderBook(payload: unknown): ClobOrderBook | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const book = payload as Record<string, unknown>;
+  return { asks: parseClobOrderLevels(book.asks).sort((left, right) => left.price - right.price) };
+}
+
+function parseClobOrderLevels(value: unknown): ClobOrderLevel[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map(toClobOrderLevel).filter(isClobOrderLevel);
+}
+
+function toClobOrderLevel(value: unknown): ClobOrderLevel | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const level = value as Record<string, unknown>;
+  const price = toFiniteNumber(level.price);
+  const size = toFiniteNumber(level.size);
+  return price !== null && size !== null ? { price, size } : null;
+}
+
+function findProposedOutcomeToken(proposedPrice: bigint, market: ClobMarket | null): ClobMarketToken | null {
+  const outcomeSide = getScalarProposedOutcomeSide(proposedPrice);
+  const tokens = market?.tokens ?? [];
+  if (!outcomeSide || !tokens.length) {
+    return null;
+  }
+
+  const exactToken = tokens.find((token) => normalizeTokenOutcome(token.outcome) === outcomeSide);
+  if (exactToken) {
+    return { ...exactToken, outcome: outcomeSide };
+  }
+
+  if (tokens.length === 2) {
+    return outcomeSide === "YES" ? tokens[0] : tokens[1];
+  }
+
+  return null;
+}
+
+function getScalarProposedOutcomeSide(proposedPrice: bigint): "YES" | "NO" | null {
+  if (proposedPrice === umaOnePrice) {
+    return "YES";
+  }
+  if (proposedPrice === 0n) {
+    return "NO";
+  }
+  return null;
+}
+
+function normalizeTokenOutcome(outcome: string): "YES" | "NO" | null {
+  const normalized = normalizeTagText(outcome);
+  if (["yes", "y"].includes(normalized)) {
+    return "YES";
+  }
+  if (["no", "n"].includes(normalized)) {
+    return "NO";
+  }
+  return null;
+}
+
+function formatProposedSideLiquidity(liquidity: ProposedSideLiquidity): string {
+  return [
+    `**${liquidity.outcome} shares available**`,
+    `best ask ${formatSharePrice(liquidity.bestAsk)}`,
+    `${formatShareQuantity(liquidity.bestAskSize)} at best`,
+    `${formatShareQuantity(liquidity.totalAskSize)} total asks`
+  ].join(" | ");
 }
 
 async function fetchAllPolymarketTags(nowMs = Date.now()): Promise<TagFilterEntry[]> {
@@ -966,17 +1153,16 @@ function formatConfiguredTagFilters(tagFilters: ProposalTagFilterEntry[]): strin
 }
 
 function formatProposedOutcome(value: bigint): string {
-  const one = 10n ** 18n;
   if (value === 0n) {
     return "NO (0)";
   }
-  if (value === one) {
+  if (value === umaOnePrice) {
     return "YES (1)";
   }
-  if (value === one / 2n) {
+  if (value === umaHalfPrice) {
     return "UNKNOWN / 50-50 (0.5)";
   }
-  if (value === -(1n << 255n)) {
+  if (value === umaIgnorePrice) {
     return "IGNORE";
   }
 
@@ -1071,6 +1257,60 @@ function firstNonEmptyString(...values: unknown[]): string | null {
     }
   }
   return null;
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parseStringArray(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function defaultOutcomeName(index: number): string {
+  if (index === 0) {
+    return "YES";
+  }
+  if (index === 1) {
+    return "NO";
+  }
+  return `Outcome ${index + 1}`;
+}
+
+function isClobMarketToken(value: ClobMarketToken | null): value is ClobMarketToken {
+  return Boolean(value?.tokenId && value.outcome);
+}
+
+function isClobOrderLevel(value: ClobOrderLevel | null): value is ClobOrderLevel {
+  return Boolean(value && Number.isFinite(value.price) && Number.isFinite(value.size));
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatSharePrice(value: number): string {
+  return `$${formatDecimal(value, value < 0.01 ? 4 : 3)}`;
+}
+
+function formatShareQuantity(value: number): string {
+  return `${formatDecimal(value, 4)} shares`;
+}
+
+function formatDecimal(value: number, maximumFractionDigits: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits
+  }).format(value);
 }
 
 function splitRpcUrls(value: unknown): string[] {
