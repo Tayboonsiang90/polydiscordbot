@@ -109,6 +109,7 @@ export const umaVoteRevealsAdapter: WebsiteAdapter = {
   getPollIntervalMinutes: () => 1,
   getPollIntervalReason: () => "Ethereum log polling for large UMA Voting v2 reveal events",
   getErrorNoticeWindowMinutes: () => 60,
+  maxEventPostAgeMinutes: 10,
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     if (!integration) {
       throw new Error("UMA Vote Reveals requires an integration record");

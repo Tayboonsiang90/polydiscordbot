@@ -112,6 +112,7 @@ export const umaVoteCommitsAdapter: WebsiteAdapter = {
   getPollIntervalMinutes: () => 1,
   getPollIntervalReason: () => "Ethereum log polling for large UMA Voting v2 commit and recommit events",
   getErrorNoticeWindowMinutes: () => 60,
+  maxEventPostAgeMinutes: 10,
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     if (!integration) {
       throw new Error("UMA Vote Commits requires an integration record");

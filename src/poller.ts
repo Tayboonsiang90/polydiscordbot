@@ -162,9 +162,10 @@ export async function checkEventIntegration(
   const alertPosts = adapter.shouldAlertOnEventPost
     ? enrichedNewPosts.filter((post) => adapter.shouldAlertOnEventPost!(post))
     : enrichedNewPosts;
+  const freshAlertPosts = alertPosts.filter((post) => isEventPostFresh(adapter, post, result.observedAt));
   const newPosts = options.queueAlerts
-    ? claimEventAlertPosts(database, activeIntegration.id, alertPosts, result.observedAt)
-    : alertPosts;
+    ? claimEventAlertPosts(database, activeIntegration.id, freshAlertPosts, result.observedAt)
+    : freshAlertPosts;
   const eventSettingsJson = updateEventSeenPostIds(baseSettingsJson, eventSelection.nextSeenPostIds);
   const eventStateIntegration =
     eventSettingsJson !== activeIntegration.settingsJson
@@ -192,6 +193,14 @@ function claimEventAlertPosts(
   observedAt: Date
 ): EventMonitorPost[] {
   return posts.filter((post) => database.claimEventAlert(integrationId, post.id, post, observedAt));
+}
+
+function isEventPostFresh(adapter: WebsiteAdapter, post: EventMonitorPost, now: Date): boolean {
+  if (!adapter.maxEventPostAgeMinutes) {
+    return true;
+  }
+
+  return now.getTime() - post.postedAt.getTime() <= adapter.maxEventPostAgeMinutes * 60_000;
 }
 
 export function selectNewEventPosts(
@@ -471,6 +480,12 @@ export class PollScheduler {
 
   private async sendClaimedEventPost(integration: Integration, post: EventMonitorPost): Promise<void> {
     try {
+      const adapter = getAdapter(integration.adapterId);
+      if (!isEventPostFresh(adapter, post, new Date())) {
+        this.database.markEventAlertSent(integration.id, post.id);
+        return;
+      }
+
       for (const channelId of this.resolveEventPostChannelIds(integration, post)) {
         await this.sendEventPost(channelId, integration, post);
       }

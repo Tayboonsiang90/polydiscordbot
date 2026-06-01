@@ -245,6 +245,7 @@ export type WebsiteAdapter = {
   getPollIntervalMinutes?(integration: Integration, now?: Date): number;
   getPollIntervalReason?(integration: Integration, now?: Date): string;
   getErrorNoticeWindowMinutes?(integration: Integration): number;
+  maxEventPostAgeMinutes?: number;
   shouldAlertOnChange?(previousValue: string | null, currentValue: string): boolean;
   upsertPolymarketMarket?(
     integration: Integration,
