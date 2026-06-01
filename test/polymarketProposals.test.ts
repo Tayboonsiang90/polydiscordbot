@@ -272,6 +272,11 @@ describe("fetchPolymarketProposalUpdates", () => {
       proposedOutcome: "NO (0)",
       proposedSideLiquidity: ">>> **NO SHARES AVAILABLE**\nBest ask: **`$0.037`**\nAt best: **`12.5 shares`**\nTotal asks: **`112.5 shares`**"
     });
+    expect(result.posts[0].hiddenFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Penny pick check", value: "CLOB orderbook checked: proposed-side asks found." })
+      ])
+    );
 
     const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
     expect(embedFields.slice(0, 3).map((field) => field.name)).toEqual([
@@ -452,6 +457,9 @@ describe("fetchPolymarketProposalUpdates", () => {
       proposedOutcome: "NO (0)"
     });
     expect(result.posts[0].prioritySummary?.proposedSideLiquidity).toBeUndefined();
+    expect(result.posts[0].hiddenFields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "Penny pick check", value: "CLOB orderbook failed: HTTP 504" })])
+    );
     const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
     expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "PENNY PICK LIQUIDITY" })]));
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("https://gamma-api.polymarket.com/markets?"), expect.anything());

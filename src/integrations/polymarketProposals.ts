@@ -94,6 +94,11 @@ type ProposedSideLiquidity = {
   askCount?: number;
 };
 
+type ProposedSideLiquidityCheck = {
+  liquidity: ProposedSideLiquidity | null;
+  diagnostic: string;
+};
+
 type GammaTag = {
   id?: string | number;
   label?: string;
@@ -240,7 +245,7 @@ export async function fetchPolymarketProposalUpdates(
   const logs = logsResult.result;
   activeRpcUrl = logsResult.rpcUrl;
   const marketByQuestionId = new Map<string, ClobMarket | null>();
-  const liquidityByTokenId = new Map<string, ProposedSideLiquidity | null>();
+  const liquidityByTokenId = new Map<string, ProposedSideLiquidityCheck>();
   const posts: EventMonitorPost[] = [];
   let decodedProposalCount = 0;
   let matchedProposalCount = 0;
@@ -268,8 +273,8 @@ export async function fetchPolymarketProposalUpdates(
     }
 
     matchedProposalCount += 1;
-    const liquidity = await fetchProposedSideLiquidity(proposal, market, liquidityByTokenId).catch(() => null);
-    posts.push(await enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch, liquidity)));
+    const liquidityCheck = await fetchProposedSideLiquidity(proposal, market, liquidityByTokenId);
+    posts.push(await enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch, liquidityCheck)));
   }
 
   posts.sort(compareProposalPostsDescending);
@@ -320,8 +325,8 @@ export async function buildPolymarketProposalPostFromLog(
     return null;
   }
 
-  const liquidity = await fetchProposedSideLiquidity(proposal, market).catch(() => null);
-  return enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch, liquidity));
+  const liquidityCheck = await fetchProposedSideLiquidity(proposal, market);
+  return enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch, liquidityCheck));
 }
 
 export function decodeProposePriceLog(log: PolygonLog): PolymarketProposalEvent | null {
@@ -368,13 +373,14 @@ export function normalizePolymarketProposalEvent(
   proposal: PolymarketProposalEvent,
   market: ClobMarket | null,
   tagMatch: ProposalTagMatch,
-  liquidity: ProposedSideLiquidity | null = null
+  liquidityCheck: ProposedSideLiquidityCheck | null = null
 ): EventMonitorPost {
   const transactionUrl = `https://polygonscan.com/tx/${proposal.transactionHash}`;
   const polymarketUrl = market?.market_slug ? `https://polymarket.com/market/${market.market_slug}` : undefined;
   const betmoarUrl = market?.market_slug ? `https://betmoar.fun/market/${market.market_slug}` : undefined;
   const question = market?.question;
   const matchedTags = tagMatch.matchedMarketTags.join(", ");
+  const liquidity = liquidityCheck?.liquidity ?? null;
   const liquidityText = liquidity ? formatProposedSideLiquidity(liquidity) : undefined;
   const text = [
     question ? `Proposal opened for: ${question}` : "A Polymarket UMA resolution proposal was opened.",
@@ -386,6 +392,7 @@ export function normalizePolymarketProposalEvent(
     { name: "Event type", value: "Polymarket UMA proposal", inline: true },
     { name: "On-chain tx", value: transactionUrl, inline: false },
     { name: matchedTagsFieldName, value: matchedTags, inline: false },
+    ...(liquidityCheck?.diagnostic ? [{ name: "Penny pick check", value: liquidityCheck.diagnostic, inline: false }] : []),
     ...(market?.condition_id ? [{ name: "Condition ID", value: market.condition_id, inline: false }] : []),
     { name: "Question ID", value: proposal.questionId, inline: false },
     { name: "Requester adapter", value: proposal.requester, inline: false },
@@ -773,21 +780,32 @@ async function fetchClobMarketByQuestionId(questionId: string): Promise<ClobMark
 async function fetchProposedSideLiquidity(
   proposal: PolymarketProposalEvent,
   market: ClobMarket | null,
-  cache = new Map<string, ProposedSideLiquidity | null>()
-): Promise<ProposedSideLiquidity | null> {
+  cache = new Map<string, ProposedSideLiquidityCheck>()
+): Promise<ProposedSideLiquidityCheck> {
   const token = findProposedOutcomeToken(proposal.proposedPrice, market);
   if (!token) {
-    return null;
+    return { liquidity: null, diagnostic: "CLOB orderbook skipped: proposed-side token not found." };
   }
 
   if (cache.has(token.tokenId)) {
-    return cache.get(token.tokenId) ?? null;
+    return cache.get(token.tokenId)!;
   }
 
-  const liquidity = getBookProposedSideLiquidity(token, await fetchClobOrderBook(token.tokenId).catch(() => null));
+  let result: ProposedSideLiquidityCheck;
+  try {
+    const liquidity = getBookProposedSideLiquidity(token, await fetchClobOrderBook(token.tokenId));
+    result = {
+      liquidity,
+      diagnostic: liquidity
+        ? "CLOB orderbook checked: proposed-side asks found."
+        : "CLOB orderbook checked: no proposed-side asks."
+    };
+  } catch (error) {
+    result = { liquidity: null, diagnostic: `CLOB orderbook failed: ${formatError(error)}` };
+  }
 
-  cache.set(token.tokenId, liquidity);
-  return liquidity;
+  cache.set(token.tokenId, result);
+  return result;
 }
 
 async function fetchClobOrderBook(tokenId: string): Promise<ClobOrderBook | null> {
@@ -799,10 +817,15 @@ async function fetchClobOrderBook(tokenId: string): Promise<ClobOrderBook | null
     signal: AbortSignal.timeout(clobOrderBookTimeoutMs)
   });
   if (!response.ok) {
-    return null;
+    throw new Error(`HTTP ${response.status}`);
   }
 
-  return parseClobOrderBook((await response.json()) as unknown);
+  const book = parseClobOrderBook((await response.json()) as unknown);
+  if (!book) {
+    throw new Error("unexpected response");
+  }
+
+  return book;
 }
 
 function getBookProposedSideLiquidity(token: ClobMarketToken, book: ClobOrderBook | null): ProposedSideLiquidity | null {
