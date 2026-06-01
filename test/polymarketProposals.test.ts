@@ -286,6 +286,98 @@ describe("fetchPolymarketProposalUpdates", () => {
     });
   });
 
+  it("falls back to Gamma best bid when proposed-side CLOB book liquidity is unavailable", async () => {
+    const rpcUrl = "https://rpc.example";
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const target = url.toString();
+      if (target === rpcUrl) {
+        const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, unknown>> };
+        if (body.method === "eth_blockNumber") {
+          return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+        }
+        if (body.method === "eth_getLogs") {
+          return jsonResponse({
+            jsonrpc: "2.0",
+            id: 1,
+            result: body.params[0].address === optimisticOracleV2Address ? [buildProposalLog(0n)] : []
+          });
+        }
+      }
+
+      if (target.startsWith("https://clob.polymarket.com/markets-by-question-id/")) {
+        return jsonResponse({
+          question: "Trump declassifies new UFO files by May 31?",
+          market_slug: "trump-declassifies-new-ufo-files-by-may-31-691",
+          condition_id: "0xcondition",
+          tags: ["Politics", "Aliens", "Trump", "Culture"],
+          tokens: [
+            { token_id: "yes-token", outcome: "Yes" },
+            { token_id: "no-token", outcome: "No" }
+          ]
+        });
+      }
+
+      if (target.startsWith("https://clob.polymarket.com/book?")) {
+        const bookUrl = new URL(target);
+        expect(bookUrl.searchParams.get("token_id")).toBe("no-token");
+        return new Response("upstream timeout", { status: 504 });
+      }
+
+      if (target.startsWith("https://gamma-api.polymarket.com/markets?")) {
+        const gammaUrl = new URL(target);
+        expect(gammaUrl.searchParams.get("slug")).toBe("trump-declassifies-new-ufo-files-by-may-31-691");
+        return jsonResponse([
+          {
+            slug: "trump-declassifies-new-ufo-files-by-may-31-691",
+            outcomes: "[\"Yes\", \"No\"]",
+            outcomePrices: "[\"0.0025\", \"0.9975\"]",
+            bestBid: 0.001,
+            bestAsk: 0.004,
+            liquidity: "17131.66024"
+          }
+        ]);
+      }
+
+      if (target.startsWith("https://gamma-api.polymarket.com/public-profile")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      if (target.startsWith("https://data-api.polymarket.com/trades")) {
+        return jsonResponse([]);
+      }
+
+      throw new Error(`Unexpected fetch: ${target}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketProposalUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          lastScannedBlock: 980,
+          tagFilters: [{ id: "2", label: "Politics", slug: "politics" }]
+        })
+      } as Integration,
+      new Date("2026-06-01T04:16:00.000Z")
+    );
+
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0].alertTitle).toBe("Polymarket UMA proposal - proposed-side shares available");
+    expect(result.posts[0].prioritySummary).toMatchObject({
+      proposedOutcome: "NO (0)",
+      proposedSideLiquidity: "**NO shares likely available** | estimated best ask $0.999 | size unavailable from Gamma fallback"
+    });
+    const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
+    expect(embedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Penny pick liquidity",
+          value: "**NO shares likely available** | estimated best ask $0.999 | size unavailable from Gamma fallback"
+        })
+      ])
+    );
+  });
+
   it("does not alert proposals when no tag filters are configured", async () => {
     const rpcUrl = "https://rpc.example";
     vi.stubGlobal(

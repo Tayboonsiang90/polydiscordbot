@@ -35,6 +35,7 @@ export const proposePriceTopic = keccakTopic(proposePriceEventSignature);
 
 const clobMarketByQuestionIdUrl = "https://clob.polymarket.com/markets-by-question-id";
 const clobOrderBookUrl = "https://clob.polymarket.com/book";
+const gammaMarketsUrl = "https://gamma-api.polymarket.com/markets";
 const gammaTagsUrl = "https://gamma-api.polymarket.com/tags";
 const defaultConfirmations = 0;
 const defaultInitialLookbackBlocks = 250;
@@ -47,6 +48,7 @@ const maxGammaTagPages = 120;
 const gammaTagPageSize = 100;
 const gammaTagCacheMs = 10 * 60_000;
 const clobOrderBookTimeoutMs = 2_500;
+const gammaMarketTimeoutMs = 2_500;
 const proposalTagChannelPrefix = "uma-proposals-";
 const matchedTagsFieldName = "Matched tags";
 const umaOnePrice = 10n ** 18n;
@@ -89,9 +91,20 @@ type ProposedSideLiquidity = {
   outcome: string;
   tokenId: string;
   bestAsk: number;
-  bestAskSize: number;
-  totalAskSize: number;
-  askCount: number;
+  bestAskSize?: number;
+  totalAskSize?: number;
+  askCount?: number;
+  estimated?: boolean;
+};
+
+type GammaMarket = {
+  slug?: string;
+  bestBid?: string | number | null;
+  bestAsk?: string | number | null;
+  liquidity?: string | number | null;
+  liquidityClob?: string | number | null;
+  outcomes?: string[] | string;
+  outcomePrices?: string[] | string;
 };
 
 type GammaTag = {
@@ -782,18 +795,10 @@ async function fetchProposedSideLiquidity(
     return cache.get(token.tokenId) ?? null;
   }
 
-  const book = await fetchClobOrderBook(token.tokenId);
-  const asks = book?.asks.filter((ask) => ask.price > 0 && ask.price < 1 && ask.size > 0) ?? [];
-  const liquidity = asks.length
-    ? {
-        outcome: token.outcome,
-        tokenId: token.tokenId,
-        bestAsk: asks[0].price,
-        bestAskSize: asks[0].size,
-        totalAskSize: asks.reduce((sum, ask) => sum + ask.size, 0),
-        askCount: asks.length
-      }
-    : null;
+  const book = await fetchClobOrderBook(token.tokenId).catch(() => null);
+  const liquidity =
+    getBookProposedSideLiquidity(token, book) ??
+    (await fetchGammaProposedSideLiquidity(proposal.proposedPrice, market, token).catch(() => null));
 
   cache.set(token.tokenId, liquidity);
   return liquidity;
@@ -812,6 +817,77 @@ async function fetchClobOrderBook(tokenId: string): Promise<ClobOrderBook | null
   }
 
   return parseClobOrderBook((await response.json()) as unknown);
+}
+
+function getBookProposedSideLiquidity(token: ClobMarketToken, book: ClobOrderBook | null): ProposedSideLiquidity | null {
+  const asks = book?.asks.filter((ask) => ask.price > 0 && ask.price < 1 && ask.size > 0) ?? [];
+  return asks.length
+    ? {
+        outcome: token.outcome,
+        tokenId: token.tokenId,
+        bestAsk: asks[0].price,
+        bestAskSize: asks[0].size,
+        totalAskSize: asks.reduce((sum, ask) => sum + ask.size, 0),
+        askCount: asks.length
+      }
+    : null;
+}
+
+async function fetchGammaProposedSideLiquidity(
+  proposedPrice: bigint,
+  market: ClobMarket | null,
+  token: ClobMarketToken
+): Promise<ProposedSideLiquidity | null> {
+  const outcomeSide = getScalarProposedOutcomeSide(proposedPrice);
+  if (!outcomeSide || !market?.market_slug) {
+    return null;
+  }
+
+  const gammaMarket = await fetchGammaMarketBySlug(market.market_slug);
+  const bestAsk = estimateGammaProposedSideBestAsk(outcomeSide, gammaMarket);
+  if (bestAsk === null || bestAsk <= 0 || bestAsk >= 1) {
+    return null;
+  }
+
+  return {
+    outcome: token.outcome,
+    tokenId: token.tokenId,
+    bestAsk,
+    estimated: true
+  };
+}
+
+async function fetchGammaMarketBySlug(slug: string): Promise<GammaMarket | null> {
+  const url = new URL(gammaMarketsUrl);
+  url.searchParams.set("slug", slug);
+
+  const response = await fetch(url.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" },
+    signal: AbortSignal.timeout(gammaMarketTimeoutMs)
+  });
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as unknown;
+  const markets = Array.isArray(payload) ? payload.filter(isGammaMarket) : isGammaMarket(payload) ? [payload] : [];
+  return markets.find((candidate) => candidate.slug === slug) ?? markets[0] ?? null;
+}
+
+function estimateGammaProposedSideBestAsk(outcomeSide: "YES" | "NO", market: GammaMarket | null): number | null {
+  if (!market) {
+    return null;
+  }
+
+  const directPrice = outcomeSide === "YES" ? toFiniteNumber(market.bestAsk) : complementPrice(toFiniteNumber(market.bestBid));
+  if (directPrice !== null) {
+    return directPrice;
+  }
+
+  const outcomes = parseStringArray(market.outcomes);
+  const outcomePrices = parseNumberArray(market.outcomePrices);
+  const outcomeIndex = outcomes.findIndex((outcome) => normalizeTokenOutcome(outcome) === outcomeSide);
+  return outcomeIndex >= 0 ? outcomePrices[outcomeIndex] ?? null : null;
 }
 
 function parseClobMarketTokens(payload: Record<string, unknown>): ClobMarketToken[] {
@@ -907,11 +983,14 @@ function normalizeTokenOutcome(outcome: string): "YES" | "NO" | null {
 
 function formatProposedSideLiquidity(liquidity: ProposedSideLiquidity): string {
   return [
-    `**${liquidity.outcome} shares available**`,
-    `best ask ${formatSharePrice(liquidity.bestAsk)}`,
-    `${formatShareQuantity(liquidity.bestAskSize)} at best`,
-    `${formatShareQuantity(liquidity.totalAskSize)} total asks`
-  ].join(" | ");
+    `**${liquidity.outcome} shares ${liquidity.estimated ? "likely available" : "available"}**`,
+    `${liquidity.estimated ? "estimated best ask" : "best ask"} ${formatSharePrice(liquidity.bestAsk)}`,
+    liquidity.bestAskSize === undefined ? "" : `${formatShareQuantity(liquidity.bestAskSize)} at best`,
+    liquidity.totalAskSize === undefined ? "" : `${formatShareQuantity(liquidity.totalAskSize)} total asks`,
+    liquidity.estimated ? "size unavailable from Gamma fallback" : ""
+  ]
+    .filter(Boolean)
+    .join(" | ");
 }
 
 async function fetchAllPolymarketTags(nowMs = Date.now()): Promise<TagFilterEntry[]> {
@@ -1261,7 +1340,9 @@ function firstNonEmptyString(...values: unknown[]): string | null {
 
 function parseStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
+    return value
+      .map((item) => (typeof item === "number" ? String(item) : item))
+      .filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
   }
 
   if (typeof value !== "string" || !value.trim()) {
@@ -1274,6 +1355,24 @@ function parseStringArray(value: unknown): string[] {
   } catch {
     return [];
   }
+}
+
+function parseNumberArray(value: unknown): number[] {
+  return parseStringArray(value)
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item));
+}
+
+function complementPrice(value: number | null): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(1, 1 - value));
+}
+
+function isGammaMarket(value: unknown): value is GammaMarket {
+  return Boolean(value && typeof value === "object");
 }
 
 function defaultOutcomeName(index: number): string {
