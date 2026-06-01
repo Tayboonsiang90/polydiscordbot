@@ -86,6 +86,7 @@ export type EventPostPrioritySummary = {
   proposedOutcome?: string;
   proposedOutcomeSide?: "YES" | "NO";
   proposedSideLiquidity?: string;
+  proposedSideLiquidityCheck?: string;
   proposalExpirationAt?: string;
   conditionId?: string;
   marketTags?: string[];

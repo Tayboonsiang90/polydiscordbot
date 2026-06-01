@@ -539,6 +539,9 @@ function formatPrioritySummaryFields(
     ...(summary.proposedSideLiquidity
       ? [{ name: "PENNY PICK LIQUIDITY", value: summary.proposedSideLiquidity, inline: false }]
       : []),
+    ...(summary.proposedSideLiquidityCheck
+      ? [{ name: "PENNY PICK CHECK", value: `**${summary.proposedSideLiquidityCheck}**`, inline: false }]
+      : []),
     { name: "Posted at (SGT)", value: formatSingaporeDateTime(post.postedAt), inline: true },
     ...(summary.proposalExpirationAt
       ? [{ name: "Proposal expiration (SGT)", value: formatSingaporeDateTime(summary.proposalExpirationAt), inline: true }]

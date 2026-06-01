@@ -454,14 +454,18 @@ describe("fetchPolymarketProposalUpdates", () => {
     expect(result.posts).toHaveLength(1);
     expect(result.posts[0].alertTitle).toBe("Polymarket UMA proposal");
     expect(result.posts[0].prioritySummary).toMatchObject({
-      proposedOutcome: "NO (0)"
+      proposedOutcome: "NO (0)",
+      proposedSideLiquidityCheck: "CLOB orderbook failed: HTTP 504"
     });
     expect(result.posts[0].prioritySummary?.proposedSideLiquidity).toBeUndefined();
-    expect(result.posts[0].hiddenFields).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "Penny pick check", value: "CLOB orderbook failed: HTTP 504" })])
-    );
+    expect(result.posts[0].hiddenFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Penny pick check" })]));
     const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
     expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "PENNY PICK LIQUIDITY" })]));
+    expect(embedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "PENNY PICK CHECK", value: "**CLOB orderbook failed: HTTP 504**" })
+      ])
+    );
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("https://gamma-api.polymarket.com/markets?"), expect.anything());
   });
 

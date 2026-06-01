@@ -382,6 +382,7 @@ export function normalizePolymarketProposalEvent(
   const matchedTags = tagMatch.matchedMarketTags.join(", ");
   const liquidity = liquidityCheck?.liquidity ?? null;
   const liquidityText = liquidity ? formatProposedSideLiquidity(liquidity) : undefined;
+  const visibleLiquidityCheck = getVisibleLiquidityCheck(liquidityCheck?.diagnostic);
   const text = [
     question ? `Proposal opened for: ${question}` : "A Polymarket UMA resolution proposal was opened.",
     `Proposed outcome: ${proposal.proposedOutcome}`,
@@ -392,7 +393,9 @@ export function normalizePolymarketProposalEvent(
     { name: "Event type", value: "Polymarket UMA proposal", inline: true },
     { name: "On-chain tx", value: transactionUrl, inline: false },
     { name: matchedTagsFieldName, value: matchedTags, inline: false },
-    ...(liquidityCheck?.diagnostic ? [{ name: "Penny pick check", value: liquidityCheck.diagnostic, inline: false }] : []),
+    ...(liquidityCheck?.diagnostic && !visibleLiquidityCheck
+      ? [{ name: "Penny pick check", value: liquidityCheck.diagnostic, inline: false }]
+      : []),
     ...(market?.condition_id ? [{ name: "Condition ID", value: market.condition_id, inline: false }] : []),
     { name: "Question ID", value: proposal.questionId, inline: false },
     { name: "Requester adapter", value: proposal.requester, inline: false },
@@ -421,6 +424,7 @@ export function normalizePolymarketProposalEvent(
       proposedOutcome: proposal.proposedOutcome,
       proposedOutcomeSide: getScalarProposedOutcomeSide(proposal.proposedPrice) ?? undefined,
       proposedSideLiquidity: liquidityText,
+      proposedSideLiquidityCheck: visibleLiquidityCheck,
       proposalExpirationAt: new Date(proposal.expirationTimestamp * 1_000).toISOString(),
       conditionId: market?.condition_id,
       marketTags: market?.tags,
@@ -942,6 +946,10 @@ function formatProposedSideLiquidity(liquidity: ProposedSideLiquidity): string {
   ].filter(Boolean);
 
   return `>>> ${lines.join("\n")}`;
+}
+
+function getVisibleLiquidityCheck(diagnostic: string | undefined): string | undefined {
+  return diagnostic?.startsWith("CLOB orderbook failed:") ? diagnostic : undefined;
 }
 
 function formatPlainProposedSideLiquidity(value: string): string {
