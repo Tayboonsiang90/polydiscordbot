@@ -429,12 +429,9 @@ function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresho
       { name: "Contract", value: votingV2Address, inline: false },
       { name: "Block", value: String(event.blockNumber), inline: true },
       { name: "Log index", value: String(event.logIndex), inline: true },
-      { name: "Included commit logs", value: truncateFieldValue(sortedItems.map((item) => item.event.id).join("\n")), inline: false },
-      { name: "Committed requests", value: truncateFieldValue(commitLines.join("\n")), inline: false },
+      { name: "Committed requests", value: truncateFieldValue(commitLines.join("\n"), 3_800), inline: false },
       { name: "Latest commit key", value: event.commitKey, inline: false },
-      { name: "Latest raw estimated stake", value: latest.stakeWei.toString(), inline: false },
-      { name: "Latest ancillary data", value: truncateFieldValue(event.ancillaryDataText || event.ancillaryDataHex), inline: false },
-      { name: "Latest ancillary data hex", value: event.ancillaryDataHex, inline: false }
+      { name: "Latest request metadata", value: event.ancillaryDataText || "unavailable", inline: false }
     ],
     imageUrls: [],
     imageText: "",

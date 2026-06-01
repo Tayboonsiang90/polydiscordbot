@@ -141,6 +141,18 @@ describe("UMA vote reveal adapter", () => {
         expect.objectContaining({ name: "Reveals", value: expect.stringContaining("committee P1") })
       ])
     );
+    expect(result.posts[0].hiddenFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Revealed requests", value: expect.stringContaining("committee P1") }),
+        expect.objectContaining({ name: "Latest request metadata", value: expect.stringContaining("childRequester") })
+      ])
+    );
+    expect(result.posts[0].hiddenFields).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Included reveal logs" }),
+        expect.objectContaining({ name: "Latest ancillary data hex" })
+      ])
+    );
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       lastScannedBlock: 23387898,
       lastRpcUrl: "https://rpc.example",

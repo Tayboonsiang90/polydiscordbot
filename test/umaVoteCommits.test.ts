@@ -139,7 +139,16 @@ describe("UMA vote commit adapter", () => {
     );
     expect(result.posts[0].summaryFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Commits" })]));
     expect(result.posts[0].hiddenFields).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "Committed requests", value: expect.stringContaining("recommit #2") })])
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Committed requests", value: expect.stringContaining("recommit #2") }),
+        expect.objectContaining({ name: "Latest request metadata", value: expect.stringContaining("childRequester") })
+      ])
+    );
+    expect(result.posts[0].hiddenFields).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Included commit logs" }),
+        expect.objectContaining({ name: "Latest ancillary data hex" })
+      ])
     );
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       lastScannedBlock: 23737650,

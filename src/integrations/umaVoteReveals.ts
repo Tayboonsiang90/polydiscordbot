@@ -421,10 +421,8 @@ function normalizeUmaVoteRevealPostGroup(items: UmaVoteRevealPostItem[], thresho
       { name: "Contract", value: votingV2Address, inline: false },
       { name: "Block", value: String(event.blockNumber), inline: true },
       { name: "Log index", value: String(event.logIndex), inline: true },
-      { name: "Included reveal logs", value: truncateFieldValue(sortedItems.map((item) => item.event.id).join("\n")), inline: false },
-      { name: "Latest raw vote weight", value: event.numTokens.toString(), inline: false },
-      { name: "Latest ancillary data", value: truncateFieldValue(event.ancillaryDataText || event.ancillaryDataHex), inline: false },
-      { name: "Latest ancillary data hex", value: event.ancillaryDataHex, inline: false }
+      { name: "Revealed requests", value: truncateFieldValue(revealLines.join("\n"), 3_800), inline: false },
+      { name: "Latest request metadata", value: event.ancillaryDataText || "unavailable", inline: false }
     ],
     imageUrls: [],
     imageText: "",
