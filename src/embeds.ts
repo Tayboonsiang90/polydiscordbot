@@ -11,7 +11,8 @@ import type {
   TagBlocklistUpdateResult,
   TagFilterEntry,
   TagFilterUpdateResult,
-  TagSearchResult
+  TagSearchResult,
+  ThresholdUpdateResult
 } from "./integrations/types.js";
 import type { MarketEndReminder } from "./marketEnd.js";
 import { parseSettingsJson } from "./settingsJson.js";
@@ -270,6 +271,16 @@ export function buildAddressLabelsEmbed(integration: Integration, result: Addres
       { name: "Changed", value: result.changed ? "yes" : "no", inline: true },
       { name: "Result", value: result.message, inline: false },
       ...summaryFields
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildThresholdEmbed(integration: Integration, result: ThresholdUpdateResult): EmbedBuilder {
+  return baseEmbed(integration, "Alert threshold")
+    .addFields(
+      { name: "Changed", value: result.changed ? "yes" : "no", inline: true },
+      { name: result.thresholdLabel, value: result.thresholdValue, inline: true },
+      { name: "Result", value: result.message, inline: false }
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 }
@@ -963,6 +974,20 @@ function formatSettingsFields(integration: Integration) {
       .map((tag) => `${tag.label ?? tag.slug} (${tag.slug ?? "no slug"})`);
     fields.push({ name: "Proposal tag filters", value: tags.length ? truncateEmbedValue(tags.join("\n")) : "none configured", inline: false });
   }
+  if (typeof settings.umaRevealThresholdWei === "string") {
+    fields.push({
+      name: "UMA reveal threshold",
+      value: `${formatTokenUnits(settings.umaRevealThresholdWei, 18)} UMA`,
+      inline: true
+    });
+  }
+  if (typeof settings.umaCommitThresholdWei === "string") {
+    fields.push({
+      name: "UMA commit threshold",
+      value: `${formatTokenUnits(settings.umaCommitThresholdWei, 18)} UMA`,
+      inline: true
+    });
+  }
 
   return fields;
 }
@@ -980,6 +1005,23 @@ function formatSnapshotFields(integration: Integration) {
 
 function truncateEmbedValue(value: string, maxLength = 1000): string {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+}
+
+function formatTokenUnits(value: string, decimals: number): string {
+  try {
+    const units = BigInt(value);
+    const scale = 10n ** BigInt(decimals);
+    const whole = units / scale;
+    const fractional = units % scale;
+    if (fractional === 0n) {
+      return whole.toLocaleString("en-US");
+    }
+
+    const fraction = fractional.toString().padStart(decimals, "0").replace(/0+$/, "");
+    return `${whole.toLocaleString("en-US")}.${fraction.slice(0, 4)}`;
+  } catch {
+    return value;
+  }
 }
 
 function chunkRows<T>(rows: T[], size: number): T[][] {

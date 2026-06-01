@@ -47,6 +47,9 @@ const expectedCommandIds = [
   ["umaclarifications", "polymarket-clarifications"],
   ["umadispute", "polymarket-disputes"],
   ["umaproposals", "polymarket-proposals"],
+  ["umacommits", "uma-vote-commits"],
+  ["umareveals", "uma-vote-reveals"],
+  ["umavotes", "uma-voting-committee"],
   ["ngprice", "pyth-natural-gas-strikes"],
   ["wti", "pyth-wti-strikes"],
   ["xagusd", "pyth-xagusd-strikes"],
@@ -127,5 +130,10 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("whitehousetweets").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("whitehousetweets").upsertPolymarketMarket).toBeDefined();
+    expect(getAdapterByCommandName("umacommits").updateThreshold).toBeDefined();
+    expect(getAdapterByCommandName("umacommits").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("umareveals").updateThreshold).toBeDefined();
+    expect(getAdapterByCommandName("umareveals").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("umavotes").getPollIntervalMinutes?.({} as never)).toBe(10);
   });
 });

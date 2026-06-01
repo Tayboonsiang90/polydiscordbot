@@ -211,6 +211,14 @@ export type AddressLabelUpdateOptions = {
   dryRun?: boolean;
 };
 
+export type ThresholdUpdateResult = {
+  changed: boolean;
+  message: string;
+  thresholdLabel: string;
+  thresholdValue: string;
+  settingsJson: string;
+};
+
 export type WebsiteAdapter = {
   id: string;
   commandName: string;
@@ -265,5 +273,6 @@ export type WebsiteAdapter = {
     labelQuery?: string,
     options?: AddressLabelUpdateOptions
   ): Promise<AddressLabelUpdateResult>;
+  updateThreshold?(integration: Integration, thresholdQuery?: string): ThresholdUpdateResult | Promise<ThresholdUpdateResult>;
   getTagFilters?(integration: Integration): TagFilterEntry[];
 };

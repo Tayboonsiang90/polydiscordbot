@@ -54,6 +54,9 @@ import { trumpScheduleAdapter } from "./trumpSchedule.js";
 import { trumpTruthAdapter } from "./trumpTruth.js";
 import { tsaPassengersAdapter } from "./tsaPassengers.js";
 import type { WebsiteAdapter } from "./types.js";
+import { umaVoteCommitsAdapter } from "./umaVoteCommits.js";
+import { umaVoteRevealsAdapter } from "./umaVoteReveals.js";
+import { umaVotingCommitteeAdapter } from "./umaVotingCommittee.js";
 import { usgsEarthquakesAdapter } from "./usgsEarthquakes.js";
 import { whiteHouseAliensNycAdapter } from "./whiteHouseAliensNyc.js";
 import { whiteHouseFullLidAdapter } from "./whiteHouseFullLid.js";
@@ -116,6 +119,9 @@ const adapters = new Map<string, WebsiteAdapter>([
   [trumpScheduleAdapter.id, trumpScheduleAdapter],
   [trumpTruthAdapter.id, trumpTruthAdapter],
   [tsaPassengersAdapter.id, tsaPassengersAdapter],
+  [umaVoteCommitsAdapter.id, umaVoteCommitsAdapter],
+  [umaVoteRevealsAdapter.id, umaVoteRevealsAdapter],
+  [umaVotingCommitteeAdapter.id, umaVotingCommitteeAdapter],
   [usgsEarthquakesAdapter.id, usgsEarthquakesAdapter],
   [whiteHouseAliensNycAdapter.id, whiteHouseAliensNycAdapter],
   [whiteHouseFullLidAdapter.id, whiteHouseFullLidAdapter],

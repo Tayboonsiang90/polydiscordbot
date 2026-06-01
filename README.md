@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Aligned Layer Sale, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, BLS Jobs Added, CDC General Fertility Rate, CDC Measles Cases, ChatGPT Outage Days, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Alien Arrests NYC, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Aligned Layer Sale, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, BLS CPI Releases, BLS Jobs Added, CDC General Fertility Rate, CDC Measles Cases, ChatGPT Outage Days, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, UMA Vote Commits, UMA Vote Reveals, UMA Voting Committee, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, White House Alien Arrests NYC, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -48,6 +48,9 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `polymarket-clarifications` | `/umaclarifications` | `#uma-clarifications` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
 | `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
 | `polymarket-proposals` | `/umaproposals` | `#uma-proposals` | `UMA Proposal Alerts` | `📨` | Alerts when Polymarket UMA resolution proposals open on-chain for configured Polymarket tags. |
+| `uma-vote-commits` | `/umacommits` | `#uma-commits` | `UMA Commit Alerts` | `🔒` | Alerts when Ethereum UMA Voting v2 commit or recommit events come from voters above the configured staked UMA threshold. |
+| `uma-vote-reveals` | `/umareveals` | `#uma-reveals` | `UMA Reveal Alerts` | `👁️` | Alerts when Ethereum UMA Voting v2 reveal events meet the configured staked UMA threshold. |
+| `uma-voting-committee` | `/umavotes` | `#uma-votes` | `UMA Vote Alerts` | `🗳️` | Monitors UMA.rocks voting committee GitHub answer changes and contributor comments for the active voting round. |
 | `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker, alerts only on strike crossings, and auto-discovers monthly NG price markets. |
 | `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker, alerts only on strike crossings, and auto-discovers monthly WTI price markets. |
 | `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed, alerts only on strike crossings, and auto-discovers monthly silver price markets. |
@@ -87,6 +90,8 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
 - Event alerts can put noisy metadata in `hiddenFields`; Discord shows it only through the shared `Show more` button.
 - Polling and alert sends live in `src/poller.ts`; reaction-role add/remove logic lives in `src/reactionRoles.ts`.
+- UMA Vote Commits polls Ethereum UMA Voting v2 `VoteCommitted` logs every minute, estimates voter stake with `getVoterStakePostUpdate(address)`, detects recommits from repeated voter/request commit keys, and filters by `/umacommits threshold`.
+- UMA Vote Reveals polls Ethereum UMA Voting v2 `VoteRevealed` logs every minute and filters by `/umareveals threshold`.
 - Market-end reminder lookup lives in `src/marketEnd.ts`; it uses queued ET windows when available, otherwise Polymarket Gamma API `endDate` by URL slug, stores the result in SQLite, backs off failed Gamma lookups, and sends shared 24h, 12h, 1h, and end alerts.
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
@@ -115,6 +120,8 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    POLYGON_RPC_URL=...
    POLYGON_RPC_URLS=...
    POLYGON_WS_URL=...
+   ETHEREUM_RPC_URL=...
+   ETHEREUM_RPC_URLS=...
    X_BEARER_TOKEN=...
    WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://xcancel.com/WhiteHouse/rss
    WHITE_HOUSE_TWEETS_ALLOW_NITTER_FALLBACK=true
@@ -145,6 +152,8 @@ Every integration uses the same command shape inside its own channel. Replace `/
 - `/bonbast polymarket url:https://polymarket.com/event/example`
 - `/bonbast enddate datetime:2026-05-10 23:59`
 - `/bonbast interval minutes:1`
+- `/umacommits threshold value:250k`
+- `/umareveals threshold value:250k`
 - `/bonbast pause`
 - `/bonbast resume`
 - `/bot summarize`
@@ -266,6 +275,8 @@ The Current Integrations table is the source of truth for each adapter's role na
 - UMA Clarification Alerts subscribes to pending `postUpdate(bytes32,bytes)` transactions and mined `AncillaryDataUpdated` events from Polymarket's UMA bulletin-board contract on Polygon over WebSocket, defaults to PublicNode's free Polygon Bor WebSocket, and uses Nodies, OnFinality, dRPC, PublicNode, Tenderly, and QuickNode public endpoints for 1-minute HTTP backfill. Pending mempool alerts are best-effort and can arrive before mining; the mined-log path remains the confirmation/backfill. It can be pointed at another provider with `POLYGON_WS_URL`, `POLYGON_RPC_URL`, or comma-separated `POLYGON_RPC_URLS`.
 - UMA Dispute Alerts subscribes to UMA OptimisticOracle `DisputePrice` events on Polygon, watches current and legacy oracle contracts, filters requester addresses to Polymarket UMA requester contracts including the bulletin board adapter, and uses 1-minute HTTP backfill plus CLOB `markets-by-question-id` enrichment.
 - UMA Proposal Alerts subscribes to UMA OptimisticOracle `ProposePrice` events on Polygon, watches current and legacy oracle contracts, filters requester addresses to Polymarket UMA requester contracts including the bulletin board adapter, enriches each proposal through CLOB `markets-by-question-id`, and alerts only when the returned market tags match configured `/umaproposals tags` filters.
+- UMA Vote Commits polls Ethereum UMA Voting v2 `VoteCommitted` logs every minute, estimates each voter's current stake at the commit block with `getVoterStakePostUpdate(address)`, detects recommits from repeated voter/request commit keys, and alerts only when the stake is at least `/umacommits threshold`.
+- UMA Vote Reveals polls Ethereum UMA Voting v2 `VoteRevealed` logs every minute and alerts only when the revealed `numTokens` vote weight is at least `/umareveals threshold`; default free RPC endpoints can be overridden with `ETHEREUM_RPC_URL` or comma-separated `ETHEREUM_RPC_URLS`.
 - UMA proposal alerts keep question, outcome, market tags, proposer, and times visible; transaction, condition ID, question ID, oracle, requester, request timestamp, and block are behind `Show more`.
 - UMA clarification, proposal, and dispute question fields include a Betmoar market link when the Polymarket market slug is known.
 - Pyth Natural Gas, WTI, XAGUSD, and XAUUSD auto-discover matching monthly Polymarket markets, parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.

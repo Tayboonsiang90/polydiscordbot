@@ -22,6 +22,7 @@ import {
   buildTagBlocklistEmbed,
   buildTagFiltersEmbed,
   buildTagSearchEmbed,
+  buildThresholdEmbed,
   buildStatusEmbed,
   buildUpdateLogsEmbed
 } from "./embeds.js";
@@ -288,6 +289,22 @@ export function buildAdapterCommands() {
           )
           .addBooleanOption((option) =>
             option.setName("dry-run").setDescription("Preview import without saving. Defaults to true.").setRequired(false)
+          )
+      );
+    }
+
+    if (adapter.updateThreshold) {
+      command.addSubcommand((subcommand) =>
+        subcommand
+          .setName("threshold")
+          .setDescription("Show or change this monitor's alert threshold")
+          .addStringOption((option) =>
+            option
+              .setName("value")
+              .setDescription("New threshold value, e.g. 100000, 250k, or 1.5m")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(40)
           )
       );
     }
@@ -650,6 +667,21 @@ export async function handleAdapterCommand(
         })
       ]
     });
+    return;
+  }
+
+  if (subcommand === "threshold") {
+    if (!adapter.updateThreshold) {
+      await interaction.reply({ content: "This integration does not support alert thresholds.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const result = await adapter.updateThreshold(integration, interaction.options.getString("value")?.trim());
+    const updated =
+      result.settingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, result.settingsJson)
+        : integration;
+    await interaction.reply({ embeds: [buildThresholdEmbed(updated, result)] });
     return;
   }
 
