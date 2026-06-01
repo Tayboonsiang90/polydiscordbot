@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import {
   Client,
   Events,
@@ -36,10 +37,11 @@ let umaAlertSubscriber: UmaAlertSubscriber | null = null;
 let umaDisputeSubscriber: UmaDisputeSubscriber | null = null;
 let umaProposalSubscriber: UmaProposalSubscriber | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
+const runtimeGitCommit = getRuntimeGitCommit();
 
 client.once(Events.ClientReady, (readyClient) => {
   try {
-    console.log(`Logged in as ${readyClient.user.tag}`);
+    console.log(`Logged in as ${readyClient.user.tag} at ${new Date().toISOString()} (commit ${runtimeGitCommit})`);
     provisioner = new IntegrationProvisioner(client, database, config);
     provisioner.start();
     new PollScheduler(client, database).start();
@@ -180,4 +182,15 @@ async function sendInteractionFailure(
 
 function isUnknownInteractionError(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === 10062);
+}
+
+function getRuntimeGitCommit(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return "unknown";
+  }
 }
