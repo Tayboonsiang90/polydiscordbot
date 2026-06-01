@@ -85,6 +85,7 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
   defaultChannelName: "earthquake",
   alertRoleName: "USGS Earthquake Alerts",
   alertRoleEmoji: "\uD83C\uDF0E",
+  shouldAlertOnChange: shouldAlertOnUsgsEarthquakeChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshEarthquakePolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
@@ -110,6 +111,19 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export function shouldAlertOnUsgsEarthquakeChange(previousValue: string | null, currentValue: string): boolean {
+  const currentEventId = extractUsgsEventId(currentValue);
+  if (!currentEventId) {
+    return false;
+  }
+
+  return extractUsgsEventId(previousValue) !== currentEventId;
+}
+
+function extractUsgsEventId(value: string | null): string | null {
+  return value?.match(/^Event ID:\s*(\S+)/m)?.[1] ?? null;
+}
 
 export async function refreshEarthquakePolymarketQueue(
   integration: Integration,

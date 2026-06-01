@@ -4,6 +4,7 @@ import {
   extractLatestUsgsEarthquakeValue,
   formatUsgsEarthquake,
   refreshEarthquakePolymarketQueue,
+  shouldAlertOnUsgsEarthquakeChange,
   type UsgsEarthquakeFeature
 } from "../src/integrations/usgsEarthquakes.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -54,6 +55,28 @@ describe("USGS earthquakes adapter", () => {
   it("rejects non-qualifying magnitudes", () => {
     expect(() => formatUsgsEarthquake({ ...feature, properties: { ...feature.properties, mag: 5.4 } })).toThrow(
       "qualifying 5.5+ earthquake"
+    );
+  });
+
+  it("alerts only when the latest qualifying earthquake event ID changes", () => {
+    const previous = [
+      "Event ID: us7000spqc",
+      "Magnitude: 6",
+      "Location: 33 km NW of Valparaíso, Chile",
+      "Time: 2026-05-31T21:34:18.009Z"
+    ].join("\n");
+    const sameEventWithCorrectedTime = [
+      "Event ID: us7000spqc",
+      "Magnitude: 6",
+      "Location: 33 km NW of Valparaíso, Chile",
+      "Time: 2026-05-31T21:34:18.026Z"
+    ].join("\n");
+    const newEvent = sameEventWithCorrectedTime.replace("us7000spqc", "us7000new");
+
+    expect(shouldAlertOnUsgsEarthquakeChange(previous, sameEventWithCorrectedTime)).toBe(false);
+    expect(shouldAlertOnUsgsEarthquakeChange(previous, newEvent)).toBe(true);
+    expect(shouldAlertOnUsgsEarthquakeChange(previous, "No 5.5+ USGS earthquakes found in the 2026-06-01 to 2026-06-07 market window.")).toBe(
+      false
     );
   });
 
