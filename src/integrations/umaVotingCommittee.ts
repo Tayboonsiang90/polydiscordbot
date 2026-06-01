@@ -99,18 +99,18 @@ type GitHubReview = {
 
 export const umaVotingCommitteeAdapter: WebsiteAdapter = {
   id: "uma-voting-committee",
-  commandName: "umavotes",
-  displayName: "UMA Voting Committee",
+  commandName: "umarocks",
+  displayName: "UMA.rocks",
   sourceUrl,
-  defaultChannelName: "uma-votes",
-  alertRoleName: "UMA Vote Alerts",
+  defaultChannelName: "umarocks",
+  alertRoleName: "UMA.rocks Alerts",
   alertRoleEmoji: "\uD83D\uDDF3\uFE0F",
   getPollIntervalMinutes: () => 10,
   getPollIntervalReason: () => "GitHub polling for the active UMA voting committee PR",
   getErrorNoticeWindowMinutes: () => 60,
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     if (!integration) {
-      throw new Error("UMA Voting Committee requires an integration record");
+      throw new Error("UMA.rocks requires an integration record");
     }
 
     const result = await this.fetchEventUpdates!(integration);

@@ -179,7 +179,7 @@ function buildIntegration(): Integration {
     guildId: "guild",
     channelId: "channel",
     adapterId: "uma-voting-committee",
-    displayName: "UMA Voting Committee",
+    displayName: "UMA.rocks",
     sourceUrl: "https://github.com/UMA-rocks/voting-committees/tree/voting-committee-1",
     polymarketUrl: null,
     alertRoleId: "role",
