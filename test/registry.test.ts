@@ -10,6 +10,7 @@ const expectedCommandIds = [
   ["aws", "aws-disrupted-events"],
   ["basedrevenue", "based-revenue"],
   ["bea", "bea-current-releases"],
+  ["jisdor", "bi-jisdor-usd-idr"],
   ["blscpi", "bls-cpi-releases"],
   ["jobsadded", "bls-jobs-added"],
   ["bonbast", "bonbast-usd-irr"],

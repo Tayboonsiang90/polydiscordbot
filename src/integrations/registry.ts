@@ -6,6 +6,7 @@ import { arenaAiLeaderboardAdapter } from "./arenaAiLeaderboard.js";
 import { awsDisruptedAdapter } from "./awsDisrupted.js";
 import { basedRevenueAdapter } from "./basedRevenue.js";
 import { beaCurrentReleasesAdapter } from "./beaCurrentReleases.js";
+import { biJisdorAdapter } from "./biJisdor.js";
 import { blsCpiReleasesAdapter } from "./blsCpiReleases.js";
 import { blsJobsAddedAdapter } from "./blsJobsAdded.js";
 import { bonbastUsdIrrAdapter } from "./bonbast.js";
@@ -72,6 +73,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [awsDisruptedAdapter.id, awsDisruptedAdapter],
   [basedRevenueAdapter.id, basedRevenueAdapter],
   [beaCurrentReleasesAdapter.id, beaCurrentReleasesAdapter],
+  [biJisdorAdapter.id, biJisdorAdapter],
   [blsCpiReleasesAdapter.id, blsCpiReleasesAdapter],
   [blsJobsAddedAdapter.id, blsJobsAddedAdapter],
   [bonbastUsdIrrAdapter.id, bonbastUsdIrrAdapter],
