@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  buildOrnnGpuApiUrl,
   normalizeOrnnGpuMarketSearchEvent,
   refreshOrnnGpuPolymarketQueue,
   type OrnnGpuIndexConfig
@@ -22,6 +23,15 @@ afterEach(() => {
 });
 
 describe("ORNN GPU Polymarket discovery", () => {
+  it("uses the ORNN API's H100 SXM name for H100 requests", () => {
+    expect(buildOrnnGpuApiUrl("H100")).toBe(
+      "https://ornn-backend-api-135941626504.us-central1.run.app/api/gpu/H100%20SXM/index-history"
+    );
+    expect(buildOrnnGpuApiUrl("H200")).toBe(
+      "https://ornn-backend-api-135941626504.us-central1.run.app/api/gpu/H200/index-history"
+    );
+  });
+
   it("normalizes matching GPU rental markets from Gamma search", () => {
     expect(
       normalizeOrnnGpuMarketSearchEvent(

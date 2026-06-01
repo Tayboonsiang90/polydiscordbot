@@ -188,7 +188,11 @@ export function normalizeOrnnGpuMarketSearchEvent(
 }
 
 export function buildOrnnGpuApiUrl(gpuName: string): string {
-  return `${apiBaseUrl}/${encodeURIComponent(gpuName)}/index-history`;
+  return `${apiBaseUrl}/${encodeURIComponent(toOrnnApiGpuName(gpuName))}/index-history`;
+}
+
+function toOrnnApiGpuName(gpuName: string): string {
+  return gpuName.toUpperCase() === "H100" ? "H100 SXM" : gpuName;
 }
 
 export function extractLatestFinalizedOrnnGpuValue(data: unknown, gpuName: string): string {
