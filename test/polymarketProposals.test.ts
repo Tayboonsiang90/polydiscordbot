@@ -386,7 +386,7 @@ describe("fetchPolymarketProposalUpdates", () => {
     );
   });
 
-  it("falls back to Gamma best bid when proposed-side CLOB book liquidity is unavailable", async () => {
+  it("does not mark liquidity when the proposed-side CLOB book is unavailable", async () => {
     const rpcUrl = "https://rpc.example";
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const target = url.toString();
@@ -423,21 +423,6 @@ describe("fetchPolymarketProposalUpdates", () => {
         return new Response("upstream timeout", { status: 504 });
       }
 
-      if (target.startsWith("https://gamma-api.polymarket.com/markets?")) {
-        const gammaUrl = new URL(target);
-        expect(gammaUrl.searchParams.get("slug")).toBe("trump-declassifies-new-ufo-files-by-may-31-691");
-        return jsonResponse([
-          {
-            slug: "trump-declassifies-new-ufo-files-by-may-31-691",
-            outcomes: "[\"Yes\", \"No\"]",
-            outcomePrices: "[\"0.0025\", \"0.9975\"]",
-            bestBid: 0.001,
-            bestAsk: 0.004,
-            liquidity: "17131.66024"
-          }
-        ]);
-      }
-
       if (target.startsWith("https://gamma-api.polymarket.com/public-profile")) {
         return new Response("not found", { status: 404 });
       }
@@ -462,20 +447,14 @@ describe("fetchPolymarketProposalUpdates", () => {
     );
 
     expect(result.posts).toHaveLength(1);
-    expect(result.posts[0].alertTitle).toBe("Polymarket UMA proposal - proposed-side shares available");
+    expect(result.posts[0].alertTitle).toBe("Polymarket UMA proposal");
     expect(result.posts[0].prioritySummary).toMatchObject({
-      proposedOutcome: "NO (0)",
-      proposedSideLiquidity: ">>> **NO SHARES LIKELY AVAILABLE**\nEstimated best ask: **`$0.999`**\n_Size unavailable from Gamma fallback._"
+      proposedOutcome: "NO (0)"
     });
+    expect(result.posts[0].prioritySummary?.proposedSideLiquidity).toBeUndefined();
     const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
-    expect(embedFields).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "PENNY PICK LIQUIDITY",
-          value: ">>> **NO SHARES LIKELY AVAILABLE**\nEstimated best ask: **`$0.999`**\n_Size unavailable from Gamma fallback._"
-        })
-      ])
-    );
+    expect(embedFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "PENNY PICK LIQUIDITY" })]));
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("https://gamma-api.polymarket.com/markets?"), expect.anything());
   });
 
   it("does not alert proposals when no tag filters are configured", async () => {
