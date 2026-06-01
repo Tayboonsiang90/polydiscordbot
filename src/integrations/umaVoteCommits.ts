@@ -81,6 +81,13 @@ type UmaVotingRoundAnswer = {
   answer?: string;
 };
 
+type UmaVoteCommitPostItem = {
+  event: UmaVoteCommitEvent;
+  stakeWei: bigint;
+  postedAt: Date;
+  roundAnswer?: UmaVotingRoundAnswer;
+};
+
 type JsonRpcResponse<T> = {
   result?: T;
   error?: { message?: string };
@@ -327,7 +334,7 @@ async function normalizeUmaVoteCommitPosts(
   const blockTimestamps = new Map<number, number>();
   const stakeCache = new Map<string, bigint>();
   const answerMaps = new Map<number, Map<string, UmaVotingRoundAnswer>>();
-  const posts: EventMonitorPost[] = [];
+  const itemsByVoter = new Map<string, UmaVoteCommitPostItem[]>();
 
   for (const event of events) {
     const stakeCacheKey = `${event.voter}:${event.blockNumber}`;
@@ -353,10 +360,86 @@ async function normalizeUmaVoteCommitPosts(
       answerMaps.set(event.roundId, answerMap);
     }
 
-    posts.push(normalizeUmaVoteCommitPost(event, stakeWei, thresholdWei, new Date(timestamp * 1000), answerMap.get(roundAnswerKey(event))));
+    const voterKey = event.voter.toLowerCase();
+    const items = itemsByVoter.get(voterKey) ?? [];
+    items.push({
+      event,
+      stakeWei,
+      postedAt: new Date(timestamp * 1000),
+      roundAnswer: answerMap.get(roundAnswerKey(event))
+    });
+    itemsByVoter.set(voterKey, items);
   }
 
+  const posts = [...itemsByVoter.values()].map((items) => normalizeUmaVoteCommitPostGroup(items, thresholdWei));
   return posts.sort(compareCommitPostsDescending);
+}
+
+function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresholdWei: bigint): EventMonitorPost {
+  const sortedItems = [...items].sort((left, right) => compareCommitEventsDescending(left.event, right.event));
+  if (sortedItems.length === 1) {
+    const item = sortedItems[0]!;
+    return normalizeUmaVoteCommitPost(item.event, item.stakeWei, thresholdWei, item.postedAt, item.roundAnswer);
+  }
+
+  const latest = sortedItems[0]!;
+  const event = latest.event;
+  const transactionUrl = `https://etherscan.io/tx/${event.transactionHash}`;
+  const recommitCount = sortedItems.filter((item) => item.event.previousCommitCount > 0).length;
+  const stakeValues = uniqueStrings(sortedItems.map((item) => `${formatUmaTokenAmount(item.stakeWei)} UMA`));
+  const rounds = uniqueStrings(sortedItems.map((item) => String(item.event.roundId)));
+  const commitLines = sortedItems.map(formatCommitGroupLine);
+  const title = recommitCount > 0 ? "Large UMA vote commits/recommits" : "Large UMA vote commits";
+  const type = recommitCount > 0 ? "UMA vote commits/recommits" : "UMA vote commits";
+  const text = [
+    `${event.voter} committed ${sortedItems.length} answers above threshold in ${formatPlural(rounds.length, "round")}.`,
+    ...commitLines.slice(0, 5)
+  ].join("\n");
+
+  return {
+    id: event.id,
+    type,
+    alertTitle: title,
+    sourceLabel: "Ethereum tx",
+    buttonLabel: "Open latest transaction",
+    mentionAlertRole: true,
+    textFieldName: "Commits",
+    text,
+    qualifyingText: text,
+    postedAt: latest.postedAt,
+    url: transactionUrl,
+    hideLinksField: true,
+    hideTextField: true,
+    summaryFields: [
+      { name: "Voter", value: event.voter, inline: false },
+      { name: "Commit count", value: String(sortedItems.length), inline: true },
+      { name: "Recommits", value: String(recommitCount), inline: true },
+      { name: stakeValues.length === 1 ? "Estimated stake" : "Estimated stakes", value: truncateFieldValue(stakeValues.join("\n")), inline: true },
+      { name: "Rounds", value: rounds.join(", "), inline: true },
+      { name: "Commits", value: truncateFieldValue(commitLines.join("\n")), inline: false },
+      { name: "Threshold", value: `${formatUmaTokenAmount(thresholdWei)} UMA`, inline: true }
+    ],
+    hiddenFields: [
+      { name: "Contract", value: votingV2Address, inline: false },
+      { name: "Block", value: String(event.blockNumber), inline: true },
+      { name: "Log index", value: String(event.logIndex), inline: true },
+      { name: "Included commit logs", value: truncateFieldValue(sortedItems.map((item) => item.event.id).join("\n")), inline: false },
+      { name: "Latest commit key", value: event.commitKey, inline: false },
+      { name: "Latest raw estimated stake", value: latest.stakeWei.toString(), inline: false },
+      { name: "Latest ancillary data", value: truncateFieldValue(event.ancillaryDataText || event.ancillaryDataHex), inline: false },
+      { name: "Latest ancillary data hex", value: event.ancillaryDataHex, inline: false }
+    ],
+    imageUrls: [],
+    imageText: "",
+    matchedTerms: [],
+    strikeTerms: []
+  };
+}
+
+function formatCommitGroupLine(item: UmaVoteCommitPostItem, index: number): string {
+  const question = item.roundAnswer?.question ?? `request ${item.event.requestTime}`;
+  const commitType = item.event.previousCommitCount > 0 ? `recommit #${item.event.previousCommitCount + 1}` : "initial";
+  return `${index + 1}. ${truncateLine(question)} -> ${commitType}`;
 }
 
 async function fetchVoterStakeAtBlock(
@@ -786,6 +869,13 @@ function compareCommitEventsAscending(left: UmaVoteCommitEvent, right: UmaVoteCo
   return left.logIndex - right.logIndex;
 }
 
+function compareCommitEventsDescending(left: UmaVoteCommitEvent, right: UmaVoteCommitEvent): number {
+  if (left.blockNumber !== right.blockNumber) {
+    return right.blockNumber - left.blockNumber;
+  }
+  return right.logIndex - left.logIndex;
+}
+
 function compareCommitPostsDescending(left: EventMonitorPost, right: EventMonitorPost): number {
   const [leftTransactionHash, leftLogIndex] = left.id.split(":");
   const [rightTransactionHash, rightLogIndex] = right.id.split(":");
@@ -806,4 +896,17 @@ function compareCommitPostsDescending(left: EventMonitorPost, right: EventMonito
 
 function isUmaVoteCommitEvent(event: UmaVoteCommitEvent | null): event is UmaVoteCommitEvent {
   return event !== null;
+}
+
+function formatPlural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+function truncateFieldValue(value: string, maxLength = 1000): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+}
+
+function truncateLine(value: string, maxLength = 180): string {
+  const singleLine = value.replace(/\s+/g, " ").trim();
+  return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 3)}...`;
 }

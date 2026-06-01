@@ -79,6 +79,12 @@ type UmaVotingRoundAnswer = {
   answer?: string;
 };
 
+type UmaVoteRevealPostItem = {
+  event: UmaVoteRevealEvent;
+  postedAt: Date;
+  roundAnswer?: UmaVotingRoundAnswer;
+};
+
 type JsonRpcResponse<T> = {
   result?: T;
   error?: { message?: string };
@@ -341,7 +347,7 @@ async function normalizeUmaVoteRevealPosts(
 ): Promise<EventMonitorPost[]> {
   const blockTimestamps = new Map<number, number>();
   const answerMaps = new Map<number, Map<string, UmaVotingRoundAnswer>>();
-  const posts: EventMonitorPost[] = [];
+  const itemsByVoter = new Map<string, UmaVoteRevealPostItem[]>();
 
   for (const event of events) {
     const timestamp =
@@ -356,10 +362,80 @@ async function normalizeUmaVoteRevealPosts(
       answerMaps.set(event.roundId, answerMap);
     }
 
-    posts.push(normalizeUmaVoteRevealPost(event, thresholdWei, new Date(timestamp * 1000), answerMap.get(roundAnswerKey(event))));
+    const voterKey = event.voter.toLowerCase();
+    const items = itemsByVoter.get(voterKey) ?? [];
+    items.push({
+      event,
+      postedAt: new Date(timestamp * 1000),
+      roundAnswer: answerMap.get(roundAnswerKey(event))
+    });
+    itemsByVoter.set(voterKey, items);
   }
 
+  const posts = [...itemsByVoter.values()].map((items) => normalizeUmaVoteRevealPostGroup(items, thresholdWei));
   return posts.sort(compareRevealPostsDescending);
+}
+
+function normalizeUmaVoteRevealPostGroup(items: UmaVoteRevealPostItem[], thresholdWei: bigint): EventMonitorPost {
+  const sortedItems = [...items].sort((left, right) => compareRevealEventsDescending(left.event, right.event));
+  if (sortedItems.length === 1) {
+    const item = sortedItems[0]!;
+    return normalizeUmaVoteRevealPost(item.event, thresholdWei, item.postedAt, item.roundAnswer);
+  }
+
+  const latest = sortedItems[0]!;
+  const event = latest.event;
+  const transactionUrl = `https://etherscan.io/tx/${event.transactionHash}`;
+  const voteWeights = uniqueStrings(sortedItems.map((item) => `${formatUmaTokenAmount(item.event.numTokens)} UMA`));
+  const rounds = uniqueStrings(sortedItems.map((item) => String(item.event.roundId)));
+  const revealLines = sortedItems.map(formatRevealGroupLine);
+  const text = [
+    `${event.voter} revealed ${sortedItems.length} answers above threshold in ${formatPlural(rounds.length, "round")}.`,
+    ...revealLines.slice(0, 5)
+  ].join("\n");
+
+  return {
+    id: event.id,
+    type: "UMA vote reveals",
+    alertTitle: "Large UMA vote reveals",
+    sourceLabel: "Ethereum tx",
+    buttonLabel: "Open latest transaction",
+    mentionAlertRole: true,
+    textFieldName: "Reveals",
+    text,
+    qualifyingText: text,
+    postedAt: latest.postedAt,
+    url: transactionUrl,
+    hideLinksField: true,
+    hideTextField: true,
+    summaryFields: [
+      { name: "Voter", value: event.voter, inline: false },
+      { name: "Reveal count", value: String(sortedItems.length), inline: true },
+      { name: voteWeights.length === 1 ? "Vote weight" : "Vote weights", value: truncateFieldValue(voteWeights.join("\n")), inline: true },
+      { name: "Rounds", value: rounds.join(", "), inline: true },
+      { name: "Reveals", value: truncateFieldValue(revealLines.join("\n")), inline: false },
+      { name: "Threshold", value: `${formatUmaTokenAmount(thresholdWei)} UMA`, inline: true }
+    ],
+    hiddenFields: [
+      { name: "Contract", value: votingV2Address, inline: false },
+      { name: "Block", value: String(event.blockNumber), inline: true },
+      { name: "Log index", value: String(event.logIndex), inline: true },
+      { name: "Included reveal logs", value: truncateFieldValue(sortedItems.map((item) => item.event.id).join("\n")), inline: false },
+      { name: "Latest raw vote weight", value: event.numTokens.toString(), inline: false },
+      { name: "Latest ancillary data", value: truncateFieldValue(event.ancillaryDataText || event.ancillaryDataHex), inline: false },
+      { name: "Latest ancillary data hex", value: event.ancillaryDataHex, inline: false }
+    ],
+    imageUrls: [],
+    imageText: "",
+    matchedTerms: [],
+    strikeTerms: []
+  };
+}
+
+function formatRevealGroupLine(item: UmaVoteRevealPostItem, index: number): string {
+  const question = item.roundAnswer?.question ?? `request ${item.event.requestTime}`;
+  const answer = item.roundAnswer?.answer ? `; committee ${item.roundAnswer.answer}` : "";
+  return `${index + 1}. ${truncateLine(question)} -> ${formatUmaVotePrice(item.event.price)}${answer}`;
 }
 
 async function fetchRoundAnswers(roundId: number): Promise<Map<string, UmaVotingRoundAnswer>> {
@@ -756,6 +832,18 @@ function functionSelector(signature: string): string {
   return `0x${Buffer.from(keccak_256(Buffer.from(signature, "utf8"))).toString("hex").slice(0, 8)}`;
 }
 
+function compareRevealEventsDescending(left: UmaVoteRevealEvent, right: UmaVoteRevealEvent): number {
+  if (left.blockNumber !== right.blockNumber) {
+    return right.blockNumber - left.blockNumber;
+  }
+
+  if (left.logIndex !== right.logIndex) {
+    return right.logIndex - left.logIndex;
+  }
+
+  return right.transactionHash.localeCompare(left.transactionHash);
+}
+
 function compareRevealPostsDescending(left: EventMonitorPost, right: EventMonitorPost): number {
   const [leftTransactionHash, leftLogIndex] = left.id.split(":");
   const [rightTransactionHash, rightLogIndex] = right.id.split(":");
@@ -776,4 +864,17 @@ function compareRevealPostsDescending(left: EventMonitorPost, right: EventMonito
 
 function isUmaVoteRevealEvent(event: UmaVoteRevealEvent | null): event is UmaVoteRevealEvent {
   return event !== null;
+}
+
+function formatPlural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+function truncateFieldValue(value: string, maxLength = 1000): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+}
+
+function truncateLine(value: string, maxLength = 180): string {
+  const singleLine = value.replace(/\s+/g, " ").trim();
+  return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 3)}...`;
 }

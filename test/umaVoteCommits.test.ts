@@ -123,23 +123,20 @@ describe("UMA vote commit adapter", () => {
       umaCommitThresholdWei: "250000000000000000000000"
     })));
 
-    expect(result.posts).toHaveLength(2);
+    expect(result.posts).toHaveLength(1);
     expect(result.posts[0]).toMatchObject({
-      alertTitle: "Large UMA vote recommit",
-      type: "UMA vote recommit",
+      alertTitle: "Large UMA vote commits/recommits",
+      type: "UMA vote commits/recommits",
       mentionAlertRole: true,
       text: expect.stringContaining("Will the highest temperature in Moscow be 4C or below on May 29?")
     });
     expect(result.posts[0].summaryFields).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Commit type", value: "Recommit #2" }),
+        expect.objectContaining({ name: "Commit count", value: "2" }),
+        expect.objectContaining({ name: "Recommits", value: "1" }),
         expect.objectContaining({ name: "Estimated stake", value: "400,000 UMA" })
       ])
     );
-    expect(result.posts[1]).toMatchObject({
-      alertTitle: "Large UMA vote commit",
-      type: "UMA vote commit"
-    });
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       lastScannedBlock: 23737650,
       lastRpcUrl: "https://rpc.example",

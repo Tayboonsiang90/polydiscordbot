@@ -90,7 +90,7 @@ describe("UMA vote reveal adapter", () => {
     });
   });
 
-  it("fetches Ethereum reveal logs and returns only reveals above the threshold", async () => {
+  it("fetches Ethereum reveal logs and groups multiple reveals from the same voter", async () => {
     const decoded = decodeUmaVoteRevealLog(sampleLog);
     expect(decoded).not.toBeNull();
     let ethCallCount = 0;
@@ -112,7 +112,7 @@ describe("UMA vote reveal adapter", () => {
         return jsonRpcResponse("0x164defc");
       }
       if (body.method === "eth_getLogs") {
-        return jsonRpcResponse([sampleLog]);
+        return jsonRpcResponse([sampleLog, { ...sampleLog, logIndex: "0x1c2" }]);
       }
       if (body.method === "eth_call") {
         ethCallCount += 1;
@@ -130,14 +130,15 @@ describe("UMA vote reveal adapter", () => {
 
     expect(result.posts).toHaveLength(1);
     expect(result.posts[0]).toMatchObject({
-      alertTitle: "Large UMA vote reveal",
+      alertTitle: "Large UMA vote reveals",
       mentionAlertRole: true,
       text: expect.stringContaining("US x Cuba diplomatic meeting by June 30?")
     });
     expect(result.posts[0].summaryFields).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ name: "Reveal count", value: "2" }),
         expect.objectContaining({ name: "Vote weight", value: "420,551.4062 UMA" }),
-        expect.objectContaining({ name: "Committee answer file", value: "P1" })
+        expect.objectContaining({ name: "Reveals", value: expect.stringContaining("committee P1") })
       ])
     );
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
