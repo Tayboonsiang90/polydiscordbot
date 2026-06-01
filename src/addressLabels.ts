@@ -5,18 +5,22 @@ import type {
   AddressLabelImportSummary,
   AddressLabelUpdateOptions,
   AddressLabelUpdateResult,
+  AddressHedgeStatus,
   AddressProfileStatus,
   EventMonitorPost
 } from "./integrations/types.js";
 import { parseSettingsJson } from "./settingsJson.js";
 
 const addressPattern = /^0x[0-9a-fA-F]{40}$/;
+const conditionIdPattern = /^0x[0-9a-fA-F]{64}$/;
 const polymarketTradesApiUrl = "https://data-api.polymarket.com/trades";
+const polymarketPositionsApiUrl = "https://data-api.polymarket.com/positions";
 const polymarketPublicProfileApiUrl = "https://gamma-api.polymarket.com/public-profile";
 const polymarketProfileBaseUrl = "https://polymarket.com";
 const profileCacheMs = 10 * 60_000;
 const profileErrorCacheMs = 60_000;
 const profileLookupTimeoutMs = 2_500;
+const positionLookupTimeoutMs = 2_500;
 
 type PolymarketPublicProfile = {
   proxyWallet?: string | null;
@@ -28,6 +32,17 @@ type PolymarketPublicProfile = {
 type PolymarketTrade = {
   name?: string;
   pseudonym?: string;
+};
+
+type PolymarketPosition = {
+  conditionId?: string;
+  outcome?: string;
+  size?: string | number;
+  currentValue?: string | number;
+  avgPrice?: string | number;
+  curPrice?: string | number;
+  title?: string;
+  slug?: string;
 };
 
 type ProfileCacheEntry = {
@@ -198,13 +213,27 @@ export async function enrichEventPostAddressProfiles(post: EventMonitorPost): Pr
     summary.proposer ? fetchPolymarketAddressProfileStatus(summary.proposer) : Promise.resolve(undefined),
     summary.disputer ? fetchPolymarketAddressProfileStatus(summary.disputer) : Promise.resolve(undefined)
   ]);
+  const oppositeOutcome = getOppositeOutcome(summary.proposedOutcomeSide);
+  const [proposerHedge, disputerHedge] =
+    summary.conditionId && oppositeOutcome
+      ? await Promise.all([
+          summary.proposer
+            ? fetchPolymarketAddressHedgeStatus(summary.proposer, proposerProfile, summary.conditionId, oppositeOutcome)
+            : Promise.resolve(undefined),
+          summary.disputer
+            ? fetchPolymarketAddressHedgeStatus(summary.disputer, disputerProfile, summary.conditionId, oppositeOutcome)
+            : Promise.resolve(undefined)
+        ])
+      : [undefined, undefined];
 
   return {
     ...post,
     prioritySummary: {
       ...summary,
       ...(proposerProfile ? { proposerProfile } : {}),
-      ...(disputerProfile ? { disputerProfile } : {})
+      ...(proposerHedge ? { proposerHedge } : {}),
+      ...(disputerProfile ? { disputerProfile } : {}),
+      ...(disputerHedge ? { disputerHedge } : {})
     }
   };
 }
@@ -326,6 +355,86 @@ async function fetchPolymarketTradeStatus(address: string): Promise<{
 
   const latestTrade = payload.find((entry): entry is PolymarketTrade => Boolean(entry && typeof entry === "object"));
   return { hasTrades: payload.length > 0, ...(latestTrade ? { latestTrade } : {}), sourceUrl: url.toString() };
+}
+
+async function fetchPolymarketAddressHedgeStatus(
+  address: string,
+  profile: AddressProfileStatus | undefined,
+  conditionId: string,
+  oppositeOutcome: "YES" | "NO",
+  now = new Date()
+): Promise<AddressHedgeStatus | undefined> {
+  const normalized = normalizeAddress(address);
+  const normalizedConditionId = normalizeConditionId(conditionId);
+  if (!normalized || !normalizedConditionId) {
+    return undefined;
+  }
+
+  const profileWallet = normalizeAddress(profile?.profileWallet) ?? normalized;
+  const url = buildPositionsUrl(profileWallet, normalizedConditionId);
+  const baseStatus = {
+    address: normalized,
+    profileWallet,
+    conditionId: normalizedConditionId,
+    oppositeOutcome,
+    checkedAt: now.toISOString(),
+    sourceUrl: url.toString()
+  };
+  if (profile?.error) {
+    return { ...baseStatus, hasOppositePosition: false, error: `Polymarket profile lookup failed: ${profile.error}` };
+  }
+
+  try {
+    const positions = await fetchPolymarketPositions(url);
+    const oppositePosition = positions.find(
+      (position) => normalizeOutcome(position.outcome) === oppositeOutcome && (toFiniteNumber(position.size) ?? 0) > 0
+    );
+    if (!oppositePosition) {
+      return { ...baseStatus, hasOppositePosition: false };
+    }
+
+    return {
+      ...baseStatus,
+      hasOppositePosition: true,
+      outcome: oppositePosition.outcome,
+      ...(toFiniteNumber(oppositePosition.size) === null ? {} : { size: toFiniteNumber(oppositePosition.size)! }),
+      ...(toFiniteNumber(oppositePosition.currentValue) === null
+        ? {}
+        : { currentValue: toFiniteNumber(oppositePosition.currentValue)! }),
+      ...(toFiniteNumber(oppositePosition.avgPrice) === null ? {} : { avgPrice: toFiniteNumber(oppositePosition.avgPrice)! }),
+      ...(toFiniteNumber(oppositePosition.curPrice) === null ? {} : { curPrice: toFiniteNumber(oppositePosition.curPrice)! }),
+      ...(oppositePosition.title ? { title: oppositePosition.title } : {}),
+      ...(oppositePosition.slug ? { slug: oppositePosition.slug } : {})
+    };
+  } catch (error) {
+    return { ...baseStatus, hasOppositePosition: false, error: formatError(error) };
+  }
+}
+
+async function fetchPolymarketPositions(url: URL): Promise<PolymarketPosition[]> {
+  const response = await fetch(url.toString(), {
+    headers: { "user-agent": "PolymarketResolutionMonitorBot/0.1" },
+    signal: AbortSignal.timeout(positionLookupTimeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket positions HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as unknown;
+  if (!Array.isArray(payload)) {
+    throw new Error("Unexpected Polymarket positions response");
+  }
+
+  return payload.filter(isPolymarketPosition);
+}
+
+function buildPositionsUrl(address: string, conditionId: string): URL {
+  const url = new URL(polymarketPositionsApiUrl);
+  url.searchParams.set("user", address);
+  url.searchParams.set("market", conditionId);
+  url.searchParams.set("sizeThreshold", "0");
+  url.searchParams.set("limit", "100");
+  return url;
 }
 
 function buildPublicProfileUrl(address: string): URL {
@@ -476,6 +585,41 @@ function normalizeAddressOrThrow(address: string | undefined): string {
 function normalizeAddress(address: string | undefined): string | null {
   const trimmed = address?.trim();
   return trimmed && addressPattern.test(trimmed) ? trimmed.toLowerCase() : null;
+}
+
+function normalizeConditionId(conditionId: string | undefined): string | null {
+  const trimmed = conditionId?.trim();
+  return trimmed && conditionIdPattern.test(trimmed) ? trimmed.toLowerCase() : null;
+}
+
+function getOppositeOutcome(outcome: "YES" | "NO" | undefined): "YES" | "NO" | null {
+  if (outcome === "YES") {
+    return "NO";
+  }
+  if (outcome === "NO") {
+    return "YES";
+  }
+  return null;
+}
+
+function normalizeOutcome(outcome: string | undefined): "YES" | "NO" | null {
+  const normalized = outcome?.trim().toLowerCase();
+  if (normalized === "yes" || normalized === "y") {
+    return "YES";
+  }
+  if (normalized === "no" || normalized === "n") {
+    return "NO";
+  }
+  return null;
+}
+
+function isPolymarketPosition(value: unknown): value is PolymarketPosition {
+  return Boolean(value && typeof value === "object");
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function firstNonEmptyString(...values: unknown[]): string | null {

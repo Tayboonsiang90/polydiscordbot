@@ -249,6 +249,8 @@ export function normalizePolymarketDisputeEvent(dispute: PolymarketDisputeEvent,
       questionUrl: polymarketUrl,
       betmoarUrl,
       proposedOutcome: dispute.proposedOutcome,
+      proposedOutcomeSide: getScalarProposedOutcomeSide(dispute.proposedPrice) ?? undefined,
+      conditionId: market?.condition_id,
       marketTags: market?.tags,
       proposer: dispute.proposer,
       disputer: dispute.disputer
@@ -492,6 +494,17 @@ function formatProposedOutcome(value: bigint): string {
   }
 
   return formatFixed18(value);
+}
+
+function getScalarProposedOutcomeSide(proposedPrice: bigint): "YES" | "NO" | null {
+  const one = 10n ** 18n;
+  if (proposedPrice === one) {
+    return "YES";
+  }
+  if (proposedPrice === 0n) {
+    return "NO";
+  }
+  return null;
 }
 
 function formatFixed18(value: bigint): string {

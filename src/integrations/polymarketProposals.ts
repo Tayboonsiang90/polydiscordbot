@@ -425,8 +425,10 @@ export function normalizePolymarketProposalEvent(
       questionUrl: polymarketUrl,
       betmoarUrl,
       proposedOutcome: proposal.proposedOutcome,
+      proposedOutcomeSide: getScalarProposedOutcomeSide(proposal.proposedPrice) ?? undefined,
       proposedSideLiquidity: liquidityText,
       proposalExpirationAt: new Date(proposal.expirationTimestamp * 1_000).toISOString(),
+      conditionId: market?.condition_id,
       marketTags: market?.tags,
       matchedTags: tagMatch.matchedMarketTags,
       proposer: proposal.proposer

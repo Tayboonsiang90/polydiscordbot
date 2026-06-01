@@ -286,6 +286,106 @@ describe("fetchPolymarketProposalUpdates", () => {
     });
   });
 
+  it("checks whether the proposer holds opposite-side Polymarket shares", async () => {
+    const rpcUrl = "https://rpc.example";
+    const conditionId = `0x${"a".repeat(64)}`;
+    const proxyWallet = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const target = url.toString();
+      if (target === rpcUrl) {
+        const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, unknown>> };
+        if (body.method === "eth_blockNumber") {
+          return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+        }
+        if (body.method === "eth_getLogs") {
+          return jsonResponse({
+            jsonrpc: "2.0",
+            id: 1,
+            result: body.params[0].address === optimisticOracleV2Address ? [buildProposalLog(0n)] : []
+          });
+        }
+      }
+
+      if (target.startsWith("https://clob.polymarket.com/markets-by-question-id/")) {
+        return jsonResponse({
+          question: "Lakers win?",
+          market_slug: "lakers-win",
+          condition_id: conditionId,
+          tags: ["Sports", "NBA"]
+        });
+      }
+
+      if (target.startsWith("https://gamma-api.polymarket.com/public-profile")) {
+        return jsonResponse({ proxyWallet, displayUsernamePublic: true, name: "KnownProposer" });
+      }
+
+      if (target.startsWith("https://data-api.polymarket.com/trades")) {
+        const tradesUrl = new URL(target);
+        expect(tradesUrl.searchParams.get("user")).toBe(proxyWallet);
+        return jsonResponse([{ proxyWallet, side: "BUY" }]);
+      }
+
+      if (target.startsWith("https://data-api.polymarket.com/positions")) {
+        const positionsUrl = new URL(target);
+        expect(positionsUrl.searchParams.get("user")).toBe(proxyWallet);
+        expect(positionsUrl.searchParams.get("market")).toBe(conditionId);
+        expect(positionsUrl.searchParams.get("sizeThreshold")).toBe("0");
+        return jsonResponse([
+          {
+            conditionId,
+            outcome: "Yes",
+            size: "12.5",
+            currentValue: "1.25",
+            avgPrice: "0.02",
+            curPrice: "0.1",
+            title: "Lakers win?",
+            slug: "lakers-win"
+          }
+        ]);
+      }
+
+      throw new Error(`Unexpected fetch: ${target}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketProposalUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          lastScannedBlock: 980,
+          tagFilters: [{ id: "1", label: "Sports", slug: "sports" }]
+        })
+      } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(result.posts[0].prioritySummary).toMatchObject({
+      conditionId,
+      proposedOutcomeSide: "NO",
+      proposerHedge: expect.objectContaining({
+        address: proposer,
+        profileWallet: proxyWallet,
+        conditionId,
+        oppositeOutcome: "YES",
+        hasOppositePosition: true,
+        size: 12.5,
+        currentValue: 1.25,
+        avgPrice: 0.02,
+        curPrice: 0.1
+      })
+    });
+
+    const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
+    expect(embedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Proposer hedge",
+          value: ">>> **HEDGED: HOLDS YES**\nSize: **`12.5 shares`**\nCurrent value: **`$1.25`**\nAvg price: **`$0.02`**\nMark price: **`$0.1`**"
+        })
+      ])
+    );
+  });
+
   it("falls back to Gamma best bid when proposed-side CLOB book liquidity is unavailable", async () => {
     const rpcUrl = "https://rpc.example";
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

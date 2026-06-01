@@ -84,14 +84,18 @@ export type EventPostPrioritySummary = {
   questionUrl?: string;
   betmoarUrl?: string;
   proposedOutcome?: string;
+  proposedOutcomeSide?: "YES" | "NO";
   proposedSideLiquidity?: string;
   proposalExpirationAt?: string;
+  conditionId?: string;
   marketTags?: string[];
   matchedTags?: string[];
   proposer?: string;
   proposerProfile?: AddressProfileStatus;
+  proposerHedge?: AddressHedgeStatus;
   disputer?: string;
   disputerProfile?: AddressProfileStatus;
+  disputerHedge?: AddressHedgeStatus;
   creator?: string;
   clarification?: string;
 };
@@ -177,6 +181,24 @@ export type AddressProfileStatus = {
   checkedAt: string;
   sourceUrl: string;
   hasTrades?: boolean;
+  error?: string;
+};
+
+export type AddressHedgeStatus = {
+  address: string;
+  profileWallet: string;
+  conditionId: string;
+  oppositeOutcome: "YES" | "NO";
+  checkedAt: string;
+  sourceUrl: string;
+  hasOppositePosition: boolean;
+  outcome?: string;
+  size?: number;
+  currentValue?: number;
+  avgPrice?: number;
+  curPrice?: number;
+  title?: string;
+  slug?: string;
   error?: string;
 };
 

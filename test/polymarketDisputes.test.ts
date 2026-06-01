@@ -234,6 +234,104 @@ describe("fetchPolymarketDisputeUpdates", () => {
       expect.objectContaining({ method: "POST", body: expect.stringContaining(optimisticOracleV3Address) })
     );
   });
+
+  it("checks proposer and disputer opposite-side Polymarket shares on dispute alerts", async () => {
+    const rpcUrl = "https://rpc.example";
+    const conditionId = `0x${"b".repeat(64)}`;
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const target = url.toString();
+      if (target === rpcUrl) {
+        const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, unknown>> };
+        if (body.method === "eth_blockNumber") {
+          return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+        }
+        if (body.method === "eth_getLogs") {
+          return jsonResponse({
+            jsonrpc: "2.0",
+            id: 1,
+            result: body.params[0].address === optimisticOracleV2Address ? [buildDisputeLog(0n)] : []
+          });
+        }
+      }
+
+      if (target.startsWith("https://clob.polymarket.com/markets-by-question-id/")) {
+        return jsonResponse({
+          question: "Trump kiss by May 31?",
+          market_slug: "trump-kiss-by-may-31",
+          condition_id: conditionId,
+          tags: ["Politics", "Trump"]
+        });
+      }
+
+      if (target.startsWith("https://gamma-api.polymarket.com/public-profile")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      if (target.startsWith("https://data-api.polymarket.com/trades")) {
+        return jsonResponse([]);
+      }
+
+      if (target.startsWith("https://data-api.polymarket.com/positions")) {
+        const positionsUrl = new URL(target);
+        expect(positionsUrl.searchParams.get("market")).toBe(conditionId);
+        if (positionsUrl.searchParams.get("user") === proposer) {
+          return jsonResponse([]);
+        }
+        if (positionsUrl.searchParams.get("user") === disputer) {
+          return jsonResponse([
+            {
+              conditionId,
+              outcome: "Yes",
+              size: "20",
+              currentValue: "2",
+              avgPrice: "0.03",
+              curPrice: "0.1"
+            }
+          ]);
+        }
+      }
+
+      throw new Error(`Unexpected fetch: ${target}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketDisputeUpdates(
+      {
+        settingsJson: JSON.stringify({ rpcUrl, lastScannedBlock: 980 })
+      } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(result.posts[0].prioritySummary).toMatchObject({
+      conditionId,
+      proposedOutcomeSide: "NO",
+      proposerHedge: expect.objectContaining({
+        address: proposer,
+        oppositeOutcome: "YES",
+        hasOppositePosition: false
+      }),
+      disputerHedge: expect.objectContaining({
+        address: disputer,
+        oppositeOutcome: "YES",
+        hasOppositePosition: true,
+        size: 20
+      })
+    });
+
+    const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
+    expect(embedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Proposer hedge",
+          value: "No **YES** position detected."
+        }),
+        expect.objectContaining({
+          name: "Disputer opposite-side shares",
+          value: ">>> **HEDGED: HOLDS YES**\nSize: **`20 shares`**\nCurrent value: **`$2`**\nAvg price: **`$0.03`**\nMark price: **`$0.1`**"
+        })
+      ])
+    );
+  });
 });
 
 function buildIntegration(settingsJson: string | null = null): Integration {

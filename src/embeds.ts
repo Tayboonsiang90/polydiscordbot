@@ -3,6 +3,7 @@ import { formatAddressWithLabel, getAddressLabelsFromSettingsJson } from "./addr
 import type { IntegrationUpdateLog } from "./database.js";
 import type { CheckResult, EventCheckResult, SnapshotResult } from "./poller.js";
 import type {
+  AddressHedgeStatus,
   AddressLabelImportIssue,
   AddressLabelUpdateResult,
   EventMonitorPost,
@@ -552,8 +553,12 @@ function formatPrioritySummaryFields(
     ...(summary.proposer
       ? [{ name: "Proposer", value: formatAddressWithLabel(summary.proposer, addressLabels, summary.proposerProfile), inline: false }]
       : []),
+    ...(summary.proposerHedge ? [{ name: "Proposer hedge", value: formatHedgeStatus(summary.proposerHedge), inline: false }] : []),
     ...(summary.disputer
       ? [{ name: "Disputer", value: formatAddressWithLabel(summary.disputer, addressLabels, summary.disputerProfile), inline: false }]
+      : []),
+    ...(summary.disputerHedge
+      ? [{ name: "Disputer opposite-side shares", value: formatHedgeStatus(summary.disputerHedge), inline: false }]
       : []),
     ...(summary.clarification ? [{ name: "Clarification", value: summary.clarification, inline: false }] : []),
     ...(summary.creator ? [{ name: "Creator", value: summary.creator, inline: false }] : [])
@@ -928,6 +933,25 @@ function formatMarketTags(marketTags: string[], matchedTags: string[]): string {
   return marketTags.map((tag) => (matched.has(normalizeTagText(tag)) ? `**${tag}**` : tag)).join(", ");
 }
 
+function formatHedgeStatus(status: AddressHedgeStatus): string {
+  if (status.error) {
+    return `Check unavailable: ${status.error}`;
+  }
+  if (!status.hasOppositePosition) {
+    return `No **${status.oppositeOutcome}** position detected.`;
+  }
+
+  const lines = [
+    `>>> **HEDGED: HOLDS ${status.oppositeOutcome}**`,
+    status.size === undefined ? "" : `Size: **\`${formatShareQuantity(status.size)}\`**`,
+    status.currentValue === undefined ? "" : `Current value: **\`${formatUsdValue(status.currentValue)}\`**`,
+    status.avgPrice === undefined ? "" : `Avg price: **\`${formatSharePrice(status.avgPrice)}\`**`,
+    status.curPrice === undefined ? "" : `Mark price: **\`${formatSharePrice(status.curPrice)}\`**`
+  ].filter(Boolean);
+
+  return lines.join("\n");
+}
+
 function normalizeTagText(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
@@ -954,6 +978,24 @@ function formatEasternDateTime(date: Date): string {
 
 function formatValue(value: string | null): string {
   return value ? truncateEmbedValue(value) : "not checked yet";
+}
+
+function formatShareQuantity(value: number): string {
+  return `${formatNumber(value, 4)} shares`;
+}
+
+function formatSharePrice(value: number): string {
+  return `$${formatNumber(value, value < 0.01 ? 4 : 3)}`;
+}
+
+function formatUsdValue(value: number): string {
+  return `$${formatNumber(value, 2)}`;
+}
+
+function formatNumber(value: number, maximumFractionDigits: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits
+  }).format(value);
 }
 
 function formatStrikeTerms(strikeTerms: string[]): string {
