@@ -118,6 +118,17 @@ describe("fetchPolymarketDisputeUpdates", () => {
         });
       }
 
+      if (target.startsWith("https://gamma-api.polymarket.com/public-profile")) {
+        const url = new URL(target);
+        const address = url.searchParams.get("address");
+        if (address === proposer) {
+          return jsonResponse({ proxyWallet: proposer, displayUsernamePublic: true, name: "KnownProposer" });
+        }
+        if (address === disputer) {
+          return new Response("not found", { status: 404 });
+        }
+      }
+
       if (target.startsWith("https://data-api.polymarket.com/trades")) {
         const url = new URL(target);
         expect(url.searchParams.get("limit")).toBe("1");
@@ -163,9 +174,9 @@ describe("fetchPolymarketDisputeUpdates", () => {
       proposedOutcome: "NO (0)",
       marketTags: ["Politics", "Trump"],
       proposer,
-      proposerProfile: expect.objectContaining({ address: proposer, hasTrades: true }),
+      proposerProfile: expect.objectContaining({ address: proposer, profileName: "KnownProposer", hasTrades: true }),
       disputer,
-      disputerProfile: expect.objectContaining({ address: disputer, hasTrades: false })
+      disputerProfile: expect.objectContaining({ address: disputer, linkedProfile: false, hasTrades: false })
     });
     const embedFields = buildEventPostEmbed(
       buildIntegration(
@@ -199,11 +210,11 @@ describe("fetchPolymarketDisputeUpdates", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "Proposer",
-          value: `Known Proposer ([Polymarket](https://polymarket.com/${proposer}))\n${proposer}`
+          value: `Known Proposer ([Polymarket: KnownProposer](https://polymarket.com/@KnownProposer))\n${proposer}`
         }),
         expect.objectContaining({
           name: "Disputer",
-          value: `Known Disputer\n${disputer}\nPolymarket: no trades found`
+          value: `Known Disputer\n${disputer}\nPolymarket: no linked profile/trades found`
         })
       ])
     );

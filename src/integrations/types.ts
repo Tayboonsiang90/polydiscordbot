@@ -171,6 +171,9 @@ export type AddressLabelEntry = {
 export type AddressProfileStatus = {
   address: string;
   profileUrl: string;
+  profileName?: string;
+  profileWallet?: string;
+  linkedProfile?: boolean;
   checkedAt: string;
   sourceUrl: string;
   hasTrades?: boolean;

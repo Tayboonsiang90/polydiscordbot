@@ -123,38 +123,77 @@ describe("address labels", () => {
     ).toBe('name,address\n"Maker, ""One""",0x1111111111111111111111111111111111111111\nSimple Maker,0x2222222222222222222222222222222222222222\n');
   });
 
-  it("checks Polymarket Data API trades before adding a profile link", async () => {
+  it("resolves a Polymarket profile proxy wallet before adding a profile link", async () => {
+    const address = "0xcf12f5b99605cb299fb11d5eff4fb304de008d02";
+    const proxyWallet = "0x4ad6cadefae3c28f5b2caa32a99ebba3a614464c";
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL | Request) => {
         const target = url.toString();
         const parsed = new URL(target);
-        expect(parsed.origin + parsed.pathname).toBe("https://data-api.polymarket.com/trades");
-        expect(parsed.searchParams.get("user")).toBe("0x3333333333333333333333333333333333333333");
-        expect(parsed.searchParams.get("limit")).toBe("1");
-        expect(parsed.searchParams.get("takerOnly")).toBe("false");
-        return new Response(JSON.stringify([{ proxyWallet: "0x3333333333333333333333333333333333333333" }]), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
+        if (parsed.origin + parsed.pathname === "https://gamma-api.polymarket.com/public-profile") {
+          expect(parsed.searchParams.get("address")).toBe(address);
+          return jsonResponse({ proxyWallet, displayUsernamePublic: true, name: "noreasapa", pseudonym: "Unripe-Split" });
+        }
+        if (parsed.origin + parsed.pathname === "https://data-api.polymarket.com/trades") {
+          expect(parsed.searchParams.get("user")).toBe(proxyWallet);
+          expect(parsed.searchParams.get("limit")).toBe("1");
+          expect(parsed.searchParams.get("takerOnly")).toBe("false");
+          return jsonResponse([{ proxyWallet, name: "noreasapa" }]);
+        }
+
+        throw new Error(`Unexpected fetch: ${target}`);
       })
     );
 
-    const status = await fetchPolymarketAddressProfileStatus("0x3333333333333333333333333333333333333333");
+    const status = await fetchPolymarketAddressProfileStatus(address);
 
     expect(status).toMatchObject({
-      address: "0x3333333333333333333333333333333333333333",
-      profileUrl: "https://polymarket.com/0x3333333333333333333333333333333333333333",
+      address,
+      profileUrl: "https://polymarket.com/@noreasapa",
+      profileName: "noreasapa",
+      profileWallet: proxyWallet,
+      linkedProfile: true,
       hasTrades: true
     });
     expect(
       formatAddressWithLabel(
-        "0x3333333333333333333333333333333333333333",
-        [{ address: "0x3333333333333333333333333333333333333333", label: "Known Trader" }],
+        address,
+        [{ address, label: "Known Trader" }],
         status
       )
     ).toBe(
-      "Known Trader ([Polymarket](https://polymarket.com/0x3333333333333333333333333333333333333333))\n0x3333333333333333333333333333333333333333"
+      `Known Trader ([Polymarket: noreasapa](https://polymarket.com/@noreasapa))\n${address}`
+    );
+  });
+
+  it("marks addresses with no public profile or trades as not linked", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const target = url.toString();
+        const parsed = new URL(target);
+        if (parsed.origin + parsed.pathname === "https://gamma-api.polymarket.com/public-profile") {
+          return new Response("not found", { status: 404 });
+        }
+        if (parsed.origin + parsed.pathname === "https://data-api.polymarket.com/trades") {
+          return jsonResponse([]);
+        }
+
+        throw new Error(`Unexpected fetch: ${target}`);
+      })
+    );
+
+    const address = "0x3333333333333333333333333333333333333333";
+    const status = await fetchPolymarketAddressProfileStatus(address);
+
+    expect(status).toMatchObject({
+      address,
+      linkedProfile: false,
+      hasTrades: false
+    });
+    expect(formatAddressWithLabel(address, [{ address, label: "Known Trader" }], status)).toBe(
+      `Known Trader\n${address}\nPolymarket: no linked profile/trades found`
     );
   });
 
@@ -168,7 +207,7 @@ describe("address labels", () => {
 
     expect(status).toMatchObject({
       address: "0x4444444444444444444444444444444444444444",
-      error: "HTTP 503"
+      error: "Polymarket public profile HTTP 503"
     });
     expect(
       formatAddressWithLabel(
@@ -179,3 +218,7 @@ describe("address labels", () => {
     ).toBe("Known Trader\n0x4444444444444444444444444444444444444444");
   });
 });
+
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } });
+}

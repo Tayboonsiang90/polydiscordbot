@@ -12,10 +12,23 @@ import { parseSettingsJson } from "./settingsJson.js";
 
 const addressPattern = /^0x[0-9a-fA-F]{40}$/;
 const polymarketTradesApiUrl = "https://data-api.polymarket.com/trades";
+const polymarketPublicProfileApiUrl = "https://gamma-api.polymarket.com/public-profile";
 const polymarketProfileBaseUrl = "https://polymarket.com";
 const profileCacheMs = 10 * 60_000;
 const profileErrorCacheMs = 60_000;
 const profileLookupTimeoutMs = 2_500;
+
+type PolymarketPublicProfile = {
+  proxyWallet?: string | null;
+  displayUsernamePublic?: boolean | null;
+  name?: string | null;
+  pseudonym?: string | null;
+};
+
+type PolymarketTrade = {
+  name?: string;
+  pseudonym?: string;
+};
 
 type ProfileCacheEntry = {
   expiresAtMs: number;
@@ -210,35 +223,29 @@ export async function fetchPolymarketAddressProfileStatus(
     return cached.status;
   }
 
-  const url = new URL(polymarketTradesApiUrl);
-  url.searchParams.set("user", normalized);
-  url.searchParams.set("limit", "1");
-  url.searchParams.set("takerOnly", "false");
-
   const baseStatus = {
     address: normalized,
     profileUrl: `${polymarketProfileBaseUrl}/${normalized}`,
     checkedAt: now.toISOString(),
-    sourceUrl: url.toString()
+    sourceUrl: ""
   };
 
   let status: AddressProfileStatus;
   try {
-    const response = await fetch(url.toString(), {
-      headers: { "user-agent": "PolymarketResolutionMonitorBot/0.1" },
-      signal: AbortSignal.timeout(profileLookupTimeoutMs)
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const payload = (await response.json()) as unknown;
-    if (!Array.isArray(payload)) {
-      throw new Error("Unexpected Polymarket trades response");
-    }
-    status = { ...baseStatus, hasTrades: payload.length > 0 };
+    const profileLookup = await fetchPolymarketPublicProfile(normalized);
+    const profileWallet = normalizeAddress(profileLookup.profile?.proxyWallet ?? undefined) ?? normalized;
+    const tradeLookup = await fetchPolymarketTradeStatus(profileWallet);
+    const profileName = getPolymarketProfileName(profileLookup.profile, tradeLookup.latestTrade);
+    status = {
+      ...baseStatus,
+      profileUrl: buildPolymarketProfileUrl(normalized, profileName, profileLookup.profile?.displayUsernamePublic),
+      ...(profileName ? { profileName } : {}),
+      ...(profileLookup.found ? { linkedProfile: true, profileWallet } : { linkedProfile: false }),
+      sourceUrl: [profileLookup.sourceUrl, tradeLookup.sourceUrl].filter(Boolean).join(" | "),
+      hasTrades: tradeLookup.hasTrades
+    };
   } catch (error) {
-    status = { ...baseStatus, error: formatError(error) };
+    status = { ...baseStatus, sourceUrl: buildPublicProfileUrl(normalized).toString(), error: formatError(error) };
   }
 
   profileCache.set(normalized, { status, expiresAtMs: now.getTime() + (status.error ? profileErrorCacheMs : profileCacheMs) });
@@ -257,15 +264,92 @@ export function formatAddressWithLabel(
 
   const label = labels.find((entry) => entry.address === normalized)?.label;
   const profileForAddress = profile?.address === normalized ? profile : undefined;
-  const profileSuffix = profileForAddress?.hasTrades ? ` ([Polymarket](${profileForAddress.profileUrl}))` : "";
-  const lines = [`${label ?? normalized}${profileSuffix}`];
-  if (label) {
+  const profileSuffix = profileForAddress?.hasTrades ? formatPolymarketProfileSuffix(profileForAddress) : "";
+  const displayLabel = label ?? profileForAddress?.profileName ?? normalized;
+  const lines = [`${displayLabel}${profileSuffix}`];
+  if (displayLabel !== normalized) {
     lines.push(normalized);
   }
   if (profileForAddress?.hasTrades === false) {
-    lines.push("Polymarket: no trades found");
+    lines.push(profileForAddress.linkedProfile ? "Polymarket: profile found, no trades found" : "Polymarket: no linked profile/trades found");
   }
   return lines.join("\n");
+}
+
+async function fetchPolymarketPublicProfile(address: string): Promise<{
+  found: boolean;
+  profile?: PolymarketPublicProfile;
+  sourceUrl: string;
+}> {
+  const url = buildPublicProfileUrl(address);
+  const response = await fetch(url.toString(), {
+    headers: { "user-agent": "PolymarketResolutionMonitorBot/0.1" },
+    signal: AbortSignal.timeout(profileLookupTimeoutMs)
+  });
+  if (response.status === 404) {
+    return { found: false, sourceUrl: url.toString() };
+  }
+  if (!response.ok) {
+    throw new Error(`Polymarket public profile HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as unknown;
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Unexpected Polymarket public profile response");
+  }
+
+  return { found: true, profile: payload as PolymarketPublicProfile, sourceUrl: url.toString() };
+}
+
+async function fetchPolymarketTradeStatus(address: string): Promise<{
+  hasTrades: boolean;
+  latestTrade?: PolymarketTrade;
+  sourceUrl: string;
+}> {
+  const url = new URL(polymarketTradesApiUrl);
+  url.searchParams.set("user", address);
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("takerOnly", "false");
+
+  const response = await fetch(url.toString(), {
+    headers: { "user-agent": "PolymarketResolutionMonitorBot/0.1" },
+    signal: AbortSignal.timeout(profileLookupTimeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket trades HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as unknown;
+  if (!Array.isArray(payload)) {
+    throw new Error("Unexpected Polymarket trades response");
+  }
+
+  const latestTrade = payload.find((entry): entry is PolymarketTrade => Boolean(entry && typeof entry === "object"));
+  return { hasTrades: payload.length > 0, ...(latestTrade ? { latestTrade } : {}), sourceUrl: url.toString() };
+}
+
+function buildPublicProfileUrl(address: string): URL {
+  const url = new URL(polymarketPublicProfileApiUrl);
+  url.searchParams.set("address", address);
+  return url;
+}
+
+function getPolymarketProfileName(profile?: PolymarketPublicProfile, trade?: PolymarketTrade): string | undefined {
+  const visibleProfileName = profile?.displayUsernamePublic === false ? undefined : profile?.name;
+  return firstNonEmptyString(visibleProfileName, trade?.name, profile?.pseudonym, trade?.pseudonym) ?? undefined;
+}
+
+function buildPolymarketProfileUrl(address: string, profileName: string | undefined, displayUsernamePublic: boolean | null | undefined): string {
+  if (profileName && displayUsernamePublic !== false && isSafePolymarketHandle(profileName)) {
+    return `${polymarketProfileBaseUrl}/@${encodeURIComponent(profileName)}`;
+  }
+
+  return `${polymarketProfileBaseUrl}/${address}`;
+}
+
+function formatPolymarketProfileSuffix(profile: AddressProfileStatus): string {
+  const linkLabel = profile.profileName ? `Polymarket: ${profile.profileName}` : "Polymarket";
+  return ` ([${escapeMarkdownLinkLabel(linkLabel)}](${profile.profileUrl}))`;
 }
 
 function getAddressLabelsFromSettings(settings: Record<string, unknown>): AddressLabelEntry[] {
@@ -392,6 +476,23 @@ function normalizeAddressOrThrow(address: string | undefined): string {
 function normalizeAddress(address: string | undefined): string | null {
   const trimmed = address?.trim();
   return trimmed && addressPattern.test(trimmed) ? trimmed.toLowerCase() : null;
+}
+
+function firstNonEmptyString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function isSafePolymarketHandle(value: string): boolean {
+  return /^[A-Za-z0-9_.-]{1,80}$/.test(value);
+}
+
+function escapeMarkdownLinkLabel(value: string): string {
+  return value.replace(/[[\]\\]/g, "\\$&");
 }
 
 function normalizeLabelOrThrow(label: string | undefined): string {

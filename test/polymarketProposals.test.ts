@@ -96,6 +96,12 @@ describe("fetchPolymarketProposalUpdates", () => {
         });
       }
 
+      if (target.startsWith("https://gamma-api.polymarket.com/public-profile")) {
+        const url = new URL(target);
+        expect(url.searchParams.get("address")).toBe(proposer);
+        return jsonResponse({ proxyWallet: proposer, displayUsernamePublic: true, name: "KnownProposer" });
+      }
+
       if (target.startsWith("https://data-api.polymarket.com/trades")) {
         const url = new URL(target);
         expect(url.searchParams.get("user")).toBe(proposer);
@@ -142,7 +148,8 @@ describe("fetchPolymarketProposalUpdates", () => {
       proposer,
       proposerProfile: expect.objectContaining({
         address: proposer,
-        profileUrl: `https://polymarket.com/${proposer}`,
+        profileUrl: "https://polymarket.com/@KnownProposer",
+        profileName: "KnownProposer",
         hasTrades: true
       })
     });
@@ -173,7 +180,7 @@ describe("fetchPolymarketProposalUpdates", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "Proposer",
-          value: `Known Proposer ([Polymarket](https://polymarket.com/${proposer}))\n${proposer}`
+          value: `Known Proposer ([Polymarket: KnownProposer](https://polymarket.com/@KnownProposer))\n${proposer}`
         })
       ])
     );
@@ -233,6 +240,10 @@ describe("fetchPolymarketProposalUpdates", () => {
           ],
           bids: []
         });
+      }
+
+      if (target.startsWith("https://gamma-api.polymarket.com/public-profile")) {
+        return new Response("not found", { status: 404 });
       }
 
       if (target.startsWith("https://data-api.polymarket.com/trades")) {
