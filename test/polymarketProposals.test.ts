@@ -162,10 +162,10 @@ describe("fetchPolymarketProposalUpdates", () => {
     expect(embedFields.slice(0, 8).map((field) => field.name)).toEqual([
       "Question",
       "Proposed outcome",
-      "Posted at (SGT)",
-      "Proposal expiration (SGT)",
-      "Posted at (ET)",
-      "Proposal expiration (ET)",
+      "Proposed at",
+      "Dispute Window Ends",
+      "Proposed at (ET)",
+      "Dispute Window Ends (ET)",
       "Market tags",
       "Proposer"
     ]);

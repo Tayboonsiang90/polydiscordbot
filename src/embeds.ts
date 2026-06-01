@@ -526,6 +526,11 @@ function formatPrioritySummaryFields(
   const addressLabels = getAddressLabelsFromSettingsJson(integration.settingsJson);
   const proposerShares = formatActorShares(summary.proposerAligned, summary.proposerHedge);
   const disputerShares = formatActorShares(summary.disputerAligned, summary.disputerHedge);
+  const isProposalSummary = post.type === "Polymarket UMA proposal";
+  const postedAtSgtLabel = isProposalSummary ? "Proposed at" : "Posted at (SGT)";
+  const postedAtEtLabel = isProposalSummary ? "Proposed at (ET)" : "Posted at (ET)";
+  const expirationSgtLabel = isProposalSummary ? "Dispute Window Ends" : "Proposal expiration (SGT)";
+  const expirationEtLabel = isProposalSummary ? "Dispute Window Ends (ET)" : "Proposal expiration (ET)";
 
   return [
     ...(summary.question
@@ -544,13 +549,13 @@ function formatPrioritySummaryFields(
     ...(summary.proposedSideLiquidityCheck
       ? [{ name: "PENNY PICK CHECK", value: `**${summary.proposedSideLiquidityCheck}**`, inline: false }]
       : []),
-    { name: "Posted at (SGT)", value: formatSingaporeDateTime(post.postedAt), inline: true },
+    { name: postedAtSgtLabel, value: formatSingaporeDateTime(post.postedAt), inline: true },
     ...(summary.proposalExpirationAt
-      ? [{ name: "Proposal expiration (SGT)", value: formatSingaporeDateTime(summary.proposalExpirationAt), inline: true }]
+      ? [{ name: expirationSgtLabel, value: formatSingaporeDateTime(summary.proposalExpirationAt), inline: true }]
       : []),
-    { name: "Posted at (ET)", value: formatEasternDateTime(post.postedAt), inline: true },
+    { name: postedAtEtLabel, value: formatEasternDateTime(post.postedAt), inline: true },
     ...(summary.proposalExpirationAt
-      ? [{ name: "Proposal expiration (ET)", value: formatEasternDateTime(new Date(summary.proposalExpirationAt)), inline: true }]
+      ? [{ name: expirationEtLabel, value: formatEasternDateTime(new Date(summary.proposalExpirationAt)), inline: true }]
       : []),
     ...(summary.marketTags?.length
       ? [{ name: "Market tags", value: formatMarketTags(summary.marketTags, summary.matchedTags ?? []), inline: false }]
