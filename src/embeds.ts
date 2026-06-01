@@ -536,7 +536,7 @@ function formatPrioritySummaryFields(
       : []),
     ...(summary.proposedOutcome ? [{ name: "Proposed outcome", value: `**${summary.proposedOutcome}**`, inline: false }] : []),
     ...(summary.proposedSideLiquidity
-      ? [{ name: "Penny pick liquidity", value: summary.proposedSideLiquidity, inline: false }]
+      ? [{ name: "PENNY PICK LIQUIDITY", value: summary.proposedSideLiquidity, inline: false }]
       : []),
     { name: "Posted at (SGT)", value: formatSingaporeDateTime(post.postedAt), inline: true },
     ...(summary.proposalExpirationAt

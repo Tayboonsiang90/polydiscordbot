@@ -392,7 +392,7 @@ export function normalizePolymarketProposalEvent(
   const text = [
     question ? `Proposal opened for: ${question}` : "A Polymarket UMA resolution proposal was opened.",
     `Proposed outcome: ${proposal.proposedOutcome}`,
-    liquidityText ? `Penny pick liquidity: ${liquidityText.replace(/\*\*/g, "")}` : "",
+    liquidityText ? `Penny pick liquidity: ${formatPlainProposedSideLiquidity(liquidityText)}` : "",
     `Matched tags: ${matchedTags}`
   ].filter(Boolean).join("\n");
   const hiddenFields = [
@@ -982,13 +982,23 @@ function normalizeTokenOutcome(outcome: string): "YES" | "NO" | null {
 }
 
 function formatProposedSideLiquidity(liquidity: ProposedSideLiquidity): string {
-  return [
-    `**${liquidity.outcome} shares ${liquidity.estimated ? "likely available" : "available"}**`,
-    `${liquidity.estimated ? "estimated best ask" : "best ask"} ${formatSharePrice(liquidity.bestAsk)}`,
-    liquidity.bestAskSize === undefined ? "" : `${formatShareQuantity(liquidity.bestAskSize)} at best`,
-    liquidity.totalAskSize === undefined ? "" : `${formatShareQuantity(liquidity.totalAskSize)} total asks`,
-    liquidity.estimated ? "size unavailable from Gamma fallback" : ""
-  ]
+  const lines = [
+    `**${liquidity.outcome.toUpperCase()} SHARES ${liquidity.estimated ? "LIKELY AVAILABLE" : "AVAILABLE"}**`,
+    `${liquidity.estimated ? "Estimated best ask" : "Best ask"}: **\`${formatSharePrice(liquidity.bestAsk)}\`**`,
+    liquidity.bestAskSize === undefined ? "" : `At best: **\`${formatShareQuantity(liquidity.bestAskSize)}\`**`,
+    liquidity.totalAskSize === undefined ? "" : `Total asks: **\`${formatShareQuantity(liquidity.totalAskSize)}\`**`,
+    liquidity.estimated ? "_Size unavailable from Gamma fallback._" : ""
+  ].filter(Boolean);
+
+  return `>>> ${lines.join("\n")}`;
+}
+
+function formatPlainProposedSideLiquidity(value: string): string {
+  return value
+    .replace(/^>>>\s*/, "")
+    .replace(/[*_`]/g, "")
+    .split(/\n+/)
+    .map((line) => line.trim())
     .filter(Boolean)
     .join(" | ");
 }

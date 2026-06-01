@@ -267,21 +267,21 @@ describe("fetchPolymarketProposalUpdates", () => {
 
     expect(result.posts).toHaveLength(1);
     expect(result.posts[0].alertTitle).toBe("Polymarket UMA proposal - proposed-side shares available");
-    expect(result.posts[0].text).toContain("Penny pick liquidity: NO shares available | best ask $0.037");
+    expect(result.posts[0].text).toContain("Penny pick liquidity: NO SHARES AVAILABLE | Best ask: $0.037");
     expect(result.posts[0].prioritySummary).toMatchObject({
       proposedOutcome: "NO (0)",
-      proposedSideLiquidity: "**NO shares available** | best ask $0.037 | 12.5 shares at best | 112.5 shares total asks"
+      proposedSideLiquidity: ">>> **NO SHARES AVAILABLE**\nBest ask: **`$0.037`**\nAt best: **`12.5 shares`**\nTotal asks: **`112.5 shares`**"
     });
 
     const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
     expect(embedFields.slice(0, 3).map((field) => field.name)).toEqual([
       "Question",
       "Proposed outcome",
-      "Penny pick liquidity"
+      "PENNY PICK LIQUIDITY"
     ]);
     expect(embedFields[2]).toEqual({
-      name: "Penny pick liquidity",
-      value: "**NO shares available** | best ask $0.037 | 12.5 shares at best | 112.5 shares total asks",
+      name: "PENNY PICK LIQUIDITY",
+      value: ">>> **NO SHARES AVAILABLE**\nBest ask: **`$0.037`**\nAt best: **`12.5 shares`**\nTotal asks: **`112.5 shares`**",
       inline: false
     });
   });
@@ -365,14 +365,14 @@ describe("fetchPolymarketProposalUpdates", () => {
     expect(result.posts[0].alertTitle).toBe("Polymarket UMA proposal - proposed-side shares available");
     expect(result.posts[0].prioritySummary).toMatchObject({
       proposedOutcome: "NO (0)",
-      proposedSideLiquidity: "**NO shares likely available** | estimated best ask $0.999 | size unavailable from Gamma fallback"
+      proposedSideLiquidity: ">>> **NO SHARES LIKELY AVAILABLE**\nEstimated best ask: **`$0.999`**\n_Size unavailable from Gamma fallback._"
     });
     const embedFields = buildEventPostEmbed(buildIntegration(), result.posts[0])[0].data.fields ?? [];
     expect(embedFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: "Penny pick liquidity",
-          value: "**NO shares likely available** | estimated best ask $0.999 | size unavailable from Gamma fallback"
+          name: "PENNY PICK LIQUIDITY",
+          value: ">>> **NO SHARES LIKELY AVAILABLE**\nEstimated best ask: **`$0.999`**\n_Size unavailable from Gamma fallback._"
         })
       ])
     );
