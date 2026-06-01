@@ -561,7 +561,7 @@ function formatPrioritySummaryFields(
       ? [{ name: "Disputer", value: formatAddressWithLabel(summary.disputer, addressLabels, summary.disputerProfile), inline: false }]
       : []),
     ...(summary.disputerHedge
-      ? [{ name: "Disputer opposite-side shares", value: formatHedgeStatus(summary.disputerHedge), inline: false }]
+      ? [{ name: "Disputer aligned shares", value: formatAlignedDisputeStatus(summary.disputerHedge), inline: false }]
       : []),
     ...(summary.clarification ? [{ name: "Clarification", value: summary.clarification, inline: false }] : []),
     ...(summary.creator ? [{ name: "Creator", value: summary.creator, inline: false }] : [])
@@ -937,15 +937,23 @@ function formatMarketTags(marketTags: string[], matchedTags: string[]): string {
 }
 
 function formatHedgeStatus(status: AddressHedgeStatus): string {
+  return formatPositionStatus(status, "HEDGED", "position");
+}
+
+function formatAlignedDisputeStatus(status: AddressHedgeStatus): string {
+  return formatPositionStatus(status, "ALIGNED", "aligned position");
+}
+
+function formatPositionStatus(status: AddressHedgeStatus, label: string, missingLabel: string): string {
   if (status.error) {
     return `Check unavailable: ${status.error}`;
   }
   if (!status.hasOppositePosition) {
-    return `No **${status.oppositeOutcome}** position detected.`;
+    return `No **${status.oppositeOutcome}** ${missingLabel} detected.`;
   }
 
   const lines = [
-    `>>> **HEDGED: HOLDS ${status.oppositeOutcome}**`,
+    `>>> **${label}: HOLDS ${status.oppositeOutcome}**`,
     status.size === undefined ? "" : `Size: **\`${formatShareQuantity(status.size)}\`**`,
     status.currentValue === undefined ? "" : `Current value: **\`${formatUsdValue(status.currentValue)}\`**`,
     status.avgPrice === undefined ? "" : `Avg price: **\`${formatSharePrice(status.avgPrice)}\`**`,

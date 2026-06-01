@@ -235,7 +235,7 @@ describe("fetchPolymarketDisputeUpdates", () => {
     );
   });
 
-  it("checks proposer and disputer opposite-side Polymarket shares on dispute alerts", async () => {
+  it("labels disputer opposite-proposed shares as aligned exposure on dispute alerts", async () => {
     const rpcUrl = "https://rpc.example";
     const conditionId = `0x${"b".repeat(64)}`;
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -326,8 +326,8 @@ describe("fetchPolymarketDisputeUpdates", () => {
           value: "No **YES** position detected."
         }),
         expect.objectContaining({
-          name: "Disputer opposite-side shares",
-          value: ">>> **HEDGED: HOLDS YES**\nSize: **`20 shares`**\nCurrent value: **`$2`**\nAvg price: **`$0.03`**\nMark price: **`$0.1`**"
+          name: "Disputer aligned shares",
+          value: ">>> **ALIGNED: HOLDS YES**\nSize: **`20 shares`**\nCurrent value: **`$2`**\nAvg price: **`$0.03`**\nMark price: **`$0.1`**"
         })
       ])
     );
