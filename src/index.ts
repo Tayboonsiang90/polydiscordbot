@@ -41,7 +41,7 @@ const runtimeGitCommit = getRuntimeGitCommit();
 
 client.once(Events.ClientReady, (readyClient) => {
   try {
-    console.log(`Logged in as ${readyClient.user.tag} at ${new Date().toISOString()} (commit ${runtimeGitCommit})`);
+    console.log(`Logged in as ${readyClient.user.tag} at ${new Date().toISOString()} (commit ${runtimeGitCommit}, pid ${process.pid})`);
     provisioner = new IntegrationProvisioner(client, database, config);
     provisioner.start();
     new PollScheduler(client, database).start();
