@@ -425,14 +425,6 @@ function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresho
       { name: "Rounds", value: rounds.join(", "), inline: true },
       { name: "Threshold", value: `${formatUmaTokenAmount(thresholdWei)} UMA`, inline: true }
     ],
-    hiddenFields: [
-      { name: "Contract", value: votingV2Address, inline: false },
-      { name: "Block", value: String(event.blockNumber), inline: true },
-      { name: "Log index", value: String(event.logIndex), inline: true },
-      { name: "Committed requests", value: truncateFieldValue(commitLines.join("\n"), 3_800), inline: false },
-      { name: "Latest commit key", value: event.commitKey, inline: false },
-      { name: "Latest request metadata", value: event.ancillaryDataText || "unavailable", inline: false }
-    ],
     imageUrls: [],
     imageText: "",
     matchedTerms: [],

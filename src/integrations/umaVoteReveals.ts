@@ -414,15 +414,7 @@ function normalizeUmaVoteRevealPostGroup(items: UmaVoteRevealPostItem[], thresho
       { name: "Reveal count", value: String(sortedItems.length), inline: true },
       { name: voteWeights.length === 1 ? "Vote weight" : "Vote weights", value: truncateFieldValue(voteWeights.join("\n")), inline: true },
       { name: "Rounds", value: rounds.join(", "), inline: true },
-      { name: "Reveals", value: truncateFieldValue(revealLines.join("\n")), inline: false },
       { name: "Threshold", value: `${formatUmaTokenAmount(thresholdWei)} UMA`, inline: true }
-    ],
-    hiddenFields: [
-      { name: "Contract", value: votingV2Address, inline: false },
-      { name: "Block", value: String(event.blockNumber), inline: true },
-      { name: "Log index", value: String(event.logIndex), inline: true },
-      { name: "Revealed requests", value: truncateFieldValue(revealLines.join("\n"), 3_800), inline: false },
-      { name: "Latest request metadata", value: event.ancillaryDataText || "unavailable", inline: false }
     ],
     imageUrls: [],
     imageText: "",

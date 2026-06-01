@@ -137,22 +137,11 @@ describe("UMA vote reveal adapter", () => {
     expect(result.posts[0].summaryFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Reveal count", value: "2" }),
-        expect.objectContaining({ name: "Vote weight", value: "420,551.4062 UMA" }),
-        expect.objectContaining({ name: "Reveals", value: expect.stringContaining("committee P1") })
+        expect.objectContaining({ name: "Vote weight", value: "420,551.4062 UMA" })
       ])
     );
-    expect(result.posts[0].hiddenFields).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "Revealed requests", value: expect.stringContaining("committee P1") }),
-        expect.objectContaining({ name: "Latest request metadata", value: expect.stringContaining("childRequester") })
-      ])
-    );
-    expect(result.posts[0].hiddenFields).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "Included reveal logs" }),
-        expect.objectContaining({ name: "Latest ancillary data hex" })
-      ])
-    );
+    expect(result.posts[0].summaryFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Reveals" })]));
+    expect(result.posts[0].hiddenFields).toBeUndefined();
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       lastScannedBlock: 23387898,
       lastRpcUrl: "https://rpc.example",
