@@ -305,16 +305,26 @@ describe("fetchPolymarketDisputeUpdates", () => {
     expect(result.posts[0].prioritySummary).toMatchObject({
       conditionId,
       proposedOutcomeSide: "NO",
+      proposerAligned: expect.objectContaining({
+        address: proposer,
+        side: "NO",
+        hasPosition: false
+      }),
       proposerHedge: expect.objectContaining({
         address: proposer,
-        oppositeOutcome: "YES",
-        hasOppositePosition: false
+        side: "YES",
+        hasPosition: false
+      }),
+      disputerAligned: expect.objectContaining({
+        address: disputer,
+        side: "YES",
+        hasPosition: true,
+        size: 20
       }),
       disputerHedge: expect.objectContaining({
         address: disputer,
-        oppositeOutcome: "YES",
-        hasOppositePosition: true,
-        size: 20
+        side: "NO",
+        hasPosition: false
       })
     });
 
@@ -322,12 +332,12 @@ describe("fetchPolymarketDisputeUpdates", () => {
     expect(embedFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: "Proposer hedge",
-          value: "No **YES** position detected."
+          name: "Proposer shares",
+          value: ">>> **ALIGNED: no NO aligned shares detected**\n**HEDGED: no YES hedge shares detected**"
         }),
         expect.objectContaining({
-          name: "Disputer aligned shares",
-          value: ">>> **ALIGNED: HOLDS YES**\nSize: **`20 shares`**\nCurrent value: **`$2`**\nAvg price: **`$0.03`**\nMark price: **`$0.1`**"
+          name: "Disputer shares",
+          value: ">>> **ALIGNED: HOLDS YES**\nSize: **`20 shares`**\nCurrent value: **`$2`**\nAvg price: **`$0.03`**\nMark price: **`$0.1`**\n**HEDGED: no NO hedge shares detected**"
         })
       ])
     );

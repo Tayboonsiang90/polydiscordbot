@@ -367,12 +367,19 @@ describe("fetchPolymarketProposalUpdates", () => {
     expect(result.posts[0].prioritySummary).toMatchObject({
       conditionId,
       proposedOutcomeSide: "NO",
+      proposerAligned: expect.objectContaining({
+        address: proposer,
+        profileWallet: proxyWallet,
+        conditionId,
+        side: "NO",
+        hasPosition: false
+      }),
       proposerHedge: expect.objectContaining({
         address: proposer,
         profileWallet: proxyWallet,
         conditionId,
-        oppositeOutcome: "YES",
-        hasOppositePosition: true,
+        side: "YES",
+        hasPosition: true,
         size: 12.5,
         currentValue: 1.25,
         avgPrice: 0.02,
@@ -384,8 +391,8 @@ describe("fetchPolymarketProposalUpdates", () => {
     expect(embedFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: "Proposer hedge",
-          value: ">>> **HEDGED: HOLDS YES**\nSize: **`12.5 shares`**\nCurrent value: **`$1.25`**\nAvg price: **`$0.02`**\nMark price: **`$0.1`**"
+          name: "Proposer shares",
+          value: ">>> **ALIGNED: no NO aligned shares detected**\n**HEDGED: HOLDS YES**\nSize: **`12.5 shares`**\nCurrent value: **`$1.25`**\nAvg price: **`$0.02`**\nMark price: **`$0.1`**"
         })
       ])
     );

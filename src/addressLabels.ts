@@ -5,7 +5,7 @@ import type {
   AddressLabelImportSummary,
   AddressLabelUpdateOptions,
   AddressLabelUpdateResult,
-  AddressHedgeStatus,
+  AddressPositionStatus,
   AddressProfileStatus,
   EventMonitorPost
 } from "./integrations/types.js";
@@ -48,6 +48,13 @@ type PolymarketPosition = {
 type ProfileCacheEntry = {
   expiresAtMs: number;
   status: AddressProfileStatus;
+};
+
+type OutcomeSide = "YES" | "NO";
+
+type ActorExposureStatuses = {
+  aligned?: AddressPositionStatus;
+  hedge?: AddressPositionStatus;
 };
 
 const profileCache = new Map<string, ProfileCacheEntry>();
@@ -213,27 +220,30 @@ export async function enrichEventPostAddressProfiles(post: EventMonitorPost): Pr
     summary.proposer ? fetchPolymarketAddressProfileStatus(summary.proposer) : Promise.resolve(undefined),
     summary.disputer ? fetchPolymarketAddressProfileStatus(summary.disputer) : Promise.resolve(undefined)
   ]);
-  const oppositeOutcome = getOppositeOutcome(summary.proposedOutcomeSide);
-  const [proposerHedge, disputerHedge] =
-    summary.conditionId && oppositeOutcome
+  const proposedOutcome = summary.proposedOutcomeSide;
+  const oppositeOutcome = getOppositeOutcome(proposedOutcome);
+  const [proposerExposure, disputerExposure] =
+    summary.conditionId && proposedOutcome && oppositeOutcome
       ? await Promise.all([
           summary.proposer
-            ? fetchPolymarketAddressHedgeStatus(summary.proposer, proposerProfile, summary.conditionId, oppositeOutcome)
-            : Promise.resolve(undefined),
+            ? fetchActorExposureStatuses(summary.proposer, proposerProfile, summary.conditionId, proposedOutcome, oppositeOutcome)
+            : Promise.resolve({} as ActorExposureStatuses),
           summary.disputer
-            ? fetchPolymarketAddressHedgeStatus(summary.disputer, disputerProfile, summary.conditionId, oppositeOutcome)
-            : Promise.resolve(undefined)
+            ? fetchActorExposureStatuses(summary.disputer, disputerProfile, summary.conditionId, oppositeOutcome, proposedOutcome)
+            : Promise.resolve({} as ActorExposureStatuses)
         ])
-      : [undefined, undefined];
+      : ([{}, {}] as [ActorExposureStatuses, ActorExposureStatuses]);
 
   return {
     ...post,
     prioritySummary: {
       ...summary,
       ...(proposerProfile ? { proposerProfile } : {}),
-      ...(proposerHedge ? { proposerHedge } : {}),
+      ...(proposerExposure.aligned ? { proposerAligned: proposerExposure.aligned } : {}),
+      ...(proposerExposure.hedge ? { proposerHedge: proposerExposure.hedge } : {}),
       ...(disputerProfile ? { disputerProfile } : {}),
-      ...(disputerHedge ? { disputerHedge } : {})
+      ...(disputerExposure.aligned ? { disputerAligned: disputerExposure.aligned } : {}),
+      ...(disputerExposure.hedge ? { disputerHedge: disputerExposure.hedge } : {})
     }
   };
 }
@@ -357,17 +367,33 @@ async function fetchPolymarketTradeStatus(address: string): Promise<{
   return { hasTrades: payload.length > 0, ...(latestTrade ? { latestTrade } : {}), sourceUrl: url.toString() };
 }
 
-async function fetchPolymarketAddressHedgeStatus(
+async function fetchActorExposureStatuses(
   address: string,
   profile: AddressProfileStatus | undefined,
   conditionId: string,
-  oppositeOutcome: "YES" | "NO",
+  alignedSide: OutcomeSide,
+  hedgeSide: OutcomeSide,
   now = new Date()
-): Promise<AddressHedgeStatus | undefined> {
+): Promise<ActorExposureStatuses> {
+  const statuses = await fetchPolymarketAddressPositionStatuses(address, profile, conditionId, [alignedSide, hedgeSide], now);
+  return {
+    aligned: statuses.get(alignedSide),
+    hedge: statuses.get(hedgeSide)
+  };
+}
+
+async function fetchPolymarketAddressPositionStatuses(
+  address: string,
+  profile: AddressProfileStatus | undefined,
+  conditionId: string,
+  sides: OutcomeSide[],
+  now = new Date()
+): Promise<Map<OutcomeSide, AddressPositionStatus>> {
   const normalized = normalizeAddress(address);
   const normalizedConditionId = normalizeConditionId(conditionId);
+  const uniqueSides = Array.from(new Set(sides));
   if (!normalized || !normalizedConditionId) {
-    return undefined;
+    return new Map();
   }
 
   const profileWallet = normalizeAddress(profile?.profileWallet) ?? normalized;
@@ -376,39 +402,54 @@ async function fetchPolymarketAddressHedgeStatus(
     address: normalized,
     profileWallet,
     conditionId: normalizedConditionId,
-    oppositeOutcome,
     checkedAt: now.toISOString(),
     sourceUrl: url.toString()
   };
   if (profile?.error) {
-    return { ...baseStatus, hasOppositePosition: false, error: `Polymarket profile lookup failed: ${profile.error}` };
+    return new Map(
+      uniqueSides.map((side) => [
+        side,
+        { ...baseStatus, side, hasPosition: false, error: `Polymarket profile lookup failed: ${profile.error}` }
+      ])
+    );
   }
 
   try {
     const positions = await fetchPolymarketPositions(url);
-    const oppositePosition = positions.find(
-      (position) => normalizeOutcome(position.outcome) === oppositeOutcome && (toFiniteNumber(position.size) ?? 0) > 0
-    );
-    if (!oppositePosition) {
-      return { ...baseStatus, hasOppositePosition: false };
-    }
-
-    return {
-      ...baseStatus,
-      hasOppositePosition: true,
-      outcome: oppositePosition.outcome,
-      ...(toFiniteNumber(oppositePosition.size) === null ? {} : { size: toFiniteNumber(oppositePosition.size)! }),
-      ...(toFiniteNumber(oppositePosition.currentValue) === null
-        ? {}
-        : { currentValue: toFiniteNumber(oppositePosition.currentValue)! }),
-      ...(toFiniteNumber(oppositePosition.avgPrice) === null ? {} : { avgPrice: toFiniteNumber(oppositePosition.avgPrice)! }),
-      ...(toFiniteNumber(oppositePosition.curPrice) === null ? {} : { curPrice: toFiniteNumber(oppositePosition.curPrice)! }),
-      ...(oppositePosition.title ? { title: oppositePosition.title } : {}),
-      ...(oppositePosition.slug ? { slug: oppositePosition.slug } : {})
-    };
+    return new Map(uniqueSides.map((side) => [side, buildAddressPositionStatus(baseStatus, side, positions)]));
   } catch (error) {
-    return { ...baseStatus, hasOppositePosition: false, error: formatError(error) };
+    return new Map(uniqueSides.map((side) => [side, { ...baseStatus, side, hasPosition: false, error: formatError(error) }]));
   }
+}
+
+function buildAddressPositionStatus(
+  baseStatus: Omit<AddressPositionStatus, "side" | "hasPosition">,
+  side: OutcomeSide,
+  positions: PolymarketPosition[]
+): AddressPositionStatus {
+  const matchedPosition = positions.find(
+    (position) => normalizeOutcome(position.outcome) === side && (toFiniteNumber(position.size) ?? 0) > 0
+  );
+  if (!matchedPosition) {
+    return { ...baseStatus, side, hasPosition: false };
+  }
+
+  const size = toFiniteNumber(matchedPosition.size);
+  const currentValue = toFiniteNumber(matchedPosition.currentValue);
+  const avgPrice = toFiniteNumber(matchedPosition.avgPrice);
+  const curPrice = toFiniteNumber(matchedPosition.curPrice);
+  return {
+    ...baseStatus,
+    side,
+    hasPosition: true,
+    outcome: matchedPosition.outcome,
+    ...(size === null ? {} : { size }),
+    ...(currentValue === null ? {} : { currentValue }),
+    ...(avgPrice === null ? {} : { avgPrice }),
+    ...(curPrice === null ? {} : { curPrice }),
+    ...(matchedPosition.title ? { title: matchedPosition.title } : {}),
+    ...(matchedPosition.slug ? { slug: matchedPosition.slug } : {})
+  };
 }
 
 async function fetchPolymarketPositions(url: URL): Promise<PolymarketPosition[]> {

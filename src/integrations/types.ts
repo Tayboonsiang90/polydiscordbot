@@ -93,10 +93,12 @@ export type EventPostPrioritySummary = {
   matchedTags?: string[];
   proposer?: string;
   proposerProfile?: AddressProfileStatus;
-  proposerHedge?: AddressHedgeStatus;
+  proposerAligned?: AddressPositionStatus;
+  proposerHedge?: AddressPositionStatus;
   disputer?: string;
   disputerProfile?: AddressProfileStatus;
-  disputerHedge?: AddressHedgeStatus;
+  disputerAligned?: AddressPositionStatus;
+  disputerHedge?: AddressPositionStatus;
   creator?: string;
   clarification?: string;
 };
@@ -185,14 +187,14 @@ export type AddressProfileStatus = {
   error?: string;
 };
 
-export type AddressHedgeStatus = {
+export type AddressPositionStatus = {
   address: string;
   profileWallet: string;
   conditionId: string;
-  oppositeOutcome: "YES" | "NO";
+  side: "YES" | "NO";
   checkedAt: string;
   sourceUrl: string;
-  hasOppositePosition: boolean;
+  hasPosition: boolean;
   outcome?: string;
   size?: number;
   currentValue?: number;

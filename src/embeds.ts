@@ -3,9 +3,9 @@ import { formatAddressWithLabel, getAddressLabelsFromSettingsJson } from "./addr
 import type { IntegrationUpdateLog } from "./database.js";
 import type { CheckResult, EventCheckResult, SnapshotResult } from "./poller.js";
 import type {
-  AddressHedgeStatus,
   AddressLabelImportIssue,
   AddressLabelUpdateResult,
+  AddressPositionStatus,
   EventMonitorPost,
   Integration,
   StrikeSearchResult,
@@ -524,6 +524,8 @@ function formatPrioritySummaryFields(
   }
 
   const addressLabels = getAddressLabelsFromSettingsJson(integration.settingsJson);
+  const proposerShares = formatActorShares(summary.proposerAligned, summary.proposerHedge);
+  const disputerShares = formatActorShares(summary.disputerAligned, summary.disputerHedge);
 
   return [
     ...(summary.question
@@ -556,13 +558,11 @@ function formatPrioritySummaryFields(
     ...(summary.proposer
       ? [{ name: "Proposer", value: formatAddressWithLabel(summary.proposer, addressLabels, summary.proposerProfile), inline: false }]
       : []),
-    ...(summary.proposerHedge ? [{ name: "Proposer hedge", value: formatHedgeStatus(summary.proposerHedge), inline: false }] : []),
+    ...(proposerShares ? [{ name: "Proposer shares", value: proposerShares, inline: false }] : []),
     ...(summary.disputer
       ? [{ name: "Disputer", value: formatAddressWithLabel(summary.disputer, addressLabels, summary.disputerProfile), inline: false }]
       : []),
-    ...(summary.disputerHedge
-      ? [{ name: "Disputer aligned shares", value: formatAlignedDisputeStatus(summary.disputerHedge), inline: false }]
-      : []),
+    ...(disputerShares ? [{ name: "Disputer shares", value: disputerShares, inline: false }] : []),
     ...(summary.clarification ? [{ name: "Clarification", value: summary.clarification, inline: false }] : []),
     ...(summary.creator ? [{ name: "Creator", value: summary.creator, inline: false }] : [])
   ].map((field) => ({ ...field, value: truncateEmbedValue(field.value) }));
@@ -936,24 +936,25 @@ function formatMarketTags(marketTags: string[], matchedTags: string[]): string {
   return marketTags.map((tag) => (matched.has(normalizeTagText(tag)) ? `**${tag}**` : tag)).join(", ");
 }
 
-function formatHedgeStatus(status: AddressHedgeStatus): string {
-  return formatPositionStatus(status, "HEDGED", "position");
+function formatActorShares(aligned?: AddressPositionStatus, hedge?: AddressPositionStatus): string | null {
+  const lines = [
+    aligned ? formatPositionStatus(aligned, "ALIGNED", "aligned shares") : "",
+    hedge ? formatPositionStatus(hedge, "HEDGED", "hedge shares") : ""
+  ].filter(Boolean);
+
+  return lines.length ? `>>> ${lines.join("\n")}` : null;
 }
 
-function formatAlignedDisputeStatus(status: AddressHedgeStatus): string {
-  return formatPositionStatus(status, "ALIGNED", "aligned position");
-}
-
-function formatPositionStatus(status: AddressHedgeStatus, label: string, missingLabel: string): string {
+function formatPositionStatus(status: AddressPositionStatus, label: string, missingLabel: string): string {
   if (status.error) {
-    return `Check unavailable: ${status.error}`;
+    return `**${label} check unavailable:** ${status.error}`;
   }
-  if (!status.hasOppositePosition) {
-    return `No **${status.oppositeOutcome}** ${missingLabel} detected.`;
+  if (!status.hasPosition) {
+    return `**${label}: no ${status.side} ${missingLabel} detected**`;
   }
 
   const lines = [
-    `>>> **${label}: HOLDS ${status.oppositeOutcome}**`,
+    `**${label}: HOLDS ${status.side}**`,
     status.size === undefined ? "" : `Size: **\`${formatShareQuantity(status.size)}\`**`,
     status.currentValue === undefined ? "" : `Current value: **\`${formatUsdValue(status.currentValue)}\`**`,
     status.avgPrice === undefined ? "" : `Avg price: **\`${formatSharePrice(status.avgPrice)}\`**`,
