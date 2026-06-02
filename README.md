@@ -153,7 +153,6 @@ Every integration uses the same command shape inside its own channel. Replace `/
 
 - `/bonbast status`
 - `/bonbast check`
-- `/bonbast test`
 - `/bonbast last`
 - `/bonbast updates`
 - `/freeappstore snapshot`
@@ -192,7 +191,6 @@ Bonbast replies use Discord embeds with compact fields, colored status accents, 
 Use `/bonbast polymarket` once per market so future alerts include a clickable Polymarket link.
 The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.
 Use `/bonbast clear` to clear the current integration channel. You and the bot both need `Manage Messages`.
-Use `/bonbast test` to preview the exact role ping and alert embed without fetching Bonbast or changing stored values.
 
 ## Polymarket URL Queue
 

@@ -50,12 +50,10 @@ import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from ".
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
 import { mergeSettingsJson } from "./settingsJson.js";
 import {
-  buildAlertMessagePayload,
   checkEventIntegration,
   checkIntegration,
   getEffectivePollIntervalMinutes,
-  getPollIntervalReason,
-  type CheckResult
+  getPollIntervalReason
 } from "./poller.js";
 import { syncUmaAddressLabels } from "./umaAddressLabels.js";
 
@@ -71,7 +69,6 @@ export function buildAdapterCommands() {
       .setDescription(`Manage ${adapter.displayName}`)
       .addSubcommand((subcommand) => subcommand.setName("status").setDescription("Show monitor status"))
       .addSubcommand((subcommand) => subcommand.setName("check").setDescription("Fetch the current value now"))
-      .addSubcommand((subcommand) => subcommand.setName("test").setDescription("Send a simulated value-change alert"))
       .addSubcommand((subcommand) => subcommand.setName("last").setDescription("Show the last stored value"))
       .addSubcommand((subcommand) => subcommand.setName("updates").setDescription("Show recent source update timing logs"))
       .addSubcommand((subcommand) => subcommand.setName("clear").setDescription("Clear messages from this monitor channel"))
@@ -685,18 +682,6 @@ export async function handleAdapterCommand(
     return;
   }
 
-  if (subcommand === "test") {
-    if (!("send" in interaction.channel) || typeof interaction.channel.send !== "function") {
-      await interaction.reply({ content: "This command only works in a sendable text channel.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    const result = buildSimulatedAlertResult(integration);
-    await interaction.channel.send(buildAlertMessagePayload(result));
-    await interaction.reply({ content: `Sent a simulated ${integration.displayName} value-change alert.`, flags: MessageFlags.Ephemeral });
-    return;
-  }
-
   if (subcommand === "clear") {
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
       await interaction.reply({ content: "You need Manage Messages permission to clear this channel.", flags: MessageFlags.Ephemeral });
@@ -886,21 +871,6 @@ export function normalizePolymarketUrl(value: string): string | null {
   } catch {
     return null;
   }
-}
-
-export function buildSimulatedAlertResult(integration: Integration): CheckResult {
-  const currentValue = simulateNextValue(integration.lastValue);
-  return {
-    integration: {
-      ...integration,
-      lastValue: currentValue,
-      lastCheckedAt: new Date().toISOString()
-    },
-    previousValue: integration.lastValue ?? "not checked yet",
-    previousCheckedAt: integration.lastCheckedAt,
-    currentValue,
-    changed: true
-  };
 }
 
 function buildStatusReplyEmbed(integration: Integration) {
@@ -1180,19 +1150,6 @@ function formatEasternDateTime(date: Date): string {
 
 function isValidPeriod(year: number, month: number): boolean {
   return Number.isInteger(year) && Number.isInteger(month) && year >= 1904 && year <= 2100 && month >= 1 && month <= 12;
-}
-
-function simulateNextValue(value: string | null): string {
-  if (!value) {
-    return "simulated-value";
-  }
-
-  const numericValue = Number(value);
-  if (Number.isFinite(numericValue)) {
-    return String(numericValue + 1);
-  }
-
-  return `${value} (simulated update)`;
 }
 
 export async function clearTextChannel(channel: TextChannel): Promise<number> {

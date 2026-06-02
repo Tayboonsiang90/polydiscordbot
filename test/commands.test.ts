@@ -2,12 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildAdapterCommands,
   buildBotCommands,
-  buildSimulatedAlertResult,
   formatPolymarketLine,
   normalizePolymarketUrl
 } from "../src/commands.js";
 import { listAdapters } from "../src/integrations/registry.js";
-import { buildAlertMessagePayload } from "../src/poller.js";
 import {
   buildCheckEmbed,
   buildClearErrorsEmbed,
@@ -67,7 +65,7 @@ describe("adapter commands", () => {
     const commandByName = new Map(
       buildAdapterCommands().map((command) => [command.name, command.toJSON() as CommandJson])
     );
-    const sharedSubcommands = ["status", "check", "test", "last", "updates", "clear", "polymarket", "interval", "enddate", "pause", "resume"];
+    const sharedSubcommands = ["status", "check", "last", "updates", "clear", "polymarket", "interval", "enddate", "pause", "resume"];
 
     for (const adapter of listAdapters()) {
       const command = commandByName.get(adapter.commandName);
@@ -80,6 +78,7 @@ describe("adapter commands", () => {
       for (const subcommandName of sharedSubcommands) {
         expect(options).toEqual(expect.arrayContaining([expect.objectContaining({ name: subcommandName })]));
       }
+      expect(options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "test" })]));
 
       const optionalSubcommands: Array<[unknown, string]> = [
         [adapter.supportsPeriod, "period"],
@@ -224,16 +223,6 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "Last retrieved at", value: "06/05/2026, 10:40:00 SGT" })
       ])
     );
-  });
-
-  it("builds simulated alerts with role mentions", () => {
-    const result = buildSimulatedAlertResult({ ...checkedIntegration, lastValue: "181300" });
-    const payload = buildAlertMessagePayload(result);
-
-    expect(result.previousValue).toBe("181300");
-    expect(result.currentValue).toBe("181301");
-    expect(payload.content).toBe("<@&role>");
-    expect(payload.allowedMentions).toEqual({ roles: ["role"] });
   });
 
   it("builds a grouped alert role selector embed", () => {
