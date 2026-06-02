@@ -16,7 +16,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 
 | Adapter ID | Command | Channel | Alert Role | Emoji | Description |
 | --- | --- | --- | --- | --- | --- |
-| `bonbast-usd-irr` | `/bonbast` | `#bonbast-usd-irr` | `Bonbast Alerts` | `💱` | Monitors Bonbast USD/IRR values and auto-discovers active USD/IRR Polymarket markets. |
+| `bonbast-usd-irr` | `/bonbast` | `#bonbast-usd-irr` | `Bonbast Alerts` | `💱` | Monitors Bonbast USD/IRR values and auto-discovers active hit-by and end-of-month USD/IRR Polymarket markets. |
 | `aaa-regular-gas` | `/aaa` | `#aaa-regular-gas` | `AAA Gas Alerts` | `⛽` | Monitors AAA national Current Avg. Regular gas price for Polymarket resolution checks. |
 | `all-in-podcast` | `/allin` | `#allinpod` | `All-In Podcast Alerts` | `🎧` | Monitors allin.com episodes for the latest All-In Podcast release and auto-discovers active weekly All-In Polymarket markets. |
 | `aligned-layer-sale` | `/alignedsale` | `#alignedsale` | `Aligned Sale Alerts` | `⏸️` | Temporary monitor for sale.alignedlayer.com page and app-bundle changes while the token sale is on hold. |

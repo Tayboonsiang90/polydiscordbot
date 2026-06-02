@@ -132,7 +132,7 @@ export function normalizeBonbastMarketSearchEvent(event: GammaSearchEvent, now =
 
   const slug = event.slug.trim();
   const title = event.title.toLowerCase();
-  if (!slug.startsWith("will-usd-hit-iranian-rials-by-") || !title.includes("usd") || !title.includes("iranian rials")) {
+  if (!isBonbastPolymarketSlug(slug) || !title.includes("usd") || !title.includes("iranian rials")) {
     return null;
   }
 
@@ -153,9 +153,9 @@ export function normalizeBonbastMarketSearchEvent(event: GammaSearchEvent, now =
 
 async function fetchBonbastMarketSearchCandidates(now: Date): Promise<PolymarketQueueMarket[]> {
   const searchUrl = new URL(gammaSearchUrl);
-  searchUrl.searchParams.set("q", "will usd hit iranian rials");
+  searchUrl.searchParams.set("q", "usd iranian rials");
   searchUrl.searchParams.set("events_status", "active");
-  searchUrl.searchParams.set("limit_per_type", "10");
+  searchUrl.searchParams.set("limit_per_type", "20");
 
   const response = await fetchWithTimeout(searchUrl.toString(), {
     headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
@@ -248,6 +248,10 @@ function compareQueueMarkets(left: PolymarketQueueMarket, right: PolymarketQueue
   const leftTime = left.startAt ? Date.parse(left.startAt) : Number.MAX_SAFE_INTEGER;
   const rightTime = right.startAt ? Date.parse(right.startAt) : Number.MAX_SAFE_INTEGER;
   return leftTime - rightTime || left.slug.localeCompare(right.slug);
+}
+
+function isBonbastPolymarketSlug(slug: string): boolean {
+  return slug.startsWith("will-usd-hit-iranian-rials-by-") || slug.startsWith("usd-x-iranian-rials-end-of-");
 }
 
 function parseGammaDate(value: unknown): string | null {

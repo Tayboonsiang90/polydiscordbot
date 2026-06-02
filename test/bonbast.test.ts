@@ -75,9 +75,29 @@ describe("extractBonbastUsdIrrValue", () => {
         now
       )
     ).toBeNull();
+
+    expect(
+      normalizeBonbastMarketSearchEvent(
+        {
+          slug: "usd-x-iranian-rials-end-of-june",
+          title: "USD x Iranian rials End of June?",
+          active: true,
+          closed: false,
+          startDate: "2026-06-01T22:56:56.361492Z",
+          endDate: "2026-06-30T00:00:00Z"
+        },
+        now
+      )
+    ).toEqual({
+      url: "https://polymarket.com/event/usd-x-iranian-rials-end-of-june",
+      slug: "usd-x-iranian-rials-end-of-june",
+      startAt: "2026-06-01T22:56:56.361Z",
+      endAt: "2026-06-30T00:00:00.000Z",
+      addedAt: now.toISOString()
+    });
   });
 
-  it("discovers and activates the current Bonbast Polymarket market", async () => {
+  it("discovers and activates current Bonbast Polymarket markets", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () =>
       new Response(
@@ -90,6 +110,14 @@ describe("extractBonbastUsdIrrValue", () => {
               closed: false,
               startDate: "2026-06-01T22:56:51.460143Z",
               endDate: "2026-06-30T00:00:00Z"
+            },
+            {
+              slug: "usd-x-iranian-rials-end-of-june",
+              title: "USD x Iranian rials End of June?",
+              active: true,
+              closed: false,
+              startDate: "2026-06-01T22:56:56.361492Z",
+              endDate: "2026-06-30T00:00:00Z"
             }
           ]
         })
@@ -100,7 +128,11 @@ describe("extractBonbastUsdIrrValue", () => {
         force: true
       });
       expect(result.activeUrl).toBe("https://polymarket.com/event/will-usd-hit-iranian-rials-by-june-30");
-      expect(result.settingsJson).toContain("will-usd-hit-iranian-rials-by-june-30");
+      const settings = JSON.parse(result.settingsJson ?? "{}") as { polymarketMarkets?: { slug: string }[] };
+      expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual([
+        "will-usd-hit-iranian-rials-by-june-30",
+        "usd-x-iranian-rials-end-of-june"
+      ]);
     } finally {
       globalThis.fetch = originalFetch;
     }
