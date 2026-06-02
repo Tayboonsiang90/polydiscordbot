@@ -153,6 +153,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("bviv").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("bviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("trumpapproval").getPollIntervalMinutes?.({} as never, new Date("2026-06-05T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("spotifyglobal").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").getPollIntervalMinutes?.({} as never)).toBe(60);
   });

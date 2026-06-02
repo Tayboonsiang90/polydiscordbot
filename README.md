@@ -60,8 +60,8 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed, alerts only on strike crossings, and auto-discovers monthly silver price markets. |
 | `pyth-xauusd-strikes` | `/xauusd` | `#xauusd` | `XAUUSD Price Alerts` | `🥇` | Monitors the Pyth XAUUSD feed, alerts only on strike crossings, and auto-discovers monthly gold price markets. |
 | `silver-trump-approval` | `/trumpapproval` | `#trumpapproval` | `Trump Approval Alerts` | `📊` | Monitors Silver Bulletin's Trump approval trend-line data and alerts when the June 5 value is finalized. |
-| `spotify-top-50-usa` | `/spotifyusa` | `#spotifyusa` | `Spotify USA Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - USA for Polymarket resolution checks. |
-| `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global for Polymarket resolution checks. |
+| `spotify-top-50-usa` | `/spotifyusa` | `#spotifyusa` | `Spotify USA Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - USA and auto-discovers monthly USA artist #1 markets. |
+| `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global and auto-discovers monthly global artist #1 markets. |
 | `strategy-bitcoin-purchases` | `/strategybtc` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active Polymarket date range. |
 | `tesla-deliveries` | `/tesla` | `#tesla` | `Tesla Deliveries Alerts` | `🚗` | Monitors Tesla production and deliveries press releases for Q2 2026 delivery updates. |
 | `trump-getty-photos` | `/trumpgetty` | `#trumpgetty` | `Trump Getty Alerts` | `📸` | Monitors Getty Images tagged editorial Donald Trump photo coverage by day and auto-discovers weekly markets. |
@@ -104,7 +104,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and stale dated URLs are cleared when no queued or undated market is active.
-- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
+- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 

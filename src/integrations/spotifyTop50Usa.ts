@@ -1,10 +1,19 @@
 ﻿import type { AdapterValue, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
+import type { Integration } from "./types.js";
 
 const sourceUrl = "https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp";
 const playlistUri = "spotify:playlist:37i9dQZEVXbLRQDuF5jeBp";
 const spotifyFetchAttempts = 3;
 const spotifyRetryDelaysMs = [1_000, 3_000];
+const usaMonthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
+  searchQuery: "which artists will have 1 hits",
+  slugPrefix: "which-artists-will-have-1-hits-in-the-us-in-",
+  titlePrefix: "Which artists will have #1 hits in the US in",
+  lastDiscoveryAtKey: "lastSpotifyUsaMarketDiscoveryAt",
+  requiredTagSlugs: ["spotify"]
+};
 
 type SpotifyInitialState = {
   entities?: {
@@ -105,10 +114,20 @@ export const spotifyTop50UsaAdapter: WebsiteAdapter = {
   defaultChannelName: "spotifyusa",
   alertRoleName: "Spotify USA Top 50 Alerts",
   alertRoleEmoji: "\uD83C\uDFB5",
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshSpotifyTop50UsaPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(): Promise<AdapterValue> {
     return fetchSpotifyTop50Value(sourceUrl, playlistUri, "Spotify Top 50 - USA", "Spotify Top 50 - USA #1 track");
   }
 };
+
+export async function refreshSpotifyTop50UsaPolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  return refreshMonthlyPolymarketQueue(integration, usaMonthlyDiscoveryConfig, now);
+}
 
 function extractInitialState(html: string): SpotifyInitialState {
   const match = html.match(/<script id="initialState" type="text\/plain">([^<]+)<\/script>/);

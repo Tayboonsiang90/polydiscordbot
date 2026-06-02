@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { extractSpotifyTop50GlobalNumberOne } from "../src/integrations/spotifyTop50Global.js";
-import { extractSpotifyTop50UsaNumberOne, fetchSpotifyTop50Value } from "../src/integrations/spotifyTop50Usa.js";
+import {
+  extractSpotifyTop50GlobalNumberOne,
+  refreshSpotifyTop50GlobalPolymarketQueue
+} from "../src/integrations/spotifyTop50Global.js";
+import {
+  extractSpotifyTop50UsaNumberOne,
+  fetchSpotifyTop50Value,
+  refreshSpotifyTop50UsaPolymarketQueue
+} from "../src/integrations/spotifyTop50Usa.js";
+import type { Integration } from "../src/integrations/types.js";
 
 function buildSpotifyHtml(playlistUri: string, trackName: string, artistNames: string[]): string {
   const initialState = {
@@ -98,6 +106,26 @@ describe("Spotify Top 50 USA adapter", () => {
 
     await expectation;
   });
+
+  it("auto-discovers the active monthly USA artists market", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(buildGammaSearchResponse()));
+
+    const result = await refreshSpotifyTop50UsaPolymarketQueue(
+      {
+        settingsJson: null,
+        polymarketUrl: "https://polymarket.com/event/which-artists-will-have-1-hits-in-the-us-in-may"
+      } as Integration,
+      new Date("2026-06-02T12:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      polymarketMarkets?: Array<{ slug: string; startAt: string; endAt: string }>;
+    };
+
+    expect(result.activeUrl).toBe("https://polymarket.com/event/which-artists-will-have-1-hits-in-the-us-in-june");
+    expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual([
+      "which-artists-will-have-1-hits-in-the-us-in-june"
+    ]);
+  });
 });
 
 describe("Spotify Top 50 Global adapter", () => {
@@ -108,4 +136,45 @@ describe("Spotify Top 50 Global adapter", () => {
 
     expect(value).toBe("#1: Global Song\nPrimary artist(s): Global Artist");
   });
+
+  it("auto-discovers the active monthly global artists market without taking the USA market", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(buildGammaSearchResponse()));
+
+    const result = await refreshSpotifyTop50GlobalPolymarketQueue(
+      {
+        settingsJson: null,
+        polymarketUrl: "https://polymarket.com/event/which-artists-will-have-1-hits-in-may"
+      } as Integration,
+      new Date("2026-06-02T12:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      polymarketMarkets?: Array<{ slug: string; startAt: string; endAt: string }>;
+    };
+
+    expect(result.activeUrl).toBe("https://polymarket.com/event/which-artists-will-have-1-hits-in-june");
+    expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual(["which-artists-will-have-1-hits-in-june"]);
+  });
 });
+
+function buildGammaSearchResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      events: [
+        {
+          slug: "which-artists-will-have-1-hits-in-the-us-in-june",
+          title: "Which artists will have #1 hits in the US in June?",
+          active: true,
+          closed: false,
+          tags: [{ slug: "spotify" }, { slug: "music" }]
+        },
+        {
+          slug: "which-artists-will-have-1-hits-in-june",
+          title: "Which artists will have #1 hits in June?",
+          active: true,
+          closed: false,
+          tags: [{ slug: "spotify" }, { slug: "music" }]
+        }
+      ]
+    })
+  );
+}

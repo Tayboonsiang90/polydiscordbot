@@ -20,6 +20,7 @@ export type MonthlyPolymarketDiscoveryConfig = {
   titlePrefix: string;
   lastDiscoveryAtKey: string;
   requiredTagSlugs?: string[];
+  excludedSlugPrefixes?: string[];
   activeIntervalMs?: number;
   noActiveIntervalMs?: number;
   lookaheadMs?: number;
@@ -168,7 +169,11 @@ function normalizeMonthlySearchEvent(
 
   const slug = event.slug.trim();
   const title = event.title.toLowerCase().trim();
-  if (!slug.startsWith(config.slugPrefix) || !title.startsWith(config.titlePrefix.toLowerCase())) {
+  if (
+    !slug.startsWith(config.slugPrefix) ||
+    !title.startsWith(config.titlePrefix.toLowerCase()) ||
+    (config.excludedSlugPrefixes ?? []).some((prefix) => slug.startsWith(prefix))
+  ) {
     return null;
   }
 
