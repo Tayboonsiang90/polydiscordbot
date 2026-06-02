@@ -56,6 +56,7 @@ const expectedCommandIds = [
   ["wti", "pyth-wti-strikes"],
   ["xagusd", "pyth-xagusd-strikes"],
   ["xauusd", "pyth-xauusd-strikes"],
+  ["trumpapproval", "silver-trump-approval"],
   ["spotifyglobal", "spotify-top-50-global"],
   ["spotifyusa", "spotify-top-50-usa"],
   ["strategybtc", "strategy-bitcoin-purchases"],
@@ -145,5 +146,6 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("umarocks").getPollIntervalMinutes?.({} as never)).toBe(10);
     expect(getAdapterByCommandName("bviv").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("bviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
+    expect(getAdapterByCommandName("trumpapproval").getPollIntervalMinutes?.({} as never, new Date("2026-06-05T16:00:00.000Z"))).toBe(1);
   });
 });

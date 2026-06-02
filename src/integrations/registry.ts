@@ -48,6 +48,7 @@ import { pythNaturalGasAdapter } from "./pythNaturalGas.js";
 import { pythWtiAdapter } from "./pythWti.js";
 import { pythXagUsdAdapter } from "./pythXagUsd.js";
 import { pythXauUsdAdapter } from "./pythXauUsd.js";
+import { silverTrumpApprovalAdapter } from "./silverTrumpApproval.js";
 import { spotifyTop50GlobalAdapter } from "./spotifyTop50Global.js";
 import { spotifyTop50UsaAdapter } from "./spotifyTop50Usa.js";
 import { strategyBitcoinPurchasesAdapter } from "./strategyBitcoinPurchases.js";
@@ -118,6 +119,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [pythWtiAdapter.id, pythWtiAdapter],
   [pythXagUsdAdapter.id, pythXagUsdAdapter],
   [pythXauUsdAdapter.id, pythXauUsdAdapter],
+  [silverTrumpApprovalAdapter.id, silverTrumpApprovalAdapter],
   [spotifyTop50GlobalAdapter.id, spotifyTop50GlobalAdapter],
   [spotifyTop50UsaAdapter.id, spotifyTop50UsaAdapter],
   [strategyBitcoinPurchasesAdapter.id, strategyBitcoinPurchasesAdapter],
