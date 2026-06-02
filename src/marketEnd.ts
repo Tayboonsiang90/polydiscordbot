@@ -138,8 +138,14 @@ export async function fetchPolymarketEndDateFromGamma(polymarketUrl: string | nu
     return null;
   }
 
-  const slug = getPolymarketSlug(polymarketUrl);
-  return slug ? parseGammaEndDate(await fetchGammaEventsBySlug(slug)) : null;
+  for (const slug of getPolymarketSlugCandidates(polymarketUrl)) {
+    const endDate = parseGammaEndDate(await fetchGammaEventsBySlug(slug));
+    if (endDate) {
+      return endDate;
+    }
+  }
+
+  return null;
 }
 
 export function parseGammaEndDate(events: GammaEvent[]): Date | null {
@@ -154,15 +160,22 @@ export function parseGammaEndDate(events: GammaEvent[]): Date | null {
 }
 
 export function getPolymarketSlug(polymarketUrl: string): string | null {
+  return getPolymarketSlugCandidates(polymarketUrl)[0] ?? null;
+}
+
+export function getPolymarketSlugCandidates(polymarketUrl: string): string[] {
   try {
     const parsed = new URL(polymarketUrl);
     if (!["polymarket.com", "www.polymarket.com"].includes(parsed.hostname.toLowerCase())) {
-      return null;
+      return [];
     }
 
-    return parsed.pathname.split("/").filter(Boolean).at(-1) ?? null;
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const eventIndex = parts.indexOf("event");
+    const slugs = eventIndex >= 0 ? parts.slice(eventIndex + 1) : parts;
+    return [...new Set([...slugs].reverse())];
   } catch {
-    return null;
+    return [];
   }
 }
 

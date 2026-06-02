@@ -8,6 +8,7 @@ import {
   fetchPolymarketEndDateFromGamma,
   getDueMarketEndReminders,
   getPolymarketSlug,
+  getPolymarketSlugCandidates,
   getStoredOrFetchPolymarketEndDate,
   parseManualEasternDateTime,
   parseGammaEndDate
@@ -52,6 +53,14 @@ describe("Polymarket market end reminders", () => {
     expect(getPolymarketSlug("https://polymarket.com/event/will-ground-beef-hit-in-2026")).toBe(
       "will-ground-beef-hit-in-2026"
     );
+    expect(
+      getPolymarketSlugCandidates(
+        "https://polymarket.com/event/what-will-the-bitcoin-implied-volatility-index-hit-by-may-31/will-the-bitcoin-volatility-index-dip-to-25-by-may-31"
+      )
+    ).toEqual([
+      "will-the-bitcoin-volatility-index-dip-to-25-by-may-31",
+      "what-will-the-bitcoin-implied-volatility-index-hit-by-may-31"
+    ]);
     expect(getPolymarketSlug("https://example.com/event/test")).toBeNull();
   });
 
@@ -77,6 +86,30 @@ describe("Polymarket market end reminders", () => {
     );
     expect(fetch).toHaveBeenCalledWith(
       "https://gamma-api.polymarket.com/events?slug=will-ground-beef-hit-in-2026",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
+
+  it("falls back to the parent event slug for nested Polymarket URLs", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ endDate: "2026-06-01T04:00:00Z" }]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchPolymarketEndDateFromGamma(
+        "https://polymarket.com/event/what-will-the-bitcoin-implied-volatility-index-hit-by-may-31/will-the-bitcoin-volatility-index-dip-to-25-by-may-31"
+      )
+    ).resolves.toEqual(new Date("2026-06-01T04:00:00.000Z"));
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://gamma-api.polymarket.com/events?slug=will-the-bitcoin-volatility-index-dip-to-25-by-may-31",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://gamma-api.polymarket.com/events?slug=what-will-the-bitcoin-implied-volatility-index-hit-by-may-31",
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     );
   });

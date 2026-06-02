@@ -63,6 +63,7 @@ const expectedCommandIds = [
   ["trumptruth", "trump-truth"],
   ["tsa", "tsa-passengers"],
   ["earthquake", "usgs-earthquakes"],
+  ["bviv", "volmex-bviv-low-strikes"],
   ["aliennyc", "white-house-aliens-nyc"],
   ["whbriefings", "white-house-briefings"],
   ["fulllid", "white-house-full-lid"],
@@ -140,5 +141,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("umareveals").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("umareveals").maxEventPostAgeMinutes).toBe(10);
     expect(getAdapterByCommandName("umarocks").getPollIntervalMinutes?.({} as never)).toBe(10);
+    expect(getAdapterByCommandName("bviv").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("bviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
   });
 });
