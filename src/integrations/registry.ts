@@ -54,6 +54,7 @@ import { spotifyTop50GlobalAdapter } from "./spotifyTop50Global.js";
 import { spotifyTop50UsaAdapter } from "./spotifyTop50Usa.js";
 import { strategyBitcoinPurchasesAdapter } from "./strategyBitcoinPurchases.js";
 import { teslaDeliveriesAdapter } from "./teslaDeliveries.js";
+import { trumpGettyPhotosAdapter } from "./trumpGettyPhotos.js";
 import { trumpScheduleAdapter } from "./trumpSchedule.js";
 import { trumpTruthAdapter } from "./trumpTruth.js";
 import { tsaPassengersAdapter } from "./tsaPassengers.js";
@@ -126,6 +127,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [spotifyTop50UsaAdapter.id, spotifyTop50UsaAdapter],
   [strategyBitcoinPurchasesAdapter.id, strategyBitcoinPurchasesAdapter],
   [teslaDeliveriesAdapter.id, teslaDeliveriesAdapter],
+  [trumpGettyPhotosAdapter.id, trumpGettyPhotosAdapter],
   [trumpScheduleAdapter.id, trumpScheduleAdapter],
   [trumpTruthAdapter.id, trumpTruthAdapter],
   [tsaPassengersAdapter.id, tsaPassengersAdapter],

@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Aligned Layer Sale, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, Bank Indonesia JISDOR USD/IDR, BLS CPI Releases, BLS Jobs Added, CDC General Fertility Rate, CDC Measles Cases, Census Durable Goods Orders, ChatGPT Outage Days, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Parcl DC Metro Home Value, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, UMA Vote Commits, UMA Vote Reveals, UMA.rocks, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Silver Trump Approval, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, Volmex BVIV Low Strikes, White House Alien Arrests NYC, White House Briefings, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Aligned Layer Sale, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, Bank Indonesia JISDOR USD/IDR, BLS CPI Releases, BLS Jobs Added, CDC General Fertility Rate, CDC Measles Cases, Census Durable Goods Orders, ChatGPT Outage Days, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Parcl DC Metro Home Value, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, UMA Vote Commits, UMA Vote Reveals, UMA.rocks, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Silver Trump Approval, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Getty Photos, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, Volmex BVIV Low Strikes, White House Alien Arrests NYC, White House Briefings, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -63,6 +63,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global for Polymarket resolution checks. |
 | `strategy-bitcoin-purchases` | `/strategybtc` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active Polymarket date range. |
 | `tesla-deliveries` | `/tesla` | `#tesla` | `Tesla Deliveries Alerts` | `🚗` | Monitors Tesla production and deliveries press releases for Q2 2026 delivery updates. |
+| `trump-getty-photos` | `/trumpgetty` | `#trumpgetty` | `Trump Getty Alerts` | `📸` | Monitors Getty Images tagged editorial Donald Trump photo coverage by day and auto-discovers weekly markets. |
 | `trump-schedule` | `/trumpschedule` | `#trumpschedule` | `Trump Schedule Alerts` | `🗓️` | General Roll Call Factbase daily Trump schedule feed with compact change alerts and no default Polymarket URL. |
 | `trump-truth` | `/trumptruth` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Monitors the Trump's Truth archive feed for @realDonaldTrump posts and parsed weekly Polymarket strike terms. |
 | `tsa-passengers` | `/tsa` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
@@ -127,8 +128,10 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    POLYGON_RPC_URLS=...
    POLYGON_WS_URL=...
    ETHEREUM_RPC_URL=...
-   ETHEREUM_RPC_URLS=...
-   X_BEARER_TOKEN=...
+  ETHEREUM_RPC_URLS=...
+  GETTY_API_KEY=...
+  GETTY_ACCESS_TOKEN=...
+  X_BEARER_TOKEN=...
    WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://xcancel.com/WhiteHouse/rss
    WHITE_HOUSE_TWEETS_ALLOW_NITTER_FALLBACK=true
    ```
