@@ -15,6 +15,7 @@ const expectedCommandIds = [
   ["jobsadded", "bls-jobs-added"],
   ["bonbast", "bonbast-usd-irr"],
   ["fertility", "cdc-fertility-rate"],
+  ["fluhosp", "cdc-flu-hospitalization"],
   ["measles", "cdc-measles"],
   ["durablegoods", "census-durable-goods"],
   ["claudecommits", "claude-code-commits"],
@@ -131,6 +132,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("fluhosp").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ornnh100").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ornnh100").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("ornnh200").refreshSettings).toBeDefined();

@@ -11,6 +11,7 @@ import { blsCpiReleasesAdapter } from "./blsCpiReleases.js";
 import { blsJobsAddedAdapter } from "./blsJobsAdded.js";
 import { bonbastUsdIrrAdapter } from "./bonbast.js";
 import { cdcFertilityRateAdapter } from "./cdcFertilityRate.js";
+import { cdcFluHospitalizationAdapter } from "./cdcFluHospitalization.js";
 import { cdcMeaslesAdapter } from "./cdcMeasles.js";
 import { censusDurableGoodsAdapter } from "./censusDurableGoods.js";
 import { claudeCodeCommitsAdapter } from "./claudeCodeCommits.js";
@@ -83,6 +84,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [blsJobsAddedAdapter.id, blsJobsAddedAdapter],
   [bonbastUsdIrrAdapter.id, bonbastUsdIrrAdapter],
   [cdcFertilityRateAdapter.id, cdcFertilityRateAdapter],
+  [cdcFluHospitalizationAdapter.id, cdcFluHospitalizationAdapter],
   [cdcMeaslesAdapter.id, cdcMeaslesAdapter],
   [censusDurableGoodsAdapter.id, censusDurableGoodsAdapter],
   [claudeCodeCommitsAdapter.id, claudeCodeCommitsAdapter],
