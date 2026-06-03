@@ -8,6 +8,7 @@ import { basedRevenueAdapter } from "./basedRevenue.js";
 import { beaCurrentReleasesAdapter } from "./beaCurrentReleases.js";
 import { biJisdorAdapter } from "./biJisdor.js";
 import { billboard200Adapter } from "./billboard200.js";
+import { billboardHot100Adapter } from "./billboardHot100.js";
 import { blsCpiReleasesAdapter } from "./blsCpiReleases.js";
 import { blsJobsAddedAdapter } from "./blsJobsAdded.js";
 import { bonbastUsdIrrAdapter } from "./bonbast.js";
@@ -85,6 +86,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [beaCurrentReleasesAdapter.id, beaCurrentReleasesAdapter],
   [biJisdorAdapter.id, biJisdorAdapter],
   [billboard200Adapter.id, billboard200Adapter],
+  [billboardHot100Adapter.id, billboardHot100Adapter],
   [blsCpiReleasesAdapter.id, blsCpiReleasesAdapter],
   [blsJobsAddedAdapter.id, blsJobsAddedAdapter],
   [bonbastUsdIrrAdapter.id, bonbastUsdIrrAdapter],

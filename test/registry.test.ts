@@ -12,6 +12,7 @@ const expectedCommandIds = [
   ["bea", "bea-current-releases"],
   ["jisdor", "bi-jisdor-usd-idr"],
   ["billboard200", "billboard-200-number-one-album"],
+  ["billboardhot100", "billboard-hot-100-number-one-song"],
   ["blscpi", "bls-cpi-releases"],
   ["jobsadded", "bls-jobs-added"],
   ["bonbast", "bonbast-usd-irr"],
@@ -147,6 +148,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("pboc").getPollIntervalMinutes?.({} as never)).toBe(15);
     expect(getAdapterByCommandName("billboard200").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("billboard200").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("billboardhot100").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("billboardhot100").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("whitehousetweets").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("whbriefings").getPollIntervalMinutes?.({} as never)).toBe(15);
