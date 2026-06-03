@@ -4,7 +4,6 @@ import {
   extractGettyDateCreatedFromText,
   extractGettyDetailDateCreated,
   extractGettyPublicSearchPhotos,
-  normalizeGettyPhoto,
   parseTrumpGettyMarketWindow,
   refreshTrumpGettyPolymarketQueue,
   trumpGettyPhotosAdapter,
@@ -40,24 +39,6 @@ describe("Trump Getty photos adapter", () => {
     });
   });
 
-  it("normalizes Getty API image records", () => {
-    expect(
-      normalizeGettyPhoto({
-        id: "2200000000",
-        title: "President Trump Departs The White House",
-        date_created: "2026-06-01T10:00:00Z",
-        display_sizes: [{ name: "thumb", uri: "https://media.gettyimages.com/thumb.jpg" }],
-        referral_destinations: [{ uri: "https://www.gettyimages.com/detail/news-photo/2200000000" }]
-      })
-    ).toEqual({
-      id: "2200000000",
-      title: "President Trump Departs The White House",
-      dateCreated: "2026-06-01",
-      url: "https://www.gettyimages.com/detail/news-photo/2200000000",
-      thumbnailUrl: "https://media.gettyimages.com/thumb.jpg"
-    });
-  });
-
   it("extracts Getty public search photos and created dates from reader markdown", () => {
     const markdown = `
 [![Image 3: President Donald Trump waves as he returns to the White House on June 1, 2026](https://media.gettyimages.com/id/2278476994/photo/washington-dc.jpg?s=612x612&w=0&k=20&c=abc) President Donald Trump waves as he returns to the White House on June 1, 2026 in Washington, DC.](https://www.gettyimages.com/detail/news-photo/president-donald-trump-waves-news-photo/2278476994)
@@ -90,19 +71,11 @@ June 1, 2026
     ).toBe("2026-05-31");
   });
 
-  it("uses the public scraper fallback when Getty API credentials are missing", async () => {
+  it("uses the public scraper for current values", async () => {
     const originalFetch = globalThis.fetch;
-    const originalApiKey = process.env.GETTY_API_KEY;
-    const originalAccessToken = process.env.GETTY_ACCESS_TOKEN;
-    delete process.env.GETTY_API_KEY;
-    delete process.env.GETTY_ACCESS_TOKEN;
 
     globalThis.fetch = async (input) => {
       const url = String(input);
-      if (url.includes("page=2")) {
-        return new Response("Title: empty page\n\nMarkdown Content:\n");
-      }
-
       if (url.includes("r.jina.ai") && url.includes("/search/2/image")) {
         return new Response(`
 [![Image 3: President Donald Trump waves on June 1,...](https://media.gettyimages.com/id/1/photo/one.jpg?s=612x612) President Donald Trump waves on June 1, in Washington, DC.](https://www.gettyimages.com/detail/news-photo/one-news-photo/1)
@@ -121,17 +94,6 @@ June 1, 2026
       expect(result.value).toContain("Covered dates: 2026-06-01, 2026-06-02");
     } finally {
       globalThis.fetch = originalFetch;
-      if (originalApiKey === undefined) {
-        delete process.env.GETTY_API_KEY;
-      } else {
-        process.env.GETTY_API_KEY = originalApiKey;
-      }
-
-      if (originalAccessToken === undefined) {
-        delete process.env.GETTY_ACCESS_TOKEN;
-      } else {
-        process.env.GETTY_ACCESS_TOKEN = originalAccessToken;
-      }
     }
   });
 

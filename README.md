@@ -64,7 +64,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global and auto-discovers monthly global artist #1 markets. |
 | `strategy-bitcoin-purchases` | `/strategybtc` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active Polymarket date range. |
 | `tesla-deliveries` | `/tesla` | `#tesla` | `Tesla Deliveries Alerts` | `🚗` | Monitors Tesla production and deliveries press releases for Q2 2026 delivery updates. |
-| `trump-getty-photos` | `/trumpgetty` | `#trumpgetty` | `Trump Getty Alerts` | `📸` | Monitors Getty tagged editorial Donald Trump photo coverage by day, using API credentials when available or public scraper fallback. |
+| `trump-getty-photos` | `/trumpgetty` | `#trumpgetty` | `Trump Getty Alerts` | `📸` | Monitors Getty tagged editorial Donald Trump photo coverage by day using the public Getty search page reader fallback. |
 | `trump-schedule` | `/trumpschedule` | `#trumpschedule` | `Trump Schedule Alerts` | `🗓️` | General Roll Call Factbase daily Trump schedule feed with compact change alerts and no default Polymarket URL. |
 | `trump-truth` | `/trumptruth` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Monitors the Trump's Truth archive feed for @realDonaldTrump posts and parsed weekly Polymarket strike terms. |
 | `tsa-passengers` | `/tsa` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
@@ -130,14 +130,12 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    POLYGON_WS_URL=...
    ETHEREUM_RPC_URL=...
   ETHEREUM_RPC_URLS=...
-  GETTY_API_KEY=...
-  GETTY_ACCESS_TOKEN=...
   X_BEARER_TOKEN=...
    WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://xcancel.com/WhiteHouse/rss
    WHITE_HOUSE_TWEETS_ALLOW_NITTER_FALLBACK=true
    ```
 
-   Getty credentials are optional. If `GETTY_API_KEY` / `GETTY_ACCESS_TOKEN` are not set, `/trumpgetty` uses the public Getty search page through the reader fallback.
+   `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback.
 
 3. Register slash commands for your test server:
 

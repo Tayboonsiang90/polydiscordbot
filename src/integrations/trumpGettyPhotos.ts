@@ -6,7 +6,6 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.gettyimages.com.mx/search/2/image?family=editorial&sort=newest&specificpeople=118600";
 const defaultPolymarketUrl = "https://polymarket.com/event/will-trump-be-photographed-every-day-this-week-61-67";
-const gettyApiUrl = "https://api.gettyimages.com/v3/search/images/editorial";
 const gettyPublicSearchUrl = "https://www.gettyimages.com/search/2/image";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const jinaReaderBaseUrl = "https://r.jina.ai/http://r.jina.ai/http://";
@@ -14,8 +13,7 @@ const marketSearchQuery = "trump photographed every day this week";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
-const maxGettyPages = 3;
-const maxGettyPublicPages = 1;
+const maxGettyPages = 1;
 const maxPhotosPerDay = 3;
 const maxGettyDetailFetches = 5;
 
@@ -39,19 +37,6 @@ export type GettyPhoto = {
 
 type GettyPhotoCandidate = Omit<GettyPhoto, "dateCreated"> & {
   dateCreated: string | null;
-};
-
-type GettySearchResponse = {
-  images?: GettyImage[];
-};
-
-type GettyImage = {
-  id?: unknown;
-  title?: unknown;
-  caption?: unknown;
-  date_created?: unknown;
-  display_sizes?: Array<{ name?: unknown; uri?: unknown }>;
-  referral_destinations?: Array<{ uri?: unknown }>;
 };
 
 type TrumpGettyDiscoverySettings = {
@@ -154,28 +139,6 @@ export function parseTrumpGettyMarketWindow(url: string, now = new Date()): Trum
   };
 }
 
-export function normalizeGettyPhoto(image: GettyImage): GettyPhoto | null {
-  if (!isNonEmptyString(image.id) || !isNonEmptyString(image.date_created)) {
-    return null;
-  }
-
-  const dateCreated = image.date_created.slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateCreated)) {
-    return null;
-  }
-
-  const title = isNonEmptyString(image.title) ? image.title : isNonEmptyString(image.caption) ? image.caption : `Getty image ${image.id}`;
-  const referralUrl = image.referral_destinations?.map((destination) => destination.uri).find(isNonEmptyString);
-  const thumbnailUrl = image.display_sizes?.map((displaySize) => displaySize.uri).find(isNonEmptyString) ?? null;
-  return {
-    id: image.id,
-    title: normalizeText(title).slice(0, 180),
-    dateCreated,
-    url: referralUrl ?? `https://www.gettyimages.com/detail/news-photo/${encodeURIComponent(image.id)}`,
-    thumbnailUrl
-  };
-}
-
 export function buildTrumpGettyValue(photos: GettyPhoto[], window: TrumpGettyMarketWindow, polymarketUrl: string): string {
   const photosByDate = groupPhotosByDate(photos, window);
   const coveredDates = window.qualifyingDates.filter((date) => (photosByDate.get(date)?.length ?? 0) > 0);
@@ -265,51 +228,12 @@ export async function refreshTrumpGettyPolymarketQueue(
 }
 
 async function fetchTrumpGettyPhotos(window: TrumpGettyMarketWindow): Promise<GettyPhoto[]> {
-  const headers = getGettyApiHeadersOrNull();
-  if (!headers) {
-    return fetchTrumpGettyPhotosFromPublicScraper(window);
-  }
-
-  return fetchTrumpGettyPhotosFromApi(window, headers);
-}
-
-async function fetchTrumpGettyPhotosFromApi(window: TrumpGettyMarketWindow, headers: Record<string, string>): Promise<GettyPhoto[]> {
-  const photos: GettyPhoto[] = [];
-  for (let page = 1; page <= maxGettyPages; page += 1) {
-    const url = new URL(gettyApiUrl);
-    url.searchParams.set("phrase", "Donald Trump");
-    url.searchParams.set("specific_people", "118600");
-    url.searchParams.set("sort_order", "newest");
-    url.searchParams.set("page_size", "100");
-    url.searchParams.set("page", String(page));
-    url.searchParams.set("start_date", window.startDate);
-    url.searchParams.set("end_date", window.endDate);
-    url.searchParams.set("fields", "detail_set");
-
-    const response = await fetchWithTimeout(url.toString(), { headers });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`Getty Images API returned HTTP ${response.status}: ${text.slice(0, 200)}`);
-    }
-
-    const payload = JSON.parse(text) as GettySearchResponse;
-    const images = payload.images ?? [];
-    photos.push(...images.map(normalizeGettyPhoto).filter((photo): photo is GettyPhoto => photo !== null));
-    if (images.length < 100) {
-      break;
-    }
-  }
-
-  return uniquePhotos(photos).filter((photo) => window.qualifyingDates.includes(photo.dateCreated));
-}
-
-async function fetchTrumpGettyPhotosFromPublicScraper(window: TrumpGettyMarketWindow): Promise<GettyPhoto[]> {
   const photos: GettyPhoto[] = [];
   const seen = new Set<string>();
   let detailFetches = 0;
   let foundAnyCandidates = false;
 
-  for (let page = 1; page <= maxGettyPublicPages; page += 1) {
+  for (let page = 1; page <= maxGettyPages; page += 1) {
     const searchMarkdown = await fetchGettyPublicSearchMarkdown(page);
     const candidates = extractGettyPublicSearchPhotos(searchMarkdown);
     if (candidates.length === 0) {
@@ -458,28 +382,6 @@ function extractGettyDateCreatedFromTextForWindow(text: string, window: TrumpGet
 
   const suffix = `-${padNumber(monthDay.month)}-${padNumber(monthDay.day)}`;
   return window.qualifyingDates.find((date) => date.endsWith(suffix)) ?? null;
-}
-
-function getGettyApiHeadersOrNull(): Record<string, string> | null {
-  const apiKey = process.env.GETTY_API_KEY;
-  const accessToken = process.env.GETTY_ACCESS_TOKEN;
-  if (isNonEmptyString(accessToken)) {
-    return {
-      authorization: `Bearer ${accessToken.trim()}`,
-      accept: "application/json",
-      "user-agent": "PolymarketResolutionMonitorBot/0.1"
-    };
-  }
-
-  if (isNonEmptyString(apiKey)) {
-    return {
-      "Api-Key": apiKey.trim(),
-      accept: "application/json",
-      "user-agent": "PolymarketResolutionMonitorBot/0.1"
-    };
-  }
-
-  return null;
 }
 
 async function fetchTrumpGettyMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
