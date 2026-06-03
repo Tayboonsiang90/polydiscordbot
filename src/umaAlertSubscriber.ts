@@ -110,7 +110,7 @@ export class UmaAlertSubscriber {
           jsonrpc: "2.0",
           id: 2,
           method: "eth_subscribe",
-          params: ["newPendingTransactions", true]
+          params: buildPendingTransactionSubscriptionParams(wsUrl)
         })
       );
       console.log(`UMA alert WebSocket subscribe requested via ${wsUrl}`);
@@ -438,6 +438,29 @@ function isPendingTransaction(value: unknown): value is PolygonPendingTransactio
 
 function isEditableMessage(message: unknown): message is EditableMessage {
   return Boolean(message && typeof message === "object" && "edit" in message && typeof message.edit === "function");
+}
+
+export function buildPendingTransactionSubscriptionParams(wsUrl: string): unknown[] {
+  if (isAlchemyWsUrl(wsUrl)) {
+    return [
+      "alchemy_pendingTransactions",
+      {
+        toAddress: [polymarketBulletinBoardAddress],
+        hashesOnly: false
+      }
+    ];
+  }
+
+  return ["newPendingTransactions", true];
+}
+
+function isAlchemyWsUrl(wsUrl: string): boolean {
+  try {
+    const hostname = new URL(wsUrl).hostname.toLowerCase();
+    return hostname.endsWith(".alchemy.com") || hostname.endsWith(".alchemyapi.io");
+  } catch {
+    return wsUrl.toLowerCase().includes("alchemy");
+  }
 }
 
 function formatError(error: unknown): string {

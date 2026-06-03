@@ -17,6 +17,7 @@ import {
   type PolygonLog
 } from "../src/integrations/polymarketClarifications.js";
 import type { Integration } from "../src/integrations/types.js";
+import { buildPendingTransactionSubscriptionParams } from "../src/umaAlertSubscriber.js";
 
 const questionId = "0xa4c576609b4af948431f1ba84ee209a0e91e0ab722482f1e9810ea4337d26cdc";
 const creator = "0x91430cad2d3975766499717fa0d66a78d814e5c5";
@@ -162,6 +163,25 @@ describe("Polymarket clarification parsing", () => {
         expect.objectContaining({ name: "Mempool status", value: "pending - not mined yet" })
       ])
     );
+  });
+});
+
+describe("UMA clarification WebSocket subscriptions", () => {
+  it("uses Alchemy's filtered pending transaction subscription for Alchemy WebSockets", () => {
+    expect(buildPendingTransactionSubscriptionParams("wss://polygon-mainnet.g.alchemy.com/v2/test-key")).toEqual([
+      "alchemy_pendingTransactions",
+      {
+        toAddress: [polymarketBulletinBoardAddress],
+        hashesOnly: false
+      }
+    ]);
+  });
+
+  it("keeps the generic full pending transaction subscription for non-Alchemy WebSockets", () => {
+    expect(buildPendingTransactionSubscriptionParams("wss://polygon-bor-rpc.publicnode.com")).toEqual([
+      "newPendingTransactions",
+      true
+    ]);
   });
 });
 
