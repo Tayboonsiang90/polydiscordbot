@@ -69,6 +69,7 @@ const expectedCommandIds = [
   ["tsa", "tsa-passengers"],
   ["earthquake", "usgs-earthquakes"],
   ["bviv", "volmex-bviv-low-strikes"],
+  ["eviv", "volmex-eviv-high-strikes"],
   ["aliennyc", "white-house-aliens-nyc"],
   ["whbriefings", "white-house-briefings"],
   ["fulllid", "white-house-full-lid"],
@@ -152,6 +153,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("umarocks").getPollIntervalMinutes?.({} as never)).toBe(10);
     expect(getAdapterByCommandName("bviv").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("bviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
+    expect(getAdapterByCommandName("eviv").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("eviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("trumpapproval").getPollIntervalMinutes?.({} as never, new Date("2026-06-05T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("spotifyglobal").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
