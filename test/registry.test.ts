@@ -48,6 +48,7 @@ const expectedCommandIds = [
   ["paidappstore", "paid-app-store"],
   ["dchomevalue", "parcl-dc-home-value"],
   ["nychomevalue", "parcl-nyc-home-value"],
+  ["pboc", "pboc-rate-change"],
   ["powerball", "powerball-jackpot"],
   ["umaclarifications", "polymarket-clarifications"],
   ["umadispute", "polymarket-disputes"],
@@ -142,6 +143,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("ornnb200").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("dchomevalue").getPollIntervalMinutes?.({} as never, new Date("2026-06-30T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("nychomevalue").getPollIntervalMinutes?.({} as never, new Date("2026-06-30T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("pboc").getPollIntervalMinutes?.({} as never)).toBe(15);
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("whitehousetweets").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("whbriefings").getPollIntervalMinutes?.({} as never)).toBe(15);

@@ -43,6 +43,7 @@ import { ornnH200IndexAdapter } from "./ornnH200Index.js";
 import { paidAppStoreAdapter } from "./paidAppStore.js";
 import { parclDcHomeValueAdapter } from "./parclDcHomeValue.js";
 import { parclNycHomeValueAdapter } from "./parclNycHomeValue.js";
+import { pbocRateChangeAdapter } from "./pbocRateChange.js";
 import { polymarketClarificationsAdapter } from "./polymarketClarifications.js";
 import { polymarketDisputesAdapter } from "./polymarketDisputes.js";
 import { polymarketProposalsAdapter } from "./polymarketProposals.js";
@@ -119,6 +120,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [paidAppStoreAdapter.id, paidAppStoreAdapter],
   [parclDcHomeValueAdapter.id, parclDcHomeValueAdapter],
   [parclNycHomeValueAdapter.id, parclNycHomeValueAdapter],
+  [pbocRateChangeAdapter.id, pbocRateChangeAdapter],
   [polymarketClarificationsAdapter.id, polymarketClarificationsAdapter],
   [polymarketDisputesAdapter.id, polymarketDisputesAdapter],
   [polymarketProposalsAdapter.id, polymarketProposalsAdapter],
