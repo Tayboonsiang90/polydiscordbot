@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTrumpGettyValue,
+  extractGettyDateCreatedFromText,
+  extractGettyDetailDateCreated,
+  extractGettyPublicSearchPhotos,
   normalizeGettyPhoto,
   parseTrumpGettyMarketWindow,
   refreshTrumpGettyPolymarketQueue,
+  trumpGettyPhotosAdapter,
   trumpGettyShouldAlertOnChange
 } from "../src/integrations/trumpGettyPhotos.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -52,6 +56,83 @@ describe("Trump Getty photos adapter", () => {
       url: "https://www.gettyimages.com/detail/news-photo/2200000000",
       thumbnailUrl: "https://media.gettyimages.com/thumb.jpg"
     });
+  });
+
+  it("extracts Getty public search photos and created dates from reader markdown", () => {
+    const markdown = `
+[![Image 3: President Donald Trump waves as he returns to the White House on June 1, 2026](https://media.gettyimages.com/id/2278476994/photo/washington-dc.jpg?s=612x612&w=0&k=20&c=abc) President Donald Trump waves as he returns to the White House on June 1, 2026 in Washington, DC.](https://www.gettyimages.com/detail/news-photo/president-donald-trump-waves-news-photo/2278476994)
+`;
+
+    expect(extractGettyPublicSearchPhotos(markdown)).toEqual([
+      {
+        id: "2278476994",
+        title:
+          "President Donald Trump waves as he returns to the White House on June 1, 2026 President Donald Trump waves as he returns to the White House on June 1, 2026 in Washington, DC.",
+        dateCreated: "2026-06-01",
+        url: "https://www.gettyimages.com/detail/news-photo/president-donald-trump-waves-news-photo/2278476994",
+        thumbnailUrl: "https://media.gettyimages.com/id/2278476994/photo/washington-dc.jpg?s=612x612&w=0&k=20&c=abc"
+      }
+    ]);
+  });
+
+  it("extracts Getty detail created dates when captions are incomplete", () => {
+    expect(extractGettyDateCreatedFromText("President Trump departs on May 31, 2026 in Washington, DC.")).toBe("2026-05-31");
+    expect(
+      extractGettyDetailDateCreated(`
+Date created:
+
+May 31, 2026
+
+Upload date:
+
+June 1, 2026
+`)
+    ).toBe("2026-05-31");
+  });
+
+  it("uses the public scraper fallback when Getty API credentials are missing", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalApiKey = process.env.GETTY_API_KEY;
+    const originalAccessToken = process.env.GETTY_ACCESS_TOKEN;
+    delete process.env.GETTY_API_KEY;
+    delete process.env.GETTY_ACCESS_TOKEN;
+
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("page=2")) {
+        return new Response("Title: empty page\n\nMarkdown Content:\n");
+      }
+
+      if (url.includes("r.jina.ai") && url.includes("/search/2/image")) {
+        return new Response(`
+[![Image 3: President Donald Trump waves on June 1,...](https://media.gettyimages.com/id/1/photo/one.jpg?s=612x612) President Donald Trump waves on June 1, in Washington, DC.](https://www.gettyimages.com/detail/news-photo/one-news-photo/1)
+[![Image 4: President Donald Trump speaks on June 2, 2026](https://media.gettyimages.com/id/2/photo/two.jpg?s=612x612) President Donald Trump speaks on June 2, 2026 in Washington, DC.](https://www.gettyimages.com/detail/news-photo/two-news-photo/2)
+`);
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    };
+
+    try {
+      const result = await trumpGettyPhotosAdapter.fetchCurrentValue(
+        buildIntegration("https://polymarket.com/event/will-trump-be-photographed-every-day-this-week-61-67")
+      );
+      expect(result.value).toContain("Covered days: 2/7");
+      expect(result.value).toContain("Covered dates: 2026-06-01, 2026-06-02");
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalApiKey === undefined) {
+        delete process.env.GETTY_API_KEY;
+      } else {
+        process.env.GETTY_API_KEY = originalApiKey;
+      }
+
+      if (originalAccessToken === undefined) {
+        delete process.env.GETTY_ACCESS_TOKEN;
+      } else {
+        process.env.GETTY_ACCESS_TOKEN = originalAccessToken;
+      }
+    }
   });
 
   it("formats day coverage and only alerts when new dates become covered", () => {

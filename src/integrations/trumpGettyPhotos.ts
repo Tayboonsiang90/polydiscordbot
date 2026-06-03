@@ -7,13 +7,17 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 const sourceUrl = "https://www.gettyimages.com.mx/search/2/image?family=editorial&sort=newest&specificpeople=118600";
 const defaultPolymarketUrl = "https://polymarket.com/event/will-trump-be-photographed-every-day-this-week-61-67";
 const gettyApiUrl = "https://api.gettyimages.com/v3/search/images/editorial";
+const gettyPublicSearchUrl = "https://www.gettyimages.com/search/2/image";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
+const jinaReaderBaseUrl = "https://r.jina.ai/http://r.jina.ai/http://";
 const marketSearchQuery = "trump photographed every day this week";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 const maxGettyPages = 3;
+const maxGettyPublicPages = 1;
 const maxPhotosPerDay = 3;
+const maxGettyDetailFetches = 5;
 
 export type TrumpGettyMarketWindow = {
   startDate: string;
@@ -31,6 +35,10 @@ export type GettyPhoto = {
   dateCreated: string;
   url: string;
   thumbnailUrl: string | null;
+};
+
+type GettyPhotoCandidate = Omit<GettyPhoto, "dateCreated"> & {
+  dateCreated: string | null;
 };
 
 type GettySearchResponse = {
@@ -257,7 +265,15 @@ export async function refreshTrumpGettyPolymarketQueue(
 }
 
 async function fetchTrumpGettyPhotos(window: TrumpGettyMarketWindow): Promise<GettyPhoto[]> {
-  const headers = getGettyApiHeaders();
+  const headers = getGettyApiHeadersOrNull();
+  if (!headers) {
+    return fetchTrumpGettyPhotosFromPublicScraper(window);
+  }
+
+  return fetchTrumpGettyPhotosFromApi(window, headers);
+}
+
+async function fetchTrumpGettyPhotosFromApi(window: TrumpGettyMarketWindow, headers: Record<string, string>): Promise<GettyPhoto[]> {
   const photos: GettyPhoto[] = [];
   for (let page = 1; page <= maxGettyPages; page += 1) {
     const url = new URL(gettyApiUrl);
@@ -287,7 +303,164 @@ async function fetchTrumpGettyPhotos(window: TrumpGettyMarketWindow): Promise<Ge
   return uniquePhotos(photos).filter((photo) => window.qualifyingDates.includes(photo.dateCreated));
 }
 
-function getGettyApiHeaders(): Record<string, string> {
+async function fetchTrumpGettyPhotosFromPublicScraper(window: TrumpGettyMarketWindow): Promise<GettyPhoto[]> {
+  const photos: GettyPhoto[] = [];
+  const seen = new Set<string>();
+  let detailFetches = 0;
+  let foundAnyCandidates = false;
+
+  for (let page = 1; page <= maxGettyPublicPages; page += 1) {
+    const searchMarkdown = await fetchGettyPublicSearchMarkdown(page);
+    const candidates = extractGettyPublicSearchPhotos(searchMarkdown);
+    if (candidates.length === 0) {
+      break;
+    }
+
+    foundAnyCandidates = true;
+    for (const candidate of candidates) {
+      if (seen.has(candidate.id)) {
+        continue;
+      }
+
+      seen.add(candidate.id);
+      let dateCreated = candidate.dateCreated;
+      if (!dateCreated) {
+        dateCreated = extractGettyDateCreatedFromTextForWindow(candidate.title, window);
+        if (!dateCreated && extractEnglishMonthDay(candidate.title)) {
+          continue;
+        }
+      }
+
+      if (!dateCreated && detailFetches < maxGettyDetailFetches) {
+        detailFetches += 1;
+        dateCreated = await fetchGettyDetailDateCreated(candidate.url);
+      }
+
+      if (!dateCreated || !window.qualifyingDates.includes(dateCreated)) {
+        continue;
+      }
+
+      photos.push({ ...candidate, dateCreated });
+    }
+  }
+
+  if (!foundAnyCandidates) {
+    throw new Error("Getty public scraper could not find photo results on the Getty search page.");
+  }
+
+  return uniquePhotos(photos);
+}
+
+async function fetchGettyPublicSearchMarkdown(page: number): Promise<string> {
+  const url = new URL(gettyPublicSearchUrl);
+  url.searchParams.set("family", "editorial");
+  url.searchParams.set("sort", "newest");
+  url.searchParams.set("specificpeople", "118600");
+  if (page > 1) {
+    url.searchParams.set("page", String(page));
+  }
+
+  return fetchJinaReaderText(buildJinaReaderUrl(url.toString()), "Getty public scraper");
+}
+
+async function fetchGettyDetailDateCreated(url: string): Promise<string | null> {
+  try {
+    const text = await fetchJinaReaderText(buildJinaReaderUrl(url), "Getty detail scraper");
+    return extractGettyDetailDateCreated(text);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchJinaReaderText(url: string, errorLabel: string): Promise<string> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetchWithTimeout(url, {
+      headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+    });
+    const text = await response.text();
+    if (response.status === 429 && attempt === 0) {
+      await delay(Math.min(parseJinaRetryAfterMs(text), 30_000));
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(`${errorLabel} returned HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
+
+    return text;
+  }
+
+  throw new Error(`${errorLabel} did not return a response after retrying.`);
+}
+
+export function extractGettyPublicSearchPhotos(markdown: string): GettyPhotoCandidate[] {
+  const photos: GettyPhotoCandidate[] = [];
+  const resultPattern =
+    /\[!\[Image\s+\d+:\s*([^\]]+)\]\((https:\/\/media\.gettyimages\.com\/id\/(\d+)\/[^)]+)\)\s*([^\]]*?)\]\((https:\/\/www\.gettyimages\.com\/detail\/[^)\s]+)\)/g;
+  for (const match of markdown.matchAll(resultPattern)) {
+    const imageId = match[3];
+    const detailUrl = match[5];
+    const id = extractGettyIdFromUrl(detailUrl) ?? imageId;
+    const title = normalizeText(`${match[1]} ${match[4]}`).slice(0, 180);
+    photos.push({
+      id,
+      title: title || `Getty image ${id}`,
+      dateCreated: extractGettyDateCreatedFromText(title),
+      url: detailUrl,
+      thumbnailUrl: match[2]
+    });
+  }
+
+  return uniqueCandidates(photos);
+}
+
+export function extractGettyDetailDateCreated(markdown: string): string | null {
+  const dateCreatedSection = markdown.match(/Date created:\s*([\s\S]{0,80})/i)?.[1];
+  if (dateCreatedSection) {
+    const dateFromSection = extractGettyDateCreatedFromText(dateCreatedSection);
+    if (dateFromSection) {
+      return dateFromSection;
+    }
+  }
+
+  return extractGettyDateCreatedFromText(markdown);
+}
+
+export function extractGettyDateCreatedFromText(text: string): string | null {
+  const normalized = normalizeText(text);
+  const patterns = [
+    /\bDate created:?\s*([A-Z][a-z]+\.?\s+\d{1,2},\s+20\d{2})/i,
+    /\bon\s+([A-Z][a-z]+\.?\s+\d{1,2},\s+20\d{2})\b/i,
+    /\b([A-Z][a-z]+\.?\s+\d{1,2},\s+20\d{2})\b/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    const date = match ? parseEnglishMonthDate(match[1]) : null;
+    if (date) {
+      return date;
+    }
+  }
+
+  return null;
+}
+
+function extractGettyDateCreatedFromTextForWindow(text: string, window: TrumpGettyMarketWindow): string | null {
+  const explicitDate = extractGettyDateCreatedFromText(text);
+  if (explicitDate) {
+    return explicitDate;
+  }
+
+  const monthDay = extractEnglishMonthDay(text);
+  if (!monthDay) {
+    return null;
+  }
+
+  const suffix = `-${padNumber(monthDay.month)}-${padNumber(monthDay.day)}`;
+  return window.qualifyingDates.find((date) => date.endsWith(suffix)) ?? null;
+}
+
+function getGettyApiHeadersOrNull(): Record<string, string> | null {
   const apiKey = process.env.GETTY_API_KEY;
   const accessToken = process.env.GETTY_ACCESS_TOKEN;
   if (isNonEmptyString(accessToken)) {
@@ -306,7 +479,7 @@ function getGettyApiHeaders(): Record<string, string> {
     };
   }
 
-  throw new Error("GETTY_API_KEY or GETTY_ACCESS_TOKEN is required for Getty Images API polling.");
+  return null;
 }
 
 async function fetchTrumpGettyMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
@@ -530,6 +703,115 @@ function uniquePhotos(photos: GettyPhoto[]): GettyPhoto[] {
     seen.add(photo.id);
     return true;
   });
+}
+
+function uniqueCandidates(photos: GettyPhotoCandidate[]): GettyPhotoCandidate[] {
+  const seen = new Set<string>();
+  return photos.filter((photo) => {
+    if (seen.has(photo.id)) {
+      return false;
+    }
+
+    seen.add(photo.id);
+    return true;
+  });
+}
+
+function buildJinaReaderUrl(url: string): string {
+  return `${jinaReaderBaseUrl}${url}`;
+}
+
+function extractGettyIdFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const id = parsed.pathname.split("/").filter(Boolean).at(-1);
+    return id && /^\d+$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseJinaRetryAfterMs(text: string): number {
+  try {
+    const payload = JSON.parse(text) as { retryAfter?: unknown; retryAfterDate?: unknown };
+    if (typeof payload.retryAfter === "number" && Number.isFinite(payload.retryAfter)) {
+      return Math.max(1_000, Math.ceil(payload.retryAfter * 1000) + 1_000);
+    }
+
+    if (typeof payload.retryAfterDate === "string") {
+      const retryAt = Date.parse(payload.retryAfterDate);
+      if (!Number.isNaN(retryAt)) {
+        return Math.max(1_000, retryAt - Date.now() + 1_000);
+      }
+    }
+  } catch {
+    return 10_000;
+  }
+
+  return 10_000;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function parseEnglishMonthDate(value: string): string | null {
+  const match = value.trim().match(/^([A-Z][a-z]+)\.?\s+(\d{1,2}),\s+(20\d{2})$/i);
+  if (!match) {
+    return null;
+  }
+
+  const month = englishMonthNumber(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  if (!month || day < 1 || day > 31) {
+    return null;
+  }
+
+  return formatDateParts(year, month, day);
+}
+
+function extractEnglishMonthDay(value: string): { month: number; day: number } | null {
+  const match = normalizeText(value).match(/\b(?:on\s+)?([A-Z][a-z]+)\.?\s+(\d{1,2})(?:,|\b)/i);
+  if (!match) {
+    return null;
+  }
+
+  const month = englishMonthNumber(match[1]);
+  const day = Number(match[2]);
+  return month && day >= 1 && day <= 31 ? { month, day } : null;
+}
+
+function englishMonthNumber(value: string): number | null {
+  const months = new Map([
+    ["jan", 1],
+    ["january", 1],
+    ["feb", 2],
+    ["february", 2],
+    ["mar", 3],
+    ["march", 3],
+    ["apr", 4],
+    ["april", 4],
+    ["may", 5],
+    ["jun", 6],
+    ["june", 6],
+    ["jul", 7],
+    ["july", 7],
+    ["aug", 8],
+    ["august", 8],
+    ["sep", 9],
+    ["sept", 9],
+    ["september", 9],
+    ["oct", 10],
+    ["october", 10],
+    ["nov", 11],
+    ["november", 11],
+    ["dec", 12],
+    ["december", 12]
+  ]);
+  return months.get(value.toLowerCase().replace(/\.$/, "")) ?? null;
 }
 
 function hasQueuedFutureMarket(markets: PolymarketQueueMarket[], now: Date): boolean {
