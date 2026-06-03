@@ -13,7 +13,9 @@ import {
   formatErrorMessage,
   formatSchedulerNetworkError,
   getErrorNoticeDecision,
+  getErrorNoticeSignature,
   isTransientNetworkError,
+  transientRepeatedErrorNoticeWindowMs,
   type ErrorNoticeState
 } from "./errorNotices.js";
 import { getAdapter } from "./integrations/registry.js";
@@ -22,7 +24,7 @@ import { getDueMarketEndReminders, getStoredOrFetchPolymarketEndDate, type Marke
 import { resolveIntegrationPolymarketQueue } from "./polymarketQueue.js";
 import { mergeSettingsJson, parseSettingsJson } from "./settingsJson.js";
 
-export { formatSchedulerNetworkError, getErrorNoticeDecision } from "./errorNotices.js";
+export { formatSchedulerNetworkError, getErrorNoticeDecision, getErrorNoticeSignature } from "./errorNotices.js";
 
 export type CheckResult = {
   integration: Integration;
@@ -55,6 +57,8 @@ export type EventCheckOptions = {
 
 const maxEventSeenPostIds = 100;
 const schedulerErrorNoticeWindowMs = 10 * 60_000;
+const checkFailedTitleSuffix = " - Check failed";
+const maxStaleErrorCleanupPages = 10;
 let schedulerErrorNotice: ErrorNoticeState | undefined;
 
 export function buildAlertMessagePayload(result: CheckResult) {
@@ -137,10 +141,11 @@ export async function checkEventIntegration(
   }
 
   const refreshedSettingsJson = adapter.refreshSettings ? await adapter.refreshSettings(integration) : integration.settingsJson;
-  const settingsIntegration =
+  let settingsIntegration =
     refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson
       ? database.setSettingsJson(integration.id, refreshedSettingsJson)
       : integration;
+  settingsIntegration = activateQueuedPolymarket(database, settingsIntegration);
   const result = await adapter.fetchEventUpdates(settingsIntegration, { historicalCheck: options.historicalCheck });
   const activeIntegration =
     result.polymarketUrl && result.polymarketUrl !== settingsIntegration.polymarketUrl
@@ -401,7 +406,7 @@ export class PollScheduler {
             await this.sendAlert(latest.channelId, result);
           }
         }
-        this.errorNotices.delete(latest.id);
+        this.clearErrorNoticeState(latest.id);
       } catch (error) {
         await this.sendErrorIfDue(latest.channelId, latest, error).catch(logSchedulerError);
       }
@@ -425,40 +430,83 @@ export class PollScheduler {
   private async sendErrorIfDue(channelId: string, integration: Integration, error: unknown): Promise<void> {
     const adapter = getAdapter(integration.adapterId);
     const message = formatErrorMessage(error);
-    const windowMs = (adapter.getErrorNoticeWindowMinutes?.(integration) ?? defaultRepeatedErrorNoticeWindowMs / 60_000) * 60_000;
-    const decision = getErrorNoticeDecision(this.errorNotices.get(integration.id), message, Date.now(), windowMs);
+    const adapterWindowMs =
+      (adapter.getErrorNoticeWindowMinutes?.(integration) ?? defaultRepeatedErrorNoticeWindowMs / 60_000) * 60_000;
+    const windowMs = isTransientNetworkError(error)
+      ? Math.max(adapterWindowMs, transientRepeatedErrorNoticeWindowMs)
+      : adapterWindowMs;
+    const signature = getErrorNoticeSignature(error);
+    const existingState = this.errorNotices.get(integration.id) ?? getLatestErrorNoticeState(integration.settingsJson);
+    const decision = getErrorNoticeDecision(existingState, message, Date.now(), windowMs, signature);
     this.errorNotices.set(integration.id, decision.nextState);
-    if (!decision.shouldSend) {
+    const updatedIntegration = this.recordErrorNoticeState(integration.id, decision.nextState);
+    const previousMessageId = getLatestErrorMessageId(updatedIntegration.settingsJson);
+    if (!decision.shouldSend && !previousMessageId) {
       return;
     }
 
-    await this.sendErrorMessage(channelId, integration, decision.message);
+    await this.sendErrorMessage(channelId, updatedIntegration, formatErrorNoticeDiscordMessage(message, decision), {
+      allowCreate: decision.shouldSend
+    });
+  }
+
+  private recordErrorNoticeState(integrationId: number, state: ErrorNoticeState): Integration {
+    const integration = this.database.getIntegrationById(integrationId);
+    const settingsJson = setLatestErrorNoticeState(integration.settingsJson, state);
+    return settingsJson === integration.settingsJson ? integration : this.database.setSettingsJson(integration.id, settingsJson);
+  }
+
+  private clearErrorNoticeState(integrationId: number): void {
+    this.errorNotices.delete(integrationId);
+    const integration = this.database.getIntegrationById(integrationId);
+    const settingsJson = clearLatestErrorNoticeState(integration.settingsJson);
+    if (settingsJson !== integration.settingsJson && settingsJson !== null) {
+      this.database.setSettingsJson(integration.id, settingsJson);
+    }
   }
 
   private async sendError(channelId: string, integration: Integration, error: unknown): Promise<void> {
-    await this.sendErrorMessage(channelId, integration, formatErrorMessage(error));
+    await this.sendErrorMessage(channelId, integration, formatErrorMessage(error), { allowCreate: true });
   }
 
-  private async sendErrorMessage(channelId: string, integration: Integration, message: string): Promise<void> {
+  private async sendErrorMessage(
+    channelId: string,
+    integration: Integration,
+    message: string,
+    options: { allowCreate: boolean }
+  ): Promise<void> {
     const channel = await this.client.channels.fetch(channelId);
     if (!isSendableChannel(channel)) {
       return;
     }
 
-    const sentMessage = await channel.send({ embeds: [buildErrorEmbed(integration, message)] });
+    const currentIntegration = this.database.getIntegrationById(integration.id);
+    const previousMessageId = getLatestErrorMessageId(currentIntegration.settingsJson);
+    if (previousMessageId && isFetchableMessageChannel(channel)) {
+      const previousMessage = await channel.messages.fetch(previousMessageId).catch(() => null);
+      if (isEditableMessage(previousMessage)) {
+        await previousMessage.edit({ embeds: [buildErrorEmbed(currentIntegration, message)] });
+        await cleanupStaleErrorMessages(channel, currentIntegration, previousMessageId);
+        return;
+      }
+    }
+
+    if (!options.allowCreate) {
+      return;
+    }
+
+    const sentMessage = await channel.send({ embeds: [buildErrorEmbed(currentIntegration, message)] });
     const sentMessageId = getDiscordMessageId(sentMessage);
     if (!sentMessageId) {
       return;
     }
 
-    const previousMessageId = getLatestErrorMessageId(integration.settingsJson);
-    const updatedSettingsJson = setLatestErrorMessageId(integration.settingsJson, sentMessageId);
-    if (updatedSettingsJson !== integration.settingsJson) {
+    const updatedSettingsJson = setLatestErrorMessageId(currentIntegration.settingsJson, sentMessageId);
+    if (updatedSettingsJson !== currentIntegration.settingsJson) {
       this.database.setSettingsJson(integration.id, updatedSettingsJson);
     }
-
-    if (previousMessageId && previousMessageId !== sentMessageId && isDeletableMessageChannel(channel)) {
-      await channel.messages.delete(previousMessageId).catch(() => undefined);
+    if (isFetchableMessageChannel(channel)) {
+      await cleanupStaleErrorMessages(channel, currentIntegration, sentMessageId);
     }
   }
 
@@ -532,7 +580,7 @@ export class PollScheduler {
 
         const result = await captureDailySnapshot(this.database, latest, latestSnapshotDate);
         await this.sendSnapshot(latest.channelId, result);
-        this.errorNotices.delete(latest.id);
+        this.clearErrorNoticeState(latest.id);
       } catch (error) {
         await this.sendErrorIfDue(integration.channelId, integration, error).catch(logSchedulerError);
       } finally {
@@ -607,9 +655,9 @@ type SendableChannel = {
   send(content: unknown): Promise<unknown>;
 };
 
-type DeletableMessageChannel = SendableChannel & {
+type FetchableMessageChannel = SendableChannel & {
   messages: {
-    delete(messageId: string): Promise<unknown>;
+    fetch(input: string | { limit: number; before?: string }): Promise<unknown>;
   };
 };
 
@@ -617,13 +665,13 @@ function isSendableChannel(channel: unknown): channel is SendableChannel {
   return Boolean(channel && typeof channel === "object" && "send" in channel && typeof channel.send === "function");
 }
 
-function isDeletableMessageChannel(channel: SendableChannel): channel is DeletableMessageChannel {
+function isFetchableMessageChannel(channel: SendableChannel): channel is FetchableMessageChannel {
   const messages = "messages" in channel ? channel.messages : null;
   if (!messages || typeof messages !== "object") {
     return false;
   }
 
-  return "delete" in messages && typeof messages.delete === "function";
+  return "fetch" in messages && typeof messages.fetch === "function";
 }
 
 function getDiscordMessageId(message: unknown): string | null {
@@ -634,6 +682,82 @@ function getDiscordMessageId(message: unknown): string | null {
   return typeof message.id === "string" ? message.id : null;
 }
 
+function isEditableMessage(message: unknown): message is { edit(content: unknown): Promise<unknown> } {
+  return Boolean(message && typeof message === "object" && "edit" in message && typeof message.edit === "function");
+}
+
+async function cleanupStaleErrorMessages(
+  channel: FetchableMessageChannel,
+  integration: Integration,
+  keepMessageId: string
+): Promise<void> {
+  let before: string | undefined;
+  for (let page = 0; page < maxStaleErrorCleanupPages; page += 1) {
+    const fetched = await channel.messages.fetch(before ? { limit: 100, before } : { limit: 100 }).catch(() => null);
+    const messages = getFetchedMessages(fetched);
+    if (messages.length === 0) {
+      return;
+    }
+
+    for (const message of messages) {
+      if (message.id !== keepMessageId && isIntegrationCheckFailedMessage(message, integration)) {
+        await message.delete().catch(() => undefined);
+      }
+    }
+
+    const oldestMessage = messages.at(-1);
+    if (!oldestMessage || messages.length < 100) {
+      return;
+    }
+
+    before = oldestMessage.id;
+  }
+}
+
+type FetchedDiscordMessage = {
+  id: string;
+  embeds?: Array<{ title?: string | null }>;
+  delete: () => Promise<unknown>;
+};
+
+function getFetchedMessages(fetched: unknown): FetchedDiscordMessage[] {
+  const values =
+    fetched && typeof fetched === "object" && "values" in fetched && typeof fetched.values === "function"
+      ? Array.from(fetched.values() as Iterable<unknown>)
+      : Array.isArray(fetched)
+        ? fetched
+        : [];
+
+  return values.filter(isFetchedDiscordMessage);
+}
+
+function isFetchedDiscordMessage(message: unknown): message is FetchedDiscordMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      "id" in message &&
+      typeof message.id === "string" &&
+      "delete" in message &&
+      typeof message.delete === "function"
+  );
+}
+
+function isIntegrationCheckFailedMessage(message: FetchedDiscordMessage, integration: Integration): boolean {
+  const expectedTitle = `${integration.displayName}${checkFailedTitleSuffix}`;
+  return message.embeds?.some((embed) => embed.title === expectedTitle) ?? false;
+}
+
+export function formatErrorNoticeDiscordMessage(
+  message: string,
+  decision: { shouldSend: boolean; message: string; nextState: ErrorNoticeState }
+): string {
+  if (decision.shouldSend || decision.nextState.suppressedCount <= 0) {
+    return decision.message;
+  }
+
+  return `${message}\n\nRepeated failure update: ${decision.nextState.suppressedCount} repeated error(s) since the last full alert.`;
+}
+
 export function getLatestErrorMessageId(settingsJson: string | null): string | null {
   const settings = parseSettingsJson(settingsJson);
   return typeof settings.latestErrorMessageId === "string" ? settings.latestErrorMessageId : null;
@@ -641,6 +765,47 @@ export function getLatestErrorMessageId(settingsJson: string | null): string | n
 
 export function setLatestErrorMessageId(settingsJson: string | null, messageId: string): string {
   return mergeSettingsJson(settingsJson, { latestErrorMessageId: messageId });
+}
+
+export function getLatestErrorNoticeState(settingsJson: string | null): ErrorNoticeState | undefined {
+  const state = parseSettingsJson(settingsJson).latestErrorNoticeState;
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    return undefined;
+  }
+
+  const signature = "signature" in state ? state.signature : undefined;
+  const sentAt = "sentAt" in state ? state.sentAt : undefined;
+  const suppressedCount = "suppressedCount" in state ? state.suppressedCount : undefined;
+  const sentAtMs = typeof sentAt === "string" ? Date.parse(sentAt) : Number.NaN;
+  if (typeof signature !== "string" || !Number.isFinite(sentAtMs)) {
+    return undefined;
+  }
+
+  return {
+    signature,
+    sentAtMs,
+    suppressedCount: typeof suppressedCount === "number" && Number.isFinite(suppressedCount) ? suppressedCount : 0
+  };
+}
+
+export function setLatestErrorNoticeState(settingsJson: string | null, state: ErrorNoticeState): string {
+  return mergeSettingsJson(settingsJson, {
+    latestErrorNoticeState: {
+      signature: state.signature,
+      sentAt: new Date(state.sentAtMs).toISOString(),
+      suppressedCount: state.suppressedCount
+    }
+  });
+}
+
+export function clearLatestErrorNoticeState(settingsJson: string | null): string | null {
+  const settings = parseSettingsJson(settingsJson);
+  if (!Object.prototype.hasOwnProperty.call(settings, "latestErrorNoticeState")) {
+    return settingsJson;
+  }
+
+  const { latestErrorNoticeState: _latestErrorNoticeState, ...nextSettings } = settings;
+  return JSON.stringify(nextSettings);
 }
 
 function activateQueuedPolymarket(database: BotDatabase, integration: Integration, now = new Date()): Integration {
@@ -673,7 +838,13 @@ function logSchedulerError(error: unknown): void {
   }
 
   const message = formatSchedulerNetworkError(error);
-  const decision = getErrorNoticeDecision(schedulerErrorNotice, message, Date.now(), schedulerErrorNoticeWindowMs);
+  const decision = getErrorNoticeDecision(
+    schedulerErrorNotice,
+    message,
+    Date.now(),
+    schedulerErrorNoticeWindowMs,
+    getErrorNoticeSignature(error)
+  );
   schedulerErrorNotice = decision.nextState;
   if (decision.shouldSend) {
     console.error(`Poll scheduler error: ${decision.message}`);

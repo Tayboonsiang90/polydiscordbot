@@ -5,18 +5,21 @@ export type ErrorNoticeState = {
 };
 
 export const defaultRepeatedErrorNoticeWindowMs = 30 * 60_000;
+export const transientRepeatedErrorNoticeWindowMs = 6 * 60 * 60_000;
+export const transientNetworkErrorSignature = "transient-network-error";
 
 export function getErrorNoticeDecision(
   existing: ErrorNoticeState | undefined,
   message: string,
   nowMs: number,
-  windowMs = defaultRepeatedErrorNoticeWindowMs
+  windowMs = defaultRepeatedErrorNoticeWindowMs,
+  signature = message
 ): { shouldSend: boolean; message: string; nextState: ErrorNoticeState } {
-  if (!existing || existing.signature !== message) {
+  if (!existing || existing.signature !== signature) {
     return {
       shouldSend: true,
       message,
-      nextState: { signature: message, sentAtMs: nowMs, suppressedCount: 0 }
+      nextState: { signature, sentAtMs: nowMs, suppressedCount: 0 }
     };
   }
 
@@ -36,12 +39,16 @@ export function getErrorNoticeDecision(
   return {
     shouldSend: true,
     message: `${message}${suppressedSummary}`,
-    nextState: { signature: message, sentAtMs: nowMs, suppressedCount: 0 }
+    nextState: { signature, sentAtMs: nowMs, suppressedCount: 0 }
   };
 }
 
 export function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export function getErrorNoticeSignature(error: unknown): string {
+  return isTransientNetworkError(error) ? transientNetworkErrorSignature : formatErrorMessage(error);
 }
 
 export function formatSchedulerNetworkError(error: unknown): string {
@@ -55,8 +62,19 @@ export function isTransientNetworkError(error: unknown): boolean {
   const message = formatErrorMessage(error).toLowerCase();
   return (
     codes.some((code) =>
-      ["EAI_AGAIN", "ECONNRESET", "ECONNABORTED", "EHOSTUNREACH", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].includes(code)
+      [
+        "ABORT_ERR",
+        "EAI_AGAIN",
+        "ECONNRESET",
+        "ECONNABORTED",
+        "EHOSTUNREACH",
+        "ETIMEDOUT",
+        "UND_ERR_ABORTED",
+        "UND_ERR_CONNECT_TIMEOUT"
+      ].includes(code)
     ) ||
+    message.includes("aborterror") ||
+    message.includes("aborted") ||
     message.includes("eai_again") ||
     message.includes("timeout") ||
     message.includes("timed out") ||

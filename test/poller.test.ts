@@ -1,16 +1,40 @@
-﻿import { describe, expect, it } from "vitest";
+﻿import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { BotDatabase } from "../src/database.js";
 import {
+  clearLatestErrorNoticeState,
+  formatErrorNoticeDiscordMessage,
   getDueSnapshotDate,
   getEffectivePollIntervalMinutes,
   getErrorNoticeDecision,
+  getErrorNoticeSignature,
+  getLatestErrorNoticeState,
   getLatestErrorMessageId,
   getPollIntervalReason,
   formatSchedulerNetworkError,
   hasValueChanged,
+  PollScheduler,
+  setLatestErrorNoticeState,
   setLatestErrorMessageId,
   selectNewEventPosts
 } from "../src/poller.js";
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "../src/integrations/types.js";
+
+let tempDir: string | null = null;
+
+afterEach(() => {
+  if (tempDir) {
+    rmSync(tempDir, { recursive: true, force: true });
+    tempDir = null;
+  }
+});
+
+function createTestDatabase(): BotDatabase {
+  tempDir = mkdtempSync(join(tmpdir(), "polybot-poller-"));
+  return new BotDatabase(join(tempDir, "bot.sqlite"));
+}
 
 const snapshotIntegration: Integration = {
   id: 1,
@@ -104,6 +128,32 @@ describe("getErrorNoticeDecision", () => {
     expect(second.message).toBe("HTTP 503");
     expect(second.nextState.signature).toBe("HTTP 503");
   });
+
+  it("suppresses transient errors with different fetch wording when the signature matches", () => {
+    const first = getErrorNoticeDecision(
+      undefined,
+      "Request failed for https://fred.stlouisfed.org/graph/fredgraph.csv?id=APU0000703112: The operation was aborted due to timeout",
+      1_000,
+      6 * 60 * 60_000,
+      "transient-network-error"
+    );
+    const second = getErrorNoticeDecision(
+      first.nextState,
+      "The operation was aborted.",
+      60 * 60_000,
+      6 * 60 * 60_000,
+      "transient-network-error"
+    );
+
+    expect(second.shouldSend).toBe(false);
+    expect(second.nextState.suppressedCount).toBe(1);
+  });
+});
+
+describe("getErrorNoticeSignature", () => {
+  it("normalizes aborted fetch errors as transient network errors", () => {
+    expect(getErrorNoticeSignature(new Error("The operation was aborted."))).toBe("transient-network-error");
+  });
 });
 
 describe("latest error message settings", () => {
@@ -115,6 +165,115 @@ describe("latest error message settings", () => {
       period: { year: 2026, month: 5 },
       latestErrorMessageId: "message-2"
     });
+  });
+
+  it("stores and clears repeated error notice state without removing adapter settings", () => {
+    const state = { signature: "transient-network-error", sentAtMs: Date.parse("2026-05-29T03:06:27.000Z"), suppressedCount: 2 };
+    const settingsJson = setLatestErrorNoticeState(JSON.stringify({ period: { year: 2026, month: 5 } }), state);
+
+    expect(getLatestErrorNoticeState(settingsJson)).toEqual(state);
+    expect(JSON.parse(settingsJson)).toMatchObject({
+      period: { year: 2026, month: 5 },
+      latestErrorNoticeState: {
+        signature: "transient-network-error",
+        sentAt: "2026-05-29T03:06:27.000Z",
+        suppressedCount: 2
+      }
+    });
+
+    expect(JSON.parse(clearLatestErrorNoticeState(settingsJson) ?? "{}")).toEqual({ period: { year: 2026, month: 5 } });
+  });
+});
+
+describe("check failed Discord message delivery", () => {
+  it("formats suppressed updates for an existing check-failed post", () => {
+    const message = formatErrorNoticeDiscordMessage("The operation was aborted.", {
+      shouldSend: false,
+      message: "The operation was aborted.",
+      nextState: { signature: "transient-network-error", sentAtMs: Date.now(), suppressedCount: 3 }
+    });
+
+    expect(message).toContain("The operation was aborted.");
+    expect(message).toContain("Repeated failure update: 3 repeated error(s)");
+  });
+
+  it("edits the tracked check-failed post instead of sending another one", async () => {
+    const database = createTestDatabase();
+    const settingsJson = setLatestErrorNoticeState(setLatestErrorMessageId(null, "message-1"), {
+      signature: "transient-network-error",
+      sentAtMs: Date.now(),
+      suppressedCount: 0
+    });
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "eggs-channel",
+      adapterId: "fred-egg-price",
+      displayName: "FRED Egg Price",
+      sourceUrl: "https://fred.stlouisfed.org/series/APU0000708111",
+      polymarketUrl: "https://polymarket.com/event/price-of-dozen-eggs-in-april-799",
+      settingsJson,
+      pollIntervalMinutes: 60
+    });
+    const edit = vi.fn().mockResolvedValue({});
+    const send = vi.fn().mockResolvedValue({ id: "message-2" });
+    const fetch = vi.fn().mockResolvedValue({ edit });
+    const scheduler = new PollScheduler(
+      { channels: { fetch: vi.fn().mockResolvedValue({ send, messages: { fetch } }) } } as never,
+      database
+    ) as unknown as {
+      sendErrorIfDue(channelId: string, integration: Integration, error: unknown): Promise<void>;
+    };
+
+    await scheduler.sendErrorIfDue("eggs-channel", integration, new Error("The operation was aborted."));
+
+    expect(fetch).toHaveBeenCalledWith("message-1");
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+    database.close();
+  });
+
+  it("deletes older check-failed posts after updating the tracked one", async () => {
+    const database = createTestDatabase();
+    const settingsJson = setLatestErrorNoticeState(setLatestErrorMessageId(null, "message-1"), {
+      signature: "transient-network-error",
+      sentAtMs: Date.now(),
+      suppressedCount: 0
+    });
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "eggs-channel",
+      adapterId: "fred-egg-price",
+      displayName: "FRED Egg Price",
+      sourceUrl: "https://fred.stlouisfed.org/series/APU0000708111",
+      polymarketUrl: "https://polymarket.com/event/price-of-dozen-eggs-in-april-799",
+      settingsJson,
+      pollIntervalMinutes: 60
+    });
+    const edit = vi.fn().mockResolvedValue({});
+    const staleDelete = vi.fn().mockResolvedValue({});
+    const otherDelete = vi.fn().mockResolvedValue({});
+    const messagesPage = {
+      values: () =>
+        [
+          { id: "message-1", embeds: [{ title: "FRED Egg Price - Check failed" }], delete: vi.fn() },
+          { id: "message-old", embeds: [{ title: "FRED Egg Price - Check failed" }], delete: staleDelete },
+          { id: "message-other", embeds: [{ title: "Bonbast USD/IRR - Check failed" }], delete: otherDelete }
+        ].values()
+    };
+    const fetch = vi.fn().mockImplementation(async (input: unknown) => (typeof input === "string" ? { edit } : messagesPage));
+    const scheduler = new PollScheduler(
+      { channels: { fetch: vi.fn().mockResolvedValue({ send: vi.fn(), messages: { fetch } }) } } as never,
+      database
+    ) as unknown as {
+      sendErrorIfDue(channelId: string, integration: Integration, error: unknown): Promise<void>;
+    };
+
+    await scheduler.sendErrorIfDue("eggs-channel", integration, new Error("The operation was aborted."));
+
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(staleDelete).toHaveBeenCalledTimes(1);
+    expect(otherDelete).not.toHaveBeenCalled();
+    database.close();
   });
 });
 
