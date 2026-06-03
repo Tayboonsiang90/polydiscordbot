@@ -6,6 +6,7 @@ import type {
   WebsiteAdapter
 } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import { getEthGetLogsChunkBlocks } from "../rpcProviders.js";
 
 export const polymarketBulletinBoardAddress = "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7";
 export const polymarketBulletinBoardSourceUrl = `https://polygonscan.com/address/${polymarketBulletinBoardAddress}`;
@@ -469,8 +470,9 @@ async function fetchAncillaryDataUpdateLogs(
 ): Promise<PolygonRpcResult<PolygonLog[]>> {
   const logs: PolygonLog[] = [];
   let activeRpcUrl = preferredRpcUrl;
-  for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += rpcLogChunkBlocks) {
-    const chunkTo = Math.min(toBlock, chunkFrom + rpcLogChunkBlocks - 1);
+  const chunkBlocks = getEthGetLogsChunkBlocks(activeRpcUrl ?? rpcUrls[0], rpcLogChunkBlocks);
+  for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += chunkBlocks) {
+    const chunkTo = Math.min(toBlock, chunkFrom + chunkBlocks - 1);
     const response = await fetchAncillaryDataUpdateLogRange(rpcUrls, chunkFrom, chunkTo, activeRpcUrl);
     activeRpcUrl = response.rpcUrl;
     logs.push(...response.result);

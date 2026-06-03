@@ -1,6 +1,7 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import { fetchWithTimeout } from "../http.js";
 import { enrichEventPostAddressProfiles, updateAddressLabelsInSettingsJson } from "../addressLabels.js";
+import { getEthGetLogsChunkBlocks } from "../rpcProviders.js";
 import {
   defaultPolygonRpcUrl,
   defaultPolygonRpcUrls,
@@ -342,8 +343,9 @@ async function fetchDisputeLogs(
 ): Promise<PolygonRpcResult<PolygonLog[]>> {
   const logs: PolygonLog[] = [];
   let activeRpcUrl = preferredRpcUrl;
-  for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += rpcLogChunkBlocks) {
-    const chunkTo = Math.min(toBlock, chunkFrom + rpcLogChunkBlocks - 1);
+  const chunkBlocks = getEthGetLogsChunkBlocks(activeRpcUrl ?? rpcUrls[0], rpcLogChunkBlocks);
+  for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += chunkBlocks) {
+    const chunkTo = Math.min(toBlock, chunkFrom + chunkBlocks - 1);
     for (const oracleAddress of optimisticOracleAddresses) {
       const response = await fetchDisputeLogRange(rpcUrls, oracleAddress, chunkFrom, chunkTo, activeRpcUrl);
       activeRpcUrl = response.rpcUrl;
