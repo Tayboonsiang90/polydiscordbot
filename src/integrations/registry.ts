@@ -7,6 +7,7 @@ import { awsDisruptedAdapter } from "./awsDisrupted.js";
 import { basedRevenueAdapter } from "./basedRevenue.js";
 import { beaCurrentReleasesAdapter } from "./beaCurrentReleases.js";
 import { biJisdorAdapter } from "./biJisdor.js";
+import { billboard200Adapter } from "./billboard200.js";
 import { blsCpiReleasesAdapter } from "./blsCpiReleases.js";
 import { blsJobsAddedAdapter } from "./blsJobsAdded.js";
 import { bonbastUsdIrrAdapter } from "./bonbast.js";
@@ -83,6 +84,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [basedRevenueAdapter.id, basedRevenueAdapter],
   [beaCurrentReleasesAdapter.id, beaCurrentReleasesAdapter],
   [biJisdorAdapter.id, biJisdorAdapter],
+  [billboard200Adapter.id, billboard200Adapter],
   [blsCpiReleasesAdapter.id, blsCpiReleasesAdapter],
   [blsJobsAddedAdapter.id, blsJobsAddedAdapter],
   [bonbastUsdIrrAdapter.id, bonbastUsdIrrAdapter],

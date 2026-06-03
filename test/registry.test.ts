@@ -11,6 +11,7 @@ const expectedCommandIds = [
   ["basedrevenue", "based-revenue"],
   ["bea", "bea-current-releases"],
   ["jisdor", "bi-jisdor-usd-idr"],
+  ["billboard200", "billboard-200-number-one-album"],
   ["blscpi", "bls-cpi-releases"],
   ["jobsadded", "bls-jobs-added"],
   ["bonbast", "bonbast-usd-irr"],
@@ -144,6 +145,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("dchomevalue").getPollIntervalMinutes?.({} as never, new Date("2026-06-30T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("nychomevalue").getPollIntervalMinutes?.({} as never, new Date("2026-06-30T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("pboc").getPollIntervalMinutes?.({} as never)).toBe(15);
+    expect(getAdapterByCommandName("billboard200").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("billboard200").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("whitehousetweets").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("whbriefings").getPollIntervalMinutes?.({} as never)).toBe(15);
