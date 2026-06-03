@@ -23,6 +23,7 @@ const transactionHash = "0x33333333333333333333333333333333333333333333333333333
 const ancillaryData = "q: title: Trump kiss by May 31?, description: Rules. market_id: 2261347";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   testOnlyAddressLabelHelpers.resetProfileCache();
@@ -178,6 +179,8 @@ describe("fetchPolymarketDisputeUpdates", () => {
       disputer,
       disputerProfile: expect.objectContaining({ address: disputer, linkedProfile: false, hasTrades: false })
     });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(result.posts[0].postedAt.getTime() + 5_000));
     const embedFields = buildEventPostEmbed(
       buildIntegration(
         JSON.stringify({
@@ -189,10 +192,11 @@ describe("fetchPolymarketDisputeUpdates", () => {
       ),
       result.posts[0]
     )[0].data.fields ?? [];
-    expect(embedFields.slice(0, 8).map((field) => field.name)).toEqual([
+    expect(embedFields.slice(0, 9).map((field) => field.name)).toEqual([
       "Question",
       "Proposed outcome",
       "Posted at (SGT)",
+      "Notification latency",
       "Posted at (ET)",
       "Market tags",
       "Proposer",
@@ -206,6 +210,11 @@ describe("fetchPolymarketDisputeUpdates", () => {
       inline: false
     });
     expect(embedFields[1]).toEqual({ name: "Proposed outcome", value: "**NO (0)**", inline: false });
+    expect(embedFields[3]).toEqual({
+      name: "Notification latency",
+      value: "5 seconds after block timestamp",
+      inline: true
+    });
     expect(embedFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

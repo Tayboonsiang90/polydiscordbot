@@ -362,6 +362,7 @@ export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
 }
 
 export function buildEventPostEmbed(integration: Integration, post: EventMonitorPost): EmbedBuilder[] {
+  const alertSentAt = new Date();
   const hasStrike = post.matchedTerms.length > 0;
   const hasImages = post.imageUrls.length > 0;
   const imageAttachmentNames = (post.imageAttachments ?? [])
@@ -374,7 +375,7 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
   const sourceLabel = post.sourceLabel ?? "Truth Social";
   const eventFields = [
     ...(hasStrike ? [{ name: "STRIKE HIT", value: formatMatchedStrikeTerms(post.matchedTerms), inline: false }] : []),
-    ...formatPrioritySummaryFields(integration, post),
+    ...formatPrioritySummaryFields(integration, post, alertSentAt),
     ...(post.summaryFields ?? []).map((field) => ({
       name: field.name,
       value: truncateEmbedValue(field.value),
@@ -385,6 +386,7 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
       : [
           { name: "Event type", value: post.type, inline: true },
           { name: "Posted at", value: formatSingaporeDateTime(post.postedAt), inline: false },
+          ...formatNotificationLatencyFields(post, alertSentAt),
           { name: sourceLabel, value: post.url, inline: false }
         ]),
     ...(post.fields ?? []).map((field) => ({
@@ -424,7 +426,7 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
     baseEmbed(integration, title)
       .setColor(hasStrike ? errorColor : successColor)
       .addFields(eventFields)
-      .setFooter({ text: `Alert sent at ${nowSingaporeDateTime()}` })
+      .setFooter({ text: `Alert sent at ${formatSingaporeDateTime(alertSentAt)}` })
   ];
 
   if (imageAttachmentNames.length) {
@@ -516,7 +518,8 @@ export function buildAddressLabelModalCustomId(integrationId: number, role: Addr
 
 function formatPrioritySummaryFields(
   integration: Integration,
-  post: EventMonitorPost
+  post: EventMonitorPost,
+  alertSentAt: Date
 ): Array<{ name: string; value: string; inline: boolean }> {
   const summary = post.prioritySummary;
   if (!summary) {
@@ -553,6 +556,7 @@ function formatPrioritySummaryFields(
     ...(summary.proposalExpirationAt
       ? [{ name: expirationSgtLabel, value: formatSingaporeDateTime(summary.proposalExpirationAt), inline: true }]
       : []),
+    ...formatNotificationLatencyFields(post, alertSentAt),
     { name: postedAtEtLabel, value: formatEasternDateTime(post.postedAt), inline: true },
     ...(summary.proposalExpirationAt
       ? [{ name: expirationEtLabel, value: formatEasternDateTime(new Date(summary.proposalExpirationAt)), inline: true }]
@@ -571,6 +575,42 @@ function formatPrioritySummaryFields(
     ...(summary.clarification ? [{ name: "Clarification", value: summary.clarification, inline: false }] : []),
     ...(summary.creator ? [{ name: "Creator", value: summary.creator, inline: false }] : [])
   ].map((field) => ({ ...field, value: truncateEmbedValue(field.value) }));
+}
+
+function formatNotificationLatencyFields(
+  post: EventMonitorPost,
+  alertSentAt: Date
+): Array<{ name: string; value: string; inline: boolean }> {
+  if (!shouldShowChainNotificationLatency(post)) {
+    return [];
+  }
+
+  return [
+    {
+      name: "Notification latency",
+      value: formatNotificationLatency(post.postedAt, alertSentAt),
+      inline: true
+    }
+  ];
+}
+
+function shouldShowChainNotificationLatency(post: EventMonitorPost): boolean {
+  return [
+    "Polymarket clarification",
+    "Polymarket UMA proposal",
+    "Polymarket UMA dispute",
+    "UMA vote commit",
+    "UMA vote recommit",
+    "UMA vote commits",
+    "UMA vote commits/recommits",
+    "UMA vote reveal",
+    "UMA vote reveals"
+  ].includes(post.type);
+}
+
+function formatNotificationLatency(blockchainTimestamp: Date, alertSentAt: Date): string {
+  const seconds = Math.max(0, Math.round((alertSentAt.getTime() - blockchainTimestamp.getTime()) / 1_000));
+  return `${seconds.toLocaleString("en-US")} ${seconds === 1 ? "second" : "seconds"} after block timestamp`;
 }
 
 export function buildSnapshotCapturedEmbed(result: SnapshotResult): EmbedBuilder {

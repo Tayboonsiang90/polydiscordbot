@@ -24,6 +24,7 @@ const creator = "0x91430cad2d3975766499717fa0d66a78d814e5c5";
 const transactionHash = "0xfd8e083f7ba43f100f5d662979bdd1a4d5726d626b1f2f47ddeb7bd3fe7fc988";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
@@ -88,18 +89,26 @@ describe("Polymarket clarification parsing", () => {
       creator,
       clarification: "We are aware of the dispute on this market."
     });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(post.postedAt.getTime() + 3_000));
     const embedFields = buildEventPostEmbed(
       buildIntegration(JSON.stringify({ addressLabels: [{ address: creator, label: "Polymarket Creator" }] })),
       post
     )[0].data.fields ?? [];
-    expect(embedFields.slice(0, 6).map((field) => field.name)).toEqual([
+    expect(embedFields.slice(0, 7).map((field) => field.name)).toEqual([
       "Question",
       "Posted at (SGT)",
+      "Notification latency",
       "Posted at (ET)",
       "Clarification",
       "Creator",
       "Event type"
     ]);
+    expect(embedFields[2]).toEqual({
+      name: "Notification latency",
+      value: "3 seconds after block timestamp",
+      inline: true
+    });
     expect(embedFields[0]).toEqual({
       name: "Question",
       value:
