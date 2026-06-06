@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import {
   Client,
   Events,
@@ -21,6 +23,8 @@ import { UmaDisputeSubscriber } from "./umaDisputeSubscriber.js";
 import { UmaProposalSubscriber } from "./umaProposalSubscriber.js";
 
 const heartbeatIntervalMs = 10 * 60 * 1000;
+const heartbeatPath = process.env.BOT_HEARTBEAT_PATH ?? ".health/bot-heartbeat.json";
+const startedAt = new Date().toISOString();
 const config = loadConfig();
 const database = new BotDatabase(config.databasePath);
 const client = new Client({
@@ -42,6 +46,7 @@ const runtimeGitCommit = getRuntimeGitCommit();
 client.once(Events.ClientReady, (readyClient) => {
   try {
     console.log(`Logged in as ${readyClient.user.tag} at ${new Date().toISOString()} (commit ${runtimeGitCommit}, pid ${process.pid})`);
+    writeHeartbeat(readyClient.user.tag);
     provisioner = new IntegrationProvisioner(client, database, config);
     provisioner.start();
     new PollScheduler(client, database).start();
@@ -64,6 +69,7 @@ client.once(Events.ClientReady, (readyClient) => {
       console.error("UMA proposal subscriber startup failed:", error);
     }
     heartbeatTimer = setInterval(() => {
+      writeHeartbeat(readyClient.user.tag);
       console.log(`Heartbeat: ${readyClient.user.tag} alive at ${new Date().toISOString()}`);
     }, heartbeatIntervalMs);
     heartbeatTimer.unref();
@@ -192,5 +198,28 @@ function getRuntimeGitCommit(): string {
     }).trim();
   } catch {
     return "unknown";
+  }
+}
+
+function writeHeartbeat(userTag: string): void {
+  const absolutePath = resolve(heartbeatPath);
+  const tempPath = `${absolutePath}.${process.pid}.tmp`;
+  const now = new Date();
+  const payload = {
+    status: "ready",
+    userTag,
+    commit: runtimeGitCommit,
+    pid: process.pid,
+    startedAt,
+    heartbeatAt: now.toISOString(),
+    uptimeSeconds: Math.round(process.uptime())
+  };
+
+  try {
+    mkdirSync(dirname(absolutePath), { recursive: true });
+    writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    renameSync(tempPath, absolutePath);
+  } catch (error) {
+    console.error("Failed to write heartbeat file:", error);
   }
 }

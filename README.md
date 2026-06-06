@@ -109,7 +109,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and stale dated URLs are cleared when no queued or undated market is active.
-- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
+- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 
@@ -127,6 +127,10 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    DISCORD_GUILD_ID=...
    DATABASE_PATH=data/bot.sqlite
    DEFAULT_POLL_INTERVAL_MINUTES=5
+   BOT_HEARTBEAT_PATH=.health/bot-heartbeat.json
+   DISCORD_HEALTH_WEBHOOK_URL=...
+   BOT_HEARTBEAT_MAX_AGE_SECONDS=900
+   HEALTHCHECKS_PING_URL=...
    DUNE_API_KEY=...
    KAITO_INFOMARKETS_API_URL=...
    KAITO_API_KEY=...
@@ -134,10 +138,8 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    POLYGON_RPC_URLS=...
    POLYGON_WS_URL=...
    ETHEREUM_RPC_URL=...
-  ETHEREUM_RPC_URLS=...
-  X_BEARER_TOKEN=...
-   WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://xcancel.com/WhiteHouse/rss
-   WHITE_HOUSE_TWEETS_ALLOW_NITTER_FALLBACK=true
+   ETHEREUM_RPC_URLS=...
+   WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://nitter.net/WhiteHouse/rss,https://xcancel.com/WhiteHouse/rss
    ```
 
    `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback.
@@ -197,11 +199,43 @@ Use `/bonbast polymarket` once per market so future alerts include a clickable P
 The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.
 Use `/bonbast clear` to clear the current integration channel. You and the bot both need `Manage Messages`.
 
+## Raspberry Pi Health Alerts
+
+The bot writes a heartbeat file while it is logged in and healthy. An external watchdog script can run from cron and post to a Discord webhook when the service is down, the heartbeat is stale, the Pi reboots, or recent service logs show startup/network/runtime failures.
+
+Create a private Discord status channel, create a webhook for that channel, then add this to `.env` on the Pi:
+
+```bash
+BOT_HEARTBEAT_PATH=.health/bot-heartbeat.json
+BOT_HEARTBEAT_MAX_AGE_SECONDS=900
+DISCORD_HEALTH_WEBHOOK_URL=https://discord.com/api/webhooks/...
+HEALTHCHECKS_PING_URL=https://hc-ping.com/your-uuid
+```
+
+Install the watchdog cron job on the Pi:
+
+```bash
+cd /home/financegeek/apps/discord-bot
+mkdir -p .health
+chmod +x scripts/rpi-discord-watchdog.sh
+(crontab -l 2>/dev/null; echo '* * * * * cd /home/financegeek/apps/discord-bot && ./scripts/rpi-discord-watchdog.sh >> .health/watchdog-cron.log 2>&1') | crontab -
+```
+
+Manual test:
+
+```bash
+cd /home/financegeek/apps/discord-bot
+./scripts/rpi-discord-watchdog.sh
+tail -n 20 .health/watchdog.log
+```
+
+This local watchdog cannot send a Discord webhook while the whole Pi or its internet connection is fully down. It will notify after reboot/recovery and will catch bot/service crashes, stale heartbeats, and recent `journalctl` errors. For true "Pi is unreachable" alerts, set `HEALTHCHECKS_PING_URL` from a Healthchecks.io check and configure that service to post missed-ping alerts into Discord.
+
 ## Polymarket URL Queue
 
 For most integrations, `/... polymarket url:<url>` appends or updates a queued Polymarket URL in `settingsJson.polymarketMarkets`. If the URL slug contains a date range such as `may-18-may-24`, the bot derives an ET window, keeps the current market active until the new window starts, switches automatically on the next poll/check, and prunes expired queued URLs after rollover. When no queued dated market is active and there is no undated fallback, the bot clears the active Polymarket URL so stale expired markets stop driving checks and reminders.
 
-If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. NYT Front Page, TSA, and USGS Earthquakes use the shared queue plus adapter-specific auto-discovery for upcoming weekly markets. Tesla Deliveries uses the shared queue plus adapter-specific auto-discovery for upcoming quarterly delivery markets. NCEI Tornadoes uses adapter-specific monthly windows with Gamma `endDate` because monthly markets overlap the next month until the NCEI release date.
+If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. NYT Front Page, TSA, USGS Earthquakes, and White House Full Lid use the shared queue plus adapter-specific auto-discovery for upcoming weekly markets. Tesla Deliveries uses the shared queue plus adapter-specific auto-discovery for upcoming quarterly delivery markets. NCEI Tornadoes uses adapter-specific monthly windows with Gamma `endDate` because monthly markets overlap the next month until the NCEI release date.
 
 Trump Truth and NYT Front Page also support:
 
@@ -307,7 +341,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Met Office London precipitation uses Heathrow stationdata as the official monthly row and Infoclimat Heathrow climatology as daily cumulative alpha before the Met Office row appears.
 - White House Alien Arrests NYC reads the embedded Flourish table on `whitehouse.gov/aliens` and exact-matches the `New York, NY` row's `Total Arrests` counter.
 - White House Full Lid monitors Roll Call's Factba.se calendar and Forth's WH pool page for today's ET full lid; it polls every minute during 8:00 AM-8:30 PM ET and hourly off-hours.
-- White House X Posts uses the official X API when `X_BEARER_TOKEN` is set; otherwise it falls back to Nitter/XCancel RSS feeds such as `WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://xcancel.com/WhiteHouse/rss`. It polls every 5 minutes, keeps a monotonic captured-post set, auto-discovers overlapping weekly Polymarket markets, and sends role-tagged hourly summaries only when newly captured posts exist. RSS fallback is free but less authoritative and can miss deleted posts if the feed never exposes them before removal.
+- White House X Posts uses The Trump Feed public archive for unauthenticated `@WhiteHouse` X posts, filtering out `@POTUS` posts from the shared `potus-x` feed. If that source fails, it falls back to Nitter/XCancel RSS feeds such as `WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://nitter.net/WhiteHouse/rss,https://xcancel.com/WhiteHouse/rss`. It polls every 5 minutes, keeps a monotonic captured-post set, auto-discovers overlapping weekly Polymarket markets, rejects XCancel whitelist placeholders, and sends role-tagged hourly summaries only when newly captured posts exist. Public-source fallback is less authoritative than X itself and can miss deleted posts if no public archive exposes them before removal.
 - Register new adapters in `src/integrations/registry.ts`.
 - Give each adapter a unique `commandName` for its slash command.
 - Give each adapter a unique `alertRoleName` and `alertRoleEmoji`.
