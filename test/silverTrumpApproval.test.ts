@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractSilverApprovalUpDownReferenceDates,
   extractSilverTrumpApprovalValue,
   getSilverTrumpApprovalPollIntervalMinutes,
+  normalizeSilverApprovalSearchEvent,
   parseSilverApprovalRows,
   resolveSilverDatawrapperDatasetUrl,
-  silverTrumpApprovalShouldAlertOnChange
+  silverTrumpApprovalShouldAlertOnChange,
+  type SilverApprovalMarketMetadata
 } from "../src/integrations/silverTrumpApproval.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -65,6 +68,93 @@ describe("Silver Bulletin Trump approval adapter", () => {
     expect(silverTrumpApprovalShouldAlertOnChange(waiting, finalized)).toBe(true);
     expect(silverTrumpApprovalShouldAlertOnChange(waiting, waiting)).toBe(false);
   });
+
+  it("extracts Up/Down reference dates from Polymarket rules", () => {
+    expect(
+      extractSilverApprovalUpDownReferenceDates(
+        [
+          'This market will resolve to "Up" if Donald Trump\'s Silver Bulletin approval rating is higher on June 12, 2026, than on June 5, 2026.',
+          'This market will resolve to "Down" if Donald Trump\'s Silver Bulletin approval rating is higher on June 5, 2026, than on June 12, 2026.'
+        ].join("\n\n")
+      )
+    ).toEqual({ firstDate: "2026-06-05", secondDate: "2026-06-12" });
+  });
+
+  it("normalizes active Up/Down markets from Gamma search", () => {
+    expect(
+      normalizeSilverApprovalSearchEvent(
+        {
+          slug: "trump-approval-up-or-down-this-week-741",
+          title: "Trump approval Up or Down this week?",
+          description:
+            'This market will resolve to "Up" if Donald Trump\'s Silver Bulletin approval rating is higher on June 12, 2026, than on June 5, 2026.',
+          active: true,
+          closed: false,
+          archived: false,
+          startDate: "2026-06-05T19:56:28.556228Z"
+        },
+        new Date("2026-06-06T00:00:00.000Z")
+      )
+    ).toMatchObject({
+      slug: "trump-approval-up-or-down-this-week-741",
+      url: "https://polymarket.com/event/trump-approval-up-or-down-this-week-741",
+      kind: "up-down",
+      firstDate: "2026-06-05",
+      secondDate: "2026-06-12",
+      endAt: "2026-06-15T16:00:00.000Z"
+    });
+  });
+
+  it("returns a tentative Up result until the second reference date is finalized", () => {
+    const value = extractSilverTrumpApprovalValue(
+      [
+        "modeldate,approve,disapprove",
+        "5/29/2026,38.47689,57.855",
+        "6/5/2026,38.98804,57.45648"
+      ].join("\n"),
+      datasetUrl,
+      buildUpDownMarket("2026-05-29", "2026-06-05"),
+      new Date("2026-06-06T14:00:00.000Z")
+    );
+
+    expect(value).toContain("Status: tentative; waiting for a data point after 2026-06-05 to finalize");
+    expect(value).toContain("Result: Tentative Up");
+    expect(value).toContain("Comparison: 38.5% vs 39.0% after one-decimal rounding");
+  });
+
+  it("returns a final Up result once a later data point finalizes the second reference date", () => {
+    const value = extractSilverTrumpApprovalValue(
+      [
+        "modeldate,approve,disapprove",
+        "5/29/2026,38.47689,57.855",
+        "6/5/2026,38.98804,57.45648",
+        "6/6/2026,39.1,57.0"
+      ].join("\n"),
+      datasetUrl,
+      buildUpDownMarket("2026-05-29", "2026-06-05"),
+      new Date("2026-06-06T20:00:00.000Z")
+    );
+
+    expect(value).toContain("Status: finalized");
+    expect(value).toContain("Result: Final Up");
+  });
+
+  it("uses the most recent prior day when the first reference date is missing", () => {
+    const value = extractSilverTrumpApprovalValue(
+      [
+        "modeldate,approve,disapprove",
+        "5/28/2026,38.3,57.9",
+        "6/5/2026,38.98804,57.45648",
+        "6/6/2026,39.1,57.0"
+      ].join("\n"),
+      datasetUrl,
+      buildUpDownMarket("2026-05-29", "2026-06-05"),
+      new Date("2026-06-06T20:00:00.000Z")
+    );
+
+    expect(value).toContain("First reference: 2026-05-28 = 38.3% approval (fallback for missing 2026-05-29)");
+    expect(value).toContain("Result: Final Up");
+  });
 });
 
 function buildIntegration(lastValue: string | null = null): Integration {
@@ -91,5 +181,19 @@ function buildIntegration(lastValue: string | null = null): Integration {
     snapshotDate: null,
     createdAt: "2026-06-02T00:00:00.000Z",
     updatedAt: "2026-06-02T00:00:00.000Z"
+  };
+}
+
+function buildUpDownMarket(firstDate: string, secondDate: string): SilverApprovalMarketMetadata {
+  return {
+    slug: "trump-approval-up-or-down-this-week-741",
+    url: "https://polymarket.com/event/trump-approval-up-or-down-this-week-741",
+    kind: "up-down",
+    title: "Trump approval Up or Down this week?",
+    firstDate,
+    secondDate,
+    startAt: "2026-06-05T19:56:28.556Z",
+    endAt: "2026-06-08T16:00:00.000Z",
+    addedAt: "2026-06-05T19:56:28.556Z"
   };
 }
