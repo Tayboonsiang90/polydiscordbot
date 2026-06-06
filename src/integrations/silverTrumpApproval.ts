@@ -3,6 +3,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.natesilver.net/p/trump-approval-ratings-nate-silver-bulletin";
 const datawrapperChartUrl = "https://datawrapper.dwcdn.net/kSCt4/";
+const staticDatasetUrl = "https://static.dwcdn.net/data/kSCt4.csv";
 const targetDate = "2026-06-05";
 const easternTimeZone = "America/New_York";
 
@@ -25,15 +26,8 @@ export const silverTrumpApprovalAdapter: WebsiteAdapter = {
   getPollIntervalReason: getSilverTrumpApprovalPollIntervalReason,
   shouldAlertOnChange: silverTrumpApprovalShouldAlertOnChange,
   async fetchCurrentValue(): Promise<AdapterValue> {
-    const datasetUrl = await fetchLatestSilverApprovalDatasetUrl();
-    const response = await fetchWithTimeout(datasetUrl, {
-      headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
-    });
-    if (!response.ok) {
-      throw new Error(`Silver Bulletin Datawrapper dataset returned HTTP ${response.status}`);
-    }
-
-    const value = extractSilverTrumpApprovalValue(await response.text(), datasetUrl);
+    const { csv, datasetUrl } = await fetchSilverApprovalCsv();
+    const value = extractSilverTrumpApprovalValue(csv, datasetUrl);
     return {
       value,
       rawValue: extractRawApproval(value) ?? value,
@@ -148,10 +142,29 @@ export function silverTrumpApprovalShouldAlertOnChange(previousValue: string | n
   return currentValue.includes("Target status: finalized") && !(previousValue?.includes("Target status: finalized") ?? false);
 }
 
+async function fetchSilverApprovalCsv(): Promise<{ csv: string; datasetUrl: string }> {
+  const staticResponse = await fetchWithTimeout(staticDatasetUrl, {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  }, 10_000).catch(() => null);
+  if (staticResponse?.ok) {
+    return { csv: await staticResponse.text(), datasetUrl: staticDatasetUrl };
+  }
+
+  const datasetUrl = await fetchLatestSilverApprovalDatasetUrl();
+  const response = await fetchWithTimeout(datasetUrl, {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  }, 10_000);
+  if (!response.ok) {
+    throw new Error(`Silver Bulletin Datawrapper dataset returned HTTP ${response.status}`);
+  }
+
+  return { csv: await response.text(), datasetUrl };
+}
+
 async function fetchLatestSilverApprovalDatasetUrl(): Promise<string> {
   const response = await fetchWithTimeout(datawrapperChartUrl, {
     headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
-  });
+  }, 10_000);
   if (!response.ok) {
     throw new Error(`Silver Bulletin Datawrapper chart returned HTTP ${response.status}`);
   }
