@@ -31,6 +31,7 @@ const expectedCommandIds = [
   ["beef", "fred-ground-beef"],
   ["freeappstore", "free-app-store"],
   ["hkprecip", "hk-precip"],
+  ["ika", "ika-departures"],
   ["ismpmi", "ism-services-pmi"],
   ["kaitomindshare", "kaito-polymarket-mindshare"],
   ["kpopreleases", "apple-kpop-song-releases"],
