@@ -42,7 +42,6 @@ const expectedCommandIds = [
   ["tornadoes", "ncei-tornadoes"],
   ["nycprecip", "noaa-nyc-precip"],
   ["seattleprecip", "noaa-seattle-precip"],
-  ["nytfront", "nyt-front-page"],
   ["chatgptoutage", "openai-chatgpt-outages"],
   ["ornnb200", "ornn-b200-index"],
   ["ornnh100", "ornn-h100-index"],
@@ -125,7 +124,6 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("discord").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
-    expect(getAdapterByCommandName("nytfront").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();
     expect(getAdapterByCommandName("umaproposals").updateTagFilters).toBeDefined();
     expect(getAdapterByCommandName("umadispute").updateAddressLabels).toBeDefined();

@@ -37,7 +37,6 @@ import { nceiTornadoesAdapter } from "./nceiTornadoes.js";
 import { nasaGistempAdapter } from "./nasaGistemp.js";
 import { noaaNycPrecipAdapter } from "./noaaNycPrecip.js";
 import { noaaSeattlePrecipAdapter } from "./noaaSeattlePrecip.js";
-import { nytFrontPageAdapter } from "./nytFrontPage.js";
 import { openAiChatGptOutagesAdapter } from "./openAiChatGptOutages.js";
 import { ornnB200IndexAdapter } from "./ornnB200Index.js";
 import { ornnH100IndexAdapter } from "./ornnH100Index.js";
@@ -116,7 +115,6 @@ const adapters = new Map<string, WebsiteAdapter>([
   [nasaGistempAdapter.id, nasaGistempAdapter],
   [noaaNycPrecipAdapter.id, noaaNycPrecipAdapter],
   [noaaSeattlePrecipAdapter.id, noaaSeattlePrecipAdapter],
-  [nytFrontPageAdapter.id, nytFrontPageAdapter],
   [openAiChatGptOutagesAdapter.id, openAiChatGptOutagesAdapter],
   [ornnB200IndexAdapter.id, ornnB200IndexAdapter],
   [ornnH100IndexAdapter.id, ornnH100IndexAdapter],

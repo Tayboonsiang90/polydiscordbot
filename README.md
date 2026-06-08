@@ -10,7 +10,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
 - Alert roles are auto-created from registered adapters.
-- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Aligned Layer Sale, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, Bank Indonesia JISDOR USD/IDR, Billboard 200 #1 Album, Billboard Hot 100 #1 Song, BLS CPI Releases, BLS Jobs Added, CDC General Fertility Rate, CDC Flu Hospitalization Rate, CDC Measles Cases, Census Durable Goods Orders, ChatGPT Outage Days, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Parcl DC Metro Home Value, Parcl NYC Home Value, PBoC Rate Change, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, UMA Vote Commits, UMA Vote Reveals, UMA.rocks, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Silver Trump Approval, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Getty Photos, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, Volmex BVIV Low Strikes, Volmex EVIV High Strikes, White House Alien Arrests NYC, White House Briefings, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
+- Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Aligned Layer Sale, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, Bank Indonesia JISDOR USD/IDR, Billboard 200 #1 Album, Billboard Hot 100 #1 Song, BLS CPI Releases, BLS Jobs Added, CDC General Fertility Rate, CDC Flu Hospitalization Rate, CDC Measles Cases, Census Durable Goods Orders, ChatGPT Outage Days, Claude Code Commits, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, EIA Crude Oil SPR Stocks, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 2, Paid App Store Top 2, Parcl DC Metro Home Value, Parcl NYC Home Value, PBoC Rate Change, Powerball Jackpot, UMA Clarification Alerts, UMA Proposal Alerts, UMA Vote Commits, UMA Vote Reveals, UMA.rocks, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Silver Trump Approval, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Trump Getty Photos, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, USGS 5.5+ Earthquakes, Volmex BVIV Low Strikes, Volmex EVIV High Strikes, White House Alien Arrests NYC, White House Briefings, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
 
@@ -91,7 +91,12 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
 | `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
 | `ncei-tornadoes` | `/tornadoes` | `#tornadoes` | `NCEI Tornado Alerts` | `🌪️` | Monitors NCEI U.S. Tornadoes monthly time-series counts and auto-discovers monthly tornado markets. |
-| `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `📰` | Monitors the daily New York print front page, OCRs/highlights matched strike words, and scans the active weekly window on manual checks. |
+
+## Archived Integrations
+
+| Adapter ID | Former Command | Former Channel | Status | Notes |
+| --- | --- | --- | --- | --- |
+| `nyt-front-page` | `/nytfront` | `#nytfront` | Archived | Code remains in `src/integrations/nytFrontPage.ts` for future reactivation, but it is not registered, provisioned, commanded, or polled because there are no current NYT Front Page markets. |
 
 ## Agent Quick Context
 
@@ -109,7 +114,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and stale dated URLs are cleared when no queued or undated market is active.
-- Trump Truth, All-In Podcast, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
+- Trump Truth, All-In Podcast, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 
@@ -156,7 +161,7 @@ The bot invite needs `Manage Channels`, `Send Messages`, `View Channels`, `Manag
 
 The bot creates a channel for each registered adapter when it starts, then checks every minute for missing channels.
 
-Every integration uses the same command shape inside its own channel. Replace `/bonbast` below with that channel's command, for example `/trumptruth`, `/tsa`, `/mrbeastviews`, or `/nytfront`:
+Every integration uses the same command shape inside its own channel. Replace `/bonbast` below with that channel's command, for example `/trumptruth`, `/tsa`, or `/mrbeastviews`:
 
 - `/bonbast status`
 - `/bonbast check`
@@ -235,13 +240,12 @@ This local watchdog cannot send a Discord webhook while the whole Pi or its inte
 
 For most integrations, `/... polymarket url:<url>` appends or updates a queued Polymarket URL in `settingsJson.polymarketMarkets`. If the URL slug contains a date range such as `may-18-may-24`, the bot derives an ET window, keeps the current market active until the new window starts, switches automatically on the next poll/check, and prunes expired queued URLs after rollover. When no queued dated market is active and there is no undated fallback, the bot clears the active Polymarket URL so stale expired markets stop driving checks and reminders.
 
-If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. NYT Front Page, TSA, USGS Earthquakes, and White House Full Lid use the shared queue plus adapter-specific auto-discovery for upcoming weekly markets. Tesla Deliveries uses the shared queue plus adapter-specific auto-discovery for upcoming quarterly delivery markets. NCEI Tornadoes uses adapter-specific monthly windows with Gamma `endDate` because monthly markets overlap the next month until the NCEI release date.
+If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. TSA, USGS Earthquakes, and White House Full Lid use the shared queue plus adapter-specific auto-discovery for upcoming weekly markets. Tesla Deliveries uses the shared queue plus adapter-specific auto-discovery for upcoming quarterly delivery markets. NCEI Tornadoes uses adapter-specific monthly windows with Gamma `endDate` because monthly markets overlap the next month until the NCEI release date.
 
-Trump Truth and NYT Front Page also support:
+Trump Truth also supports:
 
 - `/trumptruth strikes`
 - `/trumptruth search term:King`
-- `/nytfront strikes`
 
 The `strikes` command force-refreshes Gamma-derived strike terms and then displays the currently active unresolved terms.
 The Trump Truth `search` command refreshes settings, searches the Trump Truth archive for a word or phrase inside the active weekly market's ET timeframe, and returns matching posts plus the source search URL.
@@ -285,7 +289,7 @@ The Free App Store and Paid App Store integrations run a separate daily snapshot
 
 The bot creates `#market-alert-roles` and posts grouped reaction selectors for market integration roles. It creates `#uma-alert-roles` for UMA clarification, proposal, and dispute alert roles. React to an alert emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing selector-message assignments, user reactions, and stored fallback emoji while adding missing bot reactions. Stale selector messages with user reactions are left in place instead of being deleted automatically.
 
-The Current Integrations table is the source of truth for each adapter's role name and emoji. Normal value-change alerts, daily snapshots, and market-end reminders mention the adapter alert role. Event-post integrations can be quieter: Trump Truth posts every new post but only mentions the role when a strike is detected, while NYT Front Page only posts alerts for strike matches.
+The Current Integrations table is the source of truth for each adapter's role name and emoji. Normal value-change alerts, daily snapshots, and market-end reminders mention the adapter alert role. Event-post integrations can be quieter: Trump Truth posts every new post but only mentions the role when a strike is detected.
 
 ## Integration Pattern
 
@@ -354,7 +358,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Trump Schedule monitors Roll Call's Factba.se calendar for today's ET public schedule, stores a compact daily digest with lid/travel/press/remarks flags, and polls every 15 minutes during 7:00 AM-10:00 PM ET.
 - Trump Truth uses the reachable `https://www.trumpstruth.org/feed` archive feed because direct Truth Social access is Cloudflare-blocked locally; alerts include original Truth Social URLs and an Open Truth link button for verification.
 - Trump Truth parses weekly Polymarket strike terms into `settingsJson`, stores the latest seen Truth Social post ID in `lastValue`, checks archive image descriptions, alt text, and basic OCR output for image-only strike review, auto-discovers upcoming weekly markets, supports active-window archive search with `/trumptruth search`, and only role-tags strike hits.
-- NYT Front Page auto-discovers active weekly NYT headline markets through Gamma search; scheduled polling checks the latest page, while `/nytfront check` scans every issue date in the active market window, forces each historical page image to its issue date, and posts highlighted matched pages.
+- NYT Front Page is archived because no new markets are currently expected; keep `src/integrations/nytFrontPage.ts` intact so it can be re-registered quickly if the market series returns.
 - TSA passengers parses the date range from the active Polymarket URL slug, sums official TSA daily checkpoint throughput rows for that range, and auto-discovers upcoming weekly TSA markets into the shared queue.
 - Generic dated Polymarket queueing lives in `src/polymarketQueue.ts`; prefer it over adapter-specific queue fields unless the adapter needs extra parsed market state.
 
