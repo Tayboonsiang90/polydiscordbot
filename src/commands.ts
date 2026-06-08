@@ -1,10 +1,13 @@
 ﻿import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction, type TextChannel } from "discord.js";
+import { buildArbitrageOutcomeSelectRow } from "./arbitrageControls.js";
 import type { BotDatabase } from "./database.js";
 import { AttachmentBuilder, type Attachment } from "discord.js";
 import type { Guild } from "discord.js";
 import type { Message } from "discord.js";
 import {
   buildAddressLabelsEmbed,
+  buildArbitrageSetupEmbed,
+  buildArbitrageWatchEmbed,
   buildClearEmbed,
   buildClearErrorsEmbed,
   buildCheckEmbed,
@@ -40,6 +43,8 @@ import { parseTrumpTruthSettings, upsertTrumpTruthPolymarketMarket } from "./int
 import type {
   AddressLabelAction,
   AddressLabelUpdateOptions,
+  ArbitrageSetupInput,
+  ArbitrageWatchSide,
   Integration,
   TagFilterAction,
   TagFilterEntry,
@@ -304,6 +309,84 @@ export function buildAdapterCommands() {
               .setMaxLength(40)
           )
       );
+    }
+
+    if (adapter.prepareArbitrageSetup || adapter.configureArbitrageWatch) {
+      command
+        .addSubcommand((subcommand) =>
+          subcommand
+            .setName("setup")
+            .setDescription("Start a guided cross-platform arbitrage watch setup")
+            .addStringOption((option) =>
+              option
+                .setName("urls")
+                .setDescription("Two or three platform URLs, separated by spaces or commas")
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(4096)
+            )
+            .addNumberOption((option) =>
+              option
+                .setName("amount")
+                .setDescription("Maximum USD/USDT amount to evaluate. Defaults to 25.")
+                .setRequired(false)
+                .setMinValue(1)
+            )
+            .addNumberOption((option) =>
+              option
+                .setName("min-edge")
+                .setDescription("Minimum after-fee edge percent, e.g. 0.5. Defaults to 0.5.")
+                .setRequired(false)
+                .setMinValue(0)
+            )
+        )
+        .addSubcommand((subcommand) =>
+          subcommand
+            .setName("watch")
+            .setDescription("Configure an arbitrage watch directly")
+            .addStringOption((option) =>
+              option
+                .setName("urls")
+                .setDescription("Two or three platform URLs, separated by spaces or commas")
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(4096)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("outcome")
+                .setDescription("Shared outcome to monitor, e.g. Discord or OpenAI")
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(120)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("side")
+                .setDescription("Side to monitor")
+                .setRequired(true)
+                .addChoices(
+                  { name: "YES", value: "YES" },
+                  { name: "NO", value: "NO" },
+                  { name: "BOTH", value: "BOTH" }
+                )
+            )
+            .addNumberOption((option) =>
+              option
+                .setName("amount")
+                .setDescription("Maximum USD/USDT amount to evaluate. Defaults to 25.")
+                .setRequired(false)
+                .setMinValue(1)
+            )
+            .addNumberOption((option) =>
+              option
+                .setName("min-edge")
+                .setDescription("Minimum after-fee edge percent, e.g. 0.5. Defaults to 0.5.")
+                .setRequired(false)
+                .setMinValue(0)
+            )
+        )
+        .addSubcommand((subcommand) => subcommand.setName("config").setDescription("Show the configured arbitrage watch"));
     }
 
     return command;
@@ -682,6 +765,65 @@ export async function handleAdapterCommand(
     return;
   }
 
+  if (subcommand === "setup") {
+    if (!adapter.prepareArbitrageSetup) {
+      await interaction.reply({ content: "This integration does not support arbitrage setup.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply();
+    const result = await adapter.prepareArbitrageSetup(integration, readArbitrageSetupInput(interaction));
+    const updated =
+      result.settingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, result.settingsJson)
+        : integration;
+    await interaction.editReply({
+      embeds: [buildArbitrageSetupEmbed(updated, result)],
+      components: buildArbitrageOutcomeSelectRow(updated, result)
+    });
+    return;
+  }
+
+  if (subcommand === "watch") {
+    if (!adapter.configureArbitrageWatch) {
+      await interaction.reply({ content: "This integration does not support arbitrage watches.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const side = readArbitrageWatchSide(interaction.options.getString("side", true));
+    await interaction.deferReply();
+    const result = await adapter.configureArbitrageWatch(integration, {
+      ...readArbitrageSetupInput(interaction),
+      outcome: interaction.options.getString("outcome", true).trim(),
+      side
+    });
+    const updated =
+      result.settingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, result.settingsJson)
+        : integration;
+    await interaction.editReply({ embeds: [buildArbitrageWatchEmbed(updated, result)] });
+    return;
+  }
+
+  if (subcommand === "config") {
+    if (!adapter.getArbitrageWatch) {
+      await interaction.reply({ content: "This integration does not support arbitrage watches.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const watch = adapter.getArbitrageWatch(integration);
+    await interaction.reply({
+      embeds: [
+        buildArbitrageWatchEmbed(integration, {
+          settingsJson: integration.settingsJson ?? "{}",
+          message: watch ? "Current arbitrage watch." : "No arbitrage watch configured. Run /arb setup or /arb watch.",
+          watch
+        })
+      ]
+    });
+    return;
+  }
+
   if (subcommand === "clear") {
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
       await interaction.reply({ content: "You need Manage Messages permission to clear this channel.", flags: MessageFlags.Ephemeral });
@@ -853,6 +995,28 @@ export function describeAdapterCommand(adapter: WebsiteAdapter): string {
 
 export function formatPolymarketLine(integration: Integration): string {
   return `Polymarket: ${integration.polymarketUrl ?? "not set"}`;
+}
+
+function readArbitrageSetupInput(interaction: ChatInputCommandInteraction): ArbitrageSetupInput {
+  const urls = interaction.options
+    .getString("urls", true)
+    .split(/[\s,]+/)
+    .map((url) => url.trim())
+    .filter(Boolean);
+  const amount = interaction.options.getNumber("amount") ?? undefined;
+  const minEdgePercent = interaction.options.getNumber("min-edge") ?? undefined;
+  return {
+    urls,
+    maxStakeUsd: amount,
+    minNetEdgeBps: minEdgePercent === undefined ? undefined : minEdgePercent * 100
+  };
+}
+
+function readArbitrageWatchSide(value: string): ArbitrageWatchSide {
+  if (value === "YES" || value === "NO" || value === "BOTH") {
+    return value;
+  }
+  throw new Error("Arbitrage side must be YES, NO, or BOTH.");
 }
 
 export function normalizePolymarketUrl(value: string): string | null {

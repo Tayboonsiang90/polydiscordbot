@@ -10,6 +10,7 @@ const fluSurvNetUrl = "https://gis.cdc.gov/grasp/fluview/fluhosprates.html";
 const defaultPolymarketUrl = "https://polymarket.com/event/flu-hospitalization-rate-week-20-2026";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const fluHospitalizationMarketSearchQuery = "flu hospitalization rate week";
+const fluHospitalizationMarketSearchTag = "flu";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 14 * 24 * 60 * 60_000;
@@ -339,6 +340,7 @@ async function fetchFluHospitalizationMarketSearchCandidates(): Promise<
   searchUrl.searchParams.set("q", fluHospitalizationMarketSearchQuery);
   searchUrl.searchParams.set("events_status", "active");
   searchUrl.searchParams.set("limit_per_type", "10");
+  searchUrl.searchParams.append("events_tag", fluHospitalizationMarketSearchTag);
 
   const response = await fetchWithTimeout(searchUrl.toString(), {
     headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }

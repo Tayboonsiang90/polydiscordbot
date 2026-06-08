@@ -7,6 +7,7 @@ import {
   formatNytHistoricalIssueRows,
   getNytFrontPageMarketIssueDates,
   parseNytFrontPageSettings,
+  refreshNytFrontPageSettings,
   refreshNytFrontPagePolymarketQueue
 } from "../src/integrations/nytFrontPage.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -280,6 +281,55 @@ describe("NYT front page adapter", () => {
     );
 
     expect(result.activeUrl).toBe("https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31");
+  });
+
+  it("seeds the queue from a legacy stored URL and clears it after that week expires", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ events: [] })
+      })
+    );
+
+    const result = await refreshNytFrontPagePolymarketQueue(
+      {
+        settingsJson: null,
+        polymarketUrl: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24"
+      } as Integration,
+      new Date("2026-06-03T02:04:30.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as { polymarketMarkets?: unknown[] };
+
+    expect(result.activeUrl).toBeNull();
+    expect(settings.polymarketMarkets).toEqual([]);
+  });
+
+  it("does not reuse expired NYT strike terms when no current market is active", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ events: [] })
+      })
+    );
+
+    const settings = await refreshNytFrontPageSettings(
+      {
+        settingsJson: JSON.stringify({
+          nytStrikeTerms: ["Ukraine"],
+          nytParsedFromUrl: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24",
+          nytLastParsedAt: "2026-05-24T00:00:00.000Z"
+        }),
+        polymarketUrl: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24"
+      } as Integration,
+      false,
+      new Date("2026-06-03T02:04:30.000Z")
+    );
+
+    expect(settings.nytStrikeTerms).toEqual([]);
+    expect(settings.nytParsedFromUrl).toBeUndefined();
+    expect(settings.polymarketMarkets).toEqual([]);
   });
 
   it("finds OCR boxes for single and multi-word strike terms", () => {

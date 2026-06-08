@@ -77,6 +77,9 @@ export async function getDueMarketEndReminders(
   if (!endAt) {
     return [];
   }
+  if (hasQueuedSuccessorMarket(integration, endAt)) {
+    return [];
+  }
 
   return reminders
     .map((reminder) => ({
@@ -276,15 +279,33 @@ function isMarketEndLookupBackedOff(polymarketUrl: string, now: Date): boolean {
 
 function getQueuedMarketEndAt(integration: Integration): Date | null {
   const settings = parseSettingsJson(integration.settingsJson);
-  const market = [...normalizeQueuedMarkets(settings.polymarketMarkets), ...normalizeQueuedMarkets(settings.markets)].find(
-    (candidate) => candidate.url === integration.polymarketUrl
-  );
+  const market = getQueuedMarkets(settings).find((candidate) => candidate.url === integration.polymarketUrl);
   if (!market?.endAt) {
     return null;
   }
 
   const endAt = new Date(market.endAt);
   return Number.isNaN(endAt.getTime()) ? null : endAt;
+}
+
+function hasQueuedSuccessorMarket(integration: Integration, currentEndAt: Date): boolean {
+  if (!integration.polymarketUrl) {
+    return false;
+  }
+
+  const settings = parseSettingsJson(integration.settingsJson);
+  return getQueuedMarkets(settings).some((market) => {
+    if (market.url === integration.polymarketUrl || !market.endAt) {
+      return false;
+    }
+
+    const endAt = new Date(market.endAt);
+    return !Number.isNaN(endAt.getTime()) && endAt.getTime() > currentEndAt.getTime();
+  });
+}
+
+function getQueuedMarkets(settings: Record<string, unknown>): Array<{ url: string; endAt: string | null }> {
+  return [...normalizeQueuedMarkets(settings.polymarketMarkets), ...normalizeQueuedMarkets(settings.markets)];
 }
 
 function normalizeQueuedMarkets(value: unknown): Array<{ url: string; endAt: string | null }> {

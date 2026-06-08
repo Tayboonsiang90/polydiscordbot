@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildWhiteHouseTweetsMonitorValue,
-  normalizeWhiteHouseTweetFromApi,
+  normalizeWhiteHouseTweetFromTrumpFeed,
   parseWhiteHouseTweetsNitterFeed,
   parseWhiteHouseTweetsMarketWindow,
   refreshWhiteHouseTweetsPolymarketQueue,
@@ -46,29 +46,31 @@ describe("White House X posts adapter", () => {
     });
   });
 
-  it("normalizes X API posts, quotes, and reposts while excluding replies", () => {
+  it("normalizes The Trump Feed public archive posts while excluding POTUS posts", () => {
     expect(
-      normalizeWhiteHouseTweetFromApi({
-        id: "1",
-        text: "quote",
-        created_at: "2026-05-29T13:00:00.000Z",
-        referenced_tweets: [{ type: "quoted", id: "quoted" }]
+      normalizeWhiteHouseTweetFromTrumpFeed({
+        id: 1,
+        platform: "potus-x",
+        authorHandle: "@WhiteHouse",
+        sourceUrl: "https://x.com/WhiteHouse/status/2061970387349426334",
+        postedAt: "2026-06-03T00:37:00.000Z",
+        contentText: "White House post"
       })
-    ).toMatchObject({ id: "1", type: "Quote" });
+    ).toEqual({
+      id: "2061970387349426334",
+      text: "White House post",
+      createdAt: "2026-06-03T00:37:00.000Z",
+      type: "Post",
+      url: "https://x.com/WhiteHouse/status/2061970387349426334"
+    });
     expect(
-      normalizeWhiteHouseTweetFromApi({
-        id: "2",
-        text: "rt",
-        created_at: "2026-05-29T13:01:00.000Z",
-        referenced_tweets: [{ type: "retweeted", id: "retweeted" }]
-      })
-    ).toMatchObject({ id: "2", type: "Repost" });
-    expect(
-      normalizeWhiteHouseTweetFromApi({
-        id: "3",
-        text: "reply",
-        created_at: "2026-05-29T13:02:00.000Z",
-        referenced_tweets: [{ type: "replied_to", id: "reply" }]
+      normalizeWhiteHouseTweetFromTrumpFeed({
+        id: 2,
+        platform: "potus-x",
+        authorHandle: "@POTUS",
+        sourceUrl: "https://x.com/POTUS/status/2061963830788305194",
+        postedAt: "2026-06-03T00:11:01.000Z",
+        contentText: "RT @WhiteHouse: repost"
       })
     ).toBeNull();
   });
@@ -103,22 +105,33 @@ describe("White House X posts adapter", () => {
     ]);
   });
 
-  it("falls back to Nitter/XCancel RSS when no X bearer token is configured", async () => {
-    vi.stubEnv("X_BEARER_TOKEN", "");
-    vi.stubEnv("TWITTER_BEARER_TOKEN", "");
-    vi.stubEnv("WHITE_HOUSE_TWEETS_NITTER_FEEDS", "https://xcancel.com/WhiteHouse/rss");
+  it("uses The Trump Feed public archive as the primary public source", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        text: async () => `
-          <rss><channel><item>
-            <title>The White House: feed post</title>
-            <link>https://xcancel.com/WhiteHouse/status/200</link>
-            <pubDate>Fri, 29 May 2026 13:00:00 GMT</pubDate>
-            <description>feed post</description>
-          </item></channel></rss>
-        `
+        text: async () =>
+          JSON.stringify({
+            posts: [
+              {
+                id: 1,
+                platform: "potus-x",
+                authorHandle: "@WhiteHouse",
+                sourceUrl: "https://x.com/WhiteHouse/status/200",
+                postedAt: "2026-05-29T13:00:00.000Z",
+                contentText: "feed post"
+              },
+              {
+                id: 2,
+                platform: "potus-x",
+                authorHandle: "@POTUS",
+                sourceUrl: "https://x.com/POTUS/status/201",
+                postedAt: "2026-05-29T13:01:00.000Z",
+                contentText: "POTUS post"
+              }
+            ],
+            totalPages: 1
+          })
       })
     );
 
@@ -128,7 +141,52 @@ describe("White House X posts adapter", () => {
     } as Integration);
 
     expect(result.value).toContain("Current total: 1");
-    expect(result.value).toContain("Capture source: Nitter/XCancel RSS");
+    expect(result.value).toContain("Capture source: The Trump Feed public archive");
+  });
+
+  it("skips XCancel whitelist placeholders and tries the backup RSS feed", async () => {
+    vi.stubEnv("WHITE_HOUSE_TWEETS_NITTER_FEEDS", "https://xcancel.com/WhiteHouse/rss");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        text: async () => "temporary failure"
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => `
+          <rss><channel>
+            <title>RSS reader not yet whitelisted!</title>
+            <item>
+              <title>RSS reader not yet whitelisted!</title>
+              <link>https://rss.xcancel.com/WhiteHouse/rss</link>
+              <pubDate>Mon, 01 January 1971 00:00:00 GMT</pubDate>
+            </item>
+          </channel></rss>
+        `
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => `
+          <rss><channel><item>
+            <title>The White House: backup feed post</title>
+            <link>https://nitter.net/WhiteHouse/status/201</link>
+            <pubDate>Fri, 29 May 2026 13:00:00 GMT</pubDate>
+            <description>backup feed post</description>
+          </item></channel></rss>
+        `
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await whiteHouseTweetsAdapter.fetchCurrentValue({
+      polymarketUrl: marketUrl,
+      lastValue: null
+    } as Integration);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.value).toContain("Current total: 1");
+    expect(result.value).toContain("https://x.com/WhiteHouse/status/201");
   });
 
   it("initializes a market count without creating a retroactive hourly alert", () => {

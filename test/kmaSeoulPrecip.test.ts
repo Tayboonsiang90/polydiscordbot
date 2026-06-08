@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractKmaAsosDailyPrecipitationRows,
   extractKmaSeoulPrecipitationValue,
   getKmaSeoulPrecipSettings,
-  isValidKmaPeriod
+  isKmaSeoulMonthlyPrecipitationPending,
+  isValidKmaPeriod,
+  summarizeKmaAsosDailyPrecipitationRows
 } from "../src/integrations/kmaSeoulPrecip.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -36,12 +39,53 @@ describe("KMA Seoul precipitation adapter", () => {
     const value = extractKmaSeoulPrecipitationValue(
       {
         code: "00",
-        data: [{ stnId: 108, stnNm: "서울", tma: "2026-05", sumRn: "18.0" }]
+        data: [{ stnId: 108, stnNm: "\uC11C\uC6B8", tma: "2026-05", sumRn: "18.0" }]
       },
       { year: 2026, month: 5 }
     );
 
     expect(value).toBe("18.0 mm (2026-05)");
+  });
+
+  it("detects a present Seoul monthly row with no monthly precipitation total", () => {
+    expect(
+      isKmaSeoulMonthlyPrecipitationPending({
+        code: "00",
+        data: [{ stnId: 108, stnNm: "\uC11C\uC6B8", tma: "2026-06" }]
+      })
+    ).toBe(true);
+  });
+
+  it("extracts KMA ASOS daily precipitation rows from the result page script", () => {
+    const rows = extractKmaAsosDailyPrecipitationRows(`
+      <script>
+        var egovMapList1 = '[{"RNUM":1,"SUM_RN":1.4,"STN_NM":"\\uC11C\\uC6B8","TM":"2026-06-01","STN_ID":108}]';
+      </script>
+    `);
+
+    expect(rows).toEqual([{ RNUM: 1, SUM_RN: 1.4, STN_NM: "\uC11C\uC6B8", TM: "2026-06-01", STN_ID: 108 }]);
+  });
+
+  it("sums KMA ASOS daily Seoul rainfall rows", () => {
+    const summary = summarizeKmaAsosDailyPrecipitationRows([
+      { STN_ID: 108, STN_NM: "\uC11C\uC6B8", TM: "2026-06-01", SUM_RN: 1.4 },
+      { STN_ID: 108, STN_NM: "\uC11C\uC6B8", TM: "2026-06-02", SUM_RN: "2.6" },
+      { STN_ID: 159, STN_NM: "Busan", TM: "2026-06-02", SUM_RN: 99 }
+    ]);
+
+    expect(summary).toEqual({
+      total: 4,
+      latestDate: "2026-06-02",
+      rowCount: 2
+    });
+  });
+
+  it("treats an empty KMA ASOS daily row list as zero rainfall", () => {
+    expect(summarizeKmaAsosDailyPrecipitationRows([])).toEqual({
+      total: 0,
+      latestDate: null,
+      rowCount: 0
+    });
   });
 
   it("reads stored year and month settings", () => {

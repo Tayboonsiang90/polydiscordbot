@@ -19,6 +19,7 @@ import { censusDurableGoodsAdapter } from "./censusDurableGoods.js";
 import { claudeCodeCommitsAdapter } from "./claudeCodeCommits.js";
 import { claudeDowntimeAdapter } from "./claudeDowntime.js";
 import { cloudflareCriticalAdapter } from "./cloudflareCritical.js";
+import { crossPlatformArbitrageAdapter } from "./crossPlatformArbitrage.js";
 import { discordCriticalAdapter } from "./discordCritical.js";
 import { eiaCrudeSprAdapter } from "./eiaCrudeSpr.js";
 import { fdicFailedBanksAdapter } from "./fdicFailedBanks.js";
@@ -96,6 +97,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [claudeCodeCommitsAdapter.id, claudeCodeCommitsAdapter],
   [claudeDowntimeAdapter.id, claudeDowntimeAdapter],
   [cloudflareCriticalAdapter.id, cloudflareCriticalAdapter],
+  [crossPlatformArbitrageAdapter.id, crossPlatformArbitrageAdapter],
   [discordCriticalAdapter.id, discordCriticalAdapter],
   [eiaCrudeSprAdapter.id, eiaCrudeSprAdapter],
   [fdicFailedBanksAdapter.id, fdicFailedBanksAdapter],

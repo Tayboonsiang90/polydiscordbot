@@ -107,7 +107,7 @@ export const nytFrontPageAdapter: WebsiteAdapter = {
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = integration ? await refreshNytFrontPageSettings(integration) : { nytParsedFromUrl: defaultPolymarketUrl };
     const strikeTerms = settings.nytStrikeTerms ?? [];
-    const post = await fetchLatestNytFrontPagePost(strikeTerms, settings.nytParsedFromUrl ?? integration?.polymarketUrl ?? defaultPolymarketUrl);
+    const post = await fetchLatestNytFrontPagePost(strikeTerms, getNytActivePolymarketUrl(settings, integration));
     const enriched = await enrichNytFrontPagePostWithOcr(post, strikeTerms);
     const value = formatNytFrontPageValue(enriched);
     return { value, rawValue: value, unit: "NYT New York print front page", observedAt: new Date() };
@@ -115,7 +115,7 @@ export const nytFrontPageAdapter: WebsiteAdapter = {
   async fetchEventUpdates(integration: Integration, options?: EventMonitorOptions): Promise<EventMonitorResult> {
     const settings = parseNytFrontPageSettings(integration.settingsJson);
     const strikeTerms = settings.nytStrikeTerms ?? [];
-    const polymarketUrl = settings.nytParsedFromUrl ?? integration.polymarketUrl ?? defaultPolymarketUrl;
+    const polymarketUrl = getNytActivePolymarketUrl(settings, integration);
     if (options?.historicalCheck) {
       return fetchHistoricalNytFrontPageCheck(strikeTerms, polymarketUrl);
     }
@@ -154,7 +154,11 @@ export async function refreshNytFrontPageSettings(
 ): Promise<Record<string, unknown> & NytFrontPageSettings> {
   const resolvedQueue = await refreshNytFrontPagePolymarketQueue(integration, now);
   const settings = parseRawSettings(resolvedQueue.settingsJson);
-  const polymarketUrl = resolvedQueue.activeUrl ?? integration.polymarketUrl ?? defaultPolymarketUrl;
+  const polymarketUrl = resolvedQueue.activeUrl ?? getNytLegacyFallbackPolymarketUrl(integration, resolvedQueue.settingsJson);
+  if (!polymarketUrl) {
+    return clearNytStrikeCache(settings);
+  }
+
   const lastParsedAt = typeof settings.nytLastParsedAt === "string" ? new Date(settings.nytLastParsedAt).getTime() : NaN;
   const shouldRefresh =
     force ||
@@ -186,7 +190,8 @@ export async function refreshNytFrontPagePolymarketQueue(
   integration: Integration,
   now: Date = new Date()
 ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
-  let resolved = resolveIntegrationPolymarketQueue(integration, now);
+  const queueIntegration = seedNytCurrentPolymarketUrl(integration, now);
+  let resolved = resolveIntegrationPolymarketQueue(queueIntegration, now);
   let settings = parseNytDiscoverySettings(resolved.settingsJson);
   if (!shouldDiscoverNytMarkets(settings, now)) {
     return resolved;
@@ -208,9 +213,9 @@ export async function refreshNytFrontPagePolymarketQueue(
 
       resolved = upsertPolymarketQueueUrl(
         {
-          ...integration,
+          ...queueIntegration,
           settingsJson: resolved.settingsJson,
-          polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
+          polymarketUrl: resolved.activeUrl
         },
         candidate.url,
         now
@@ -222,6 +227,54 @@ export async function refreshNytFrontPagePolymarketQueue(
   } catch {
     return resolved;
   }
+}
+
+function seedNytCurrentPolymarketUrl(integration: Integration, now: Date): Integration {
+  const settings = parseRawSettings(integration.settingsJson);
+  if (
+    Array.isArray(settings.polymarketMarkets) ||
+    !integration.polymarketUrl ||
+    !parsePolymarketDateRangeWindow(integration.polymarketUrl, now)
+  ) {
+    return integration;
+  }
+
+  const resolved = upsertPolymarketQueueUrl(integration, integration.polymarketUrl, now);
+  return {
+    ...integration,
+    settingsJson: resolved.settingsJson,
+    polymarketUrl: resolved.activeUrl
+  };
+}
+
+function getNytActivePolymarketUrl(settings: NytFrontPageSettings, integration?: Integration): string | undefined {
+  if (settings.nytParsedFromUrl) {
+    return settings.nytParsedFromUrl;
+  }
+
+  if (integration && Array.isArray(parseRawSettings(integration.settingsJson).polymarketMarkets)) {
+    return undefined;
+  }
+
+  return integration?.polymarketUrl ?? defaultPolymarketUrl;
+}
+
+function getNytLegacyFallbackPolymarketUrl(integration: Integration, settingsJson: string | null): string | null {
+  if (Array.isArray(parseRawSettings(settingsJson).polymarketMarkets)) {
+    return null;
+  }
+
+  return integration.polymarketUrl ?? defaultPolymarketUrl;
+}
+
+function clearNytStrikeCache(settings: Record<string, unknown> & NytFrontPageSettings): Record<string, unknown> & NytFrontPageSettings {
+  const next = { ...settings };
+  delete next.nytParsedFromUrl;
+  delete next.nytLastParsedAt;
+  return {
+    ...next,
+    nytStrikeTerms: []
+  };
 }
 
 export function parseNytFrontPageSettings(settingsJson: string | null): NytFrontPageSettings {
@@ -457,12 +510,16 @@ export async function enrichNytFrontPagePostWithOcr(post: EventMonitorPost, stri
   };
 }
 
-async function fetchLatestNytFrontPagePost(strikeTerms: string[], polymarketUrl: string): Promise<EventMonitorPost> {
+async function fetchLatestNytFrontPagePost(strikeTerms: string[], polymarketUrl?: string): Promise<EventMonitorPost> {
   const issueDate = await fetchLatestIssueDate();
   return fetchNytFrontPagePostForDate(issueDate, strikeTerms, polymarketUrl);
 }
 
-async function fetchHistoricalNytFrontPageCheck(strikeTerms: string[], polymarketUrl: string): Promise<EventMonitorResult> {
+async function fetchHistoricalNytFrontPageCheck(strikeTerms: string[], polymarketUrl: string | undefined): Promise<EventMonitorResult> {
+  if (!polymarketUrl) {
+    throw new Error("No active NYT Front Page Polymarket market is configured for the current ET date.");
+  }
+
   const issueDates = getNytFrontPageMarketIssueDates(polymarketUrl);
   if (!issueDates.length) {
     throw new Error(`Could not parse NYT market date window from Polymarket URL: ${polymarketUrl}`);
@@ -539,7 +596,11 @@ export function getNytFrontPageMarketIssueDates(polymarketUrl: string, now = new
   return dates;
 }
 
-async function fetchNytFrontPagePostForDate(issueDate: string, strikeTerms: string[], polymarketUrl: string): Promise<EventMonitorPost> {
+async function fetchNytFrontPagePostForDate(
+  issueDate: string,
+  strikeTerms: string[],
+  polymarketUrl?: string
+): Promise<EventMonitorPost> {
   const pageUrl = `${sourceUrl.replace(/\/$/, "")}/${issueDate.replaceAll("-", "")}/page/1`;
   const response = await fetchWithTimeout(pageUrl, {
     headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
@@ -550,7 +611,7 @@ async function fetchNytFrontPagePostForDate(issueDate: string, strikeTerms: stri
 
   const issue = extractNytFrontPageIssue(await response.text(), pageUrl);
   const text = issue.headlines.join("\n");
-  return {
+  const post: EventMonitorPost = {
     id: issue.id,
     type: "NYT front page",
     sourceLabel: "NYT front page",
@@ -566,6 +627,11 @@ async function fetchNytFrontPagePostForDate(issueDate: string, strikeTerms: stri
     matchedTerms: findMatchedStrikeTerms(text, strikeTerms),
     strikeTerms
   };
+  if (polymarketUrl) {
+    post.polymarketUrl = polymarketUrl;
+  }
+
+  return post;
 }
 
 async function fetchLatestIssueDate(): Promise<string> {

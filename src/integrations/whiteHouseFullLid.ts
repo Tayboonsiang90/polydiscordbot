@@ -1,12 +1,25 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
-import type { AdapterValue, WebsiteAdapter } from "./types.js";
+import { getPolymarketSlug } from "../marketEnd.js";
+import {
+  parsePolymarketDateRangeWindow,
+  resolveIntegrationPolymarketQueue,
+  type PolymarketQueueMarket,
+  upsertPolymarketQueueUrl
+} from "../polymarketQueue.js";
+import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const rollCallUrl = "https://rollcall.com/factbase/trump/calendar/";
 const forthUrl = "https://www.forth.news/whpool";
 const defaultPolymarketUrl =
   "https://polymarket.com/event/will-the-white-house-call-a-full-lid-by-630-pm-may-11-16";
 const cutoffMinutesEt = 18 * 60 + 30;
+const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
+const fullLidMarketSearchQuery = "full lid";
+const fullLidMarketSearchTag = "lid";
+const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
+const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
+const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 
 export type FullLidResult = {
   dateEt: string;
@@ -25,6 +38,23 @@ type LidCandidate = {
   timeEt: string;
   detail: string;
   minutesEt: number | null;
+};
+
+type FullLidDiscoverySettings = {
+  polymarketMarkets?: PolymarketQueueMarket[];
+  lastFullLidDiscoveryAt?: string;
+};
+
+type GammaSearchResponse = {
+  events?: GammaSearchEvent[];
+};
+
+type GammaSearchEvent = {
+  slug?: unknown;
+  title?: unknown;
+  active?: unknown;
+  closed?: unknown;
+  tags?: Array<{ slug?: unknown }>;
 };
 
 export function extractRollCallFullLid(html: string, targetDateEt: string): LidCandidate | null {
@@ -136,6 +166,9 @@ export const whiteHouseFullLidAdapter: WebsiteAdapter = {
   getPollIntervalMinutes: getWhiteHouseFullLidPollIntervalMinutes,
   getPollIntervalReason: getWhiteHouseFullLidPollIntervalReason,
   shouldAlertOnChange: fullLidShouldAlertOnChange,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshWhiteHouseFullLidPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(): Promise<AdapterValue> {
     const dateEt = getEasternParts(new Date()).date;
     const result = await fetchFullLidResult(dateEt);
@@ -148,6 +181,48 @@ export const whiteHouseFullLidAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export async function refreshWhiteHouseFullLidPolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  let resolved = resolveIntegrationPolymarketQueue(integration, now);
+  let settings = parseFullLidDiscoverySettings(resolved.settingsJson);
+  if (!shouldDiscoverFullLidMarkets(settings, now)) {
+    return resolved;
+  }
+
+  settings = { ...settings, lastFullLidDiscoveryAt: now.toISOString() };
+  resolved = {
+    settingsJson: JSON.stringify(settings),
+    activeUrl: resolved.activeUrl
+  };
+
+  try {
+    const candidates = await fetchFullLidMarketSearchCandidates(now);
+    const existingSlugs = new Set((settings.polymarketMarkets ?? []).map((market) => market.slug));
+    for (const candidate of candidates) {
+      if (existingSlugs.has(candidate.slug)) {
+        continue;
+      }
+
+      resolved = upsertPolymarketQueueUrl(
+        {
+          ...integration,
+          settingsJson: resolved.settingsJson,
+          polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
+        },
+        candidate.url,
+        now
+      );
+      existingSlugs.add(candidate.slug);
+    }
+
+    return resolved;
+  } catch {
+    return resolved;
+  }
+}
 
 async function fetchFullLidResult(dateEt: string): Promise<FullLidResult> {
   const [rollCall, forth] = await Promise.all([fetchRollCallLid(dateEt), fetchForthLid(dateEt)]);
@@ -209,6 +284,145 @@ async function fetchForthLid(dateEt: string): Promise<{ ok: boolean; status: str
 
   const candidate = extractForthFullLid(await response.text(), dateEt);
   return { ok: true, status: candidate ? `full lid found at ${candidate.timeEt}` : "no full lid found", candidate };
+}
+
+async function fetchFullLidMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const searchUrl = new URL(gammaSearchUrl);
+  searchUrl.searchParams.set("q", fullLidMarketSearchQuery);
+  searchUrl.searchParams.set("events_status", "active");
+  searchUrl.searchParams.set("limit_per_type", "10");
+  searchUrl.searchParams.append("events_tag", fullLidMarketSearchTag);
+
+  const response = await fetchWithTimeout(searchUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GammaSearchResponse;
+  return (payload.events ?? []).map((event) => normalizeFullLidSearchEvent(event, now)).filter((candidate) => candidate !== null);
+}
+
+function normalizeFullLidSearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
+  if (event.active === false || event.closed === true || !isNonEmptyString(event.slug) || !isNonEmptyString(event.title)) {
+    return null;
+  }
+
+  if (
+    !event.slug.startsWith("will-the-white-house-call-a-full-lid-by-630-pm-") ||
+    !event.title.toLowerCase().startsWith("will the white house call a full lid by 6:30 pm")
+  ) {
+    return null;
+  }
+
+  const tagSlugs = new Set((event.tags ?? []).map((tag) => tag.slug).filter(isNonEmptyString));
+  if (!tagSlugs.has(fullLidMarketSearchTag)) {
+    return null;
+  }
+
+  const url = `https://polymarket.com/event/${event.slug}`;
+  return parsePolymarketDateRangeWindow(url, now) ? { slug: event.slug, url } : null;
+}
+
+function shouldDiscoverFullLidMarkets(settings: FullLidDiscoverySettings, now: Date): boolean {
+  const markets = normalizeFullLidQueueMarkets(settings.polymarketMarkets);
+  if (hasQueuedFutureMarket(markets, now)) {
+    return false;
+  }
+
+  const activeMarket = getActiveMarket(markets, now);
+  const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
+  if (!isDiscoveryIntervalDue(settings.lastFullLidDiscoveryAt, now, intervalMs)) {
+    return false;
+  }
+
+  if (!activeMarket) {
+    return true;
+  }
+
+  return Date.parse(activeMarket.endAt ?? "") - now.getTime() <= marketDiscoveryLookaheadMs;
+}
+
+function parseFullLidDiscoverySettings(settingsJson: string | null): FullLidDiscoverySettings {
+  if (!settingsJson) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(settingsJson) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    const settings = parsed as FullLidDiscoverySettings;
+    return {
+      ...settings,
+      polymarketMarkets: normalizeFullLidQueueMarkets(settings.polymarketMarkets),
+      lastFullLidDiscoveryAt: typeof settings.lastFullLidDiscoveryAt === "string" ? settings.lastFullLidDiscoveryAt : undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
+function normalizeFullLidQueueMarkets(value: unknown): PolymarketQueueMarket[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((market) => {
+    if (!market || typeof market !== "object") {
+      return [];
+    }
+
+    const candidate = market as Partial<PolymarketQueueMarket>;
+    if (!isNonEmptyString(candidate.url)) {
+      return [];
+    }
+
+    const slug = isNonEmptyString(candidate.slug) ? candidate.slug : getPolymarketSlug(candidate.url);
+    if (!slug) {
+      return [];
+    }
+
+    return [
+      {
+        url: candidate.url,
+        slug,
+        startAt: typeof candidate.startAt === "string" ? candidate.startAt : null,
+        endAt: typeof candidate.endAt === "string" ? candidate.endAt : null,
+        addedAt: typeof candidate.addedAt === "string" ? candidate.addedAt : new Date(0).toISOString()
+      }
+    ];
+  });
+}
+
+function hasQueuedFutureMarket(markets: PolymarketQueueMarket[], now: Date): boolean {
+  const nowMs = now.getTime();
+  return markets.some((market) => Boolean(market.startAt) && Date.parse(market.startAt!) > nowMs);
+}
+
+function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): PolymarketQueueMarket | null {
+  const nowMs = now.getTime();
+  return (
+    markets.find((market) => {
+      if (!market.startAt || !market.endAt) {
+        return false;
+      }
+
+      return nowMs >= Date.parse(market.startAt) && nowMs <= Date.parse(market.endAt);
+    }) ?? null
+  );
+}
+
+function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, intervalMs: number): boolean {
+  if (!lastDiscoveryAt) {
+    return true;
+  }
+
+  const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
+  return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
 }
 
 function compareLidCandidates(left: LidCandidate, right: LidCandidate): number {
@@ -294,4 +508,8 @@ function getEasternParts(date: Date): { date: string; hour: number; minute: numb
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
 }

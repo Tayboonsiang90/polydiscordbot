@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractLatestPbocAnnouncement,
   extractLatestPbocAnnouncementValue,
   extractPbocAnnouncementDetail,
+  fetchPbocUrl,
   formatPbocAnnouncementValue,
   pbocRateChangeShouldAlertOnChange
 } from "../src/integrations/pbocRateChange.js";
@@ -25,6 +26,11 @@ const detailHtml = `
 `;
 
 describe("PBoC rate change adapter", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
   it("extracts the latest rate-relevant announcement row", () => {
     expect(extractLatestPbocAnnouncement(listHtml)).toEqual({
       title: "Announcement on Open Market Operations No.104 [2026]",
@@ -69,5 +75,24 @@ describe("PBoC rate change adapter", () => {
 
   it("throws when no rate-relevant announcement row is present", () => {
     expect(() => extractLatestPbocAnnouncement("<html></html>")).toThrow("Could not find the latest PBoC rate-relevant announcement row");
+  });
+
+  it("adds a PBoC-level retry after temporary DNS failures", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error("getaddrinfo EAI_AGAIN www.pbc.gov.cn"), { code: "EAI_AGAIN" }))
+      .mockRejectedValueOnce(Object.assign(new Error("getaddrinfo EAI_AGAIN www.pbc.gov.cn"), { code: "EAI_AGAIN" }))
+      .mockRejectedValueOnce(Object.assign(new Error("getaddrinfo EAI_AGAIN www.pbc.gov.cn"), { code: "EAI_AGAIN" }))
+      .mockResolvedValueOnce(new Response("ok"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const assertion = expect(fetchPbocUrl("https://www.pbc.gov.cn/en/3688110/3688181/index.html", [0])).resolves.toMatchObject({
+      ok: true
+    });
+    await vi.runAllTimersAsync();
+    await assertion;
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });

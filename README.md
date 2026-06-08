@@ -17,6 +17,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | Adapter ID | Command | Channel | Alert Role | Emoji | Description |
 | --- | --- | --- | --- | --- | --- |
 | `bonbast-usd-irr` | `/bonbast` | `#bonbast-usd-irr` | `Bonbast Alerts` | `💱` | Monitors Bonbast USD/IRR values and auto-discovers active hit-by and end-of-month USD/IRR Polymarket markets. |
+| `cross-platform-arbitrage` | `/arb` | `#arb` | `Arbitrage Alerts` | `🔁` | Monitors configured Polymarket, Predict, and Opinion market URLs for after-fee cross-platform arbitrage routes. |
 | `aaa-regular-gas` | `/aaa` | `#aaa-regular-gas` | `AAA Gas Alerts` | `⛽` | Monitors AAA national Current Avg. Regular gas price for Polymarket resolution checks. |
 | `all-in-podcast` | `/allin` | `#allinpod` | `All-In Podcast Alerts` | `🎧` | Monitors allin.com episodes for the latest All-In Podcast release and auto-discovers active weekly All-In Polymarket markets. |
 | `aligned-layer-sale` | `/alignedsale` | `#alignedsale` | `Aligned Sale Alerts` | `⏸️` | Temporary monitor for sale.alignedlayer.com page and app-bundle changes while the token sale is on hold. |
@@ -66,13 +67,13 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `silver-trump-approval` | `/trumpapproval` | `#trumpapproval` | `Trump Approval Alerts` | `📊` | Monitors Silver Bulletin's Trump approval trend-line data and alerts when the June 5 value is finalized. |
 | `spotify-top-50-usa` | `/spotifyusa` | `#spotifyusa` | `Spotify USA Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - USA and auto-discovers monthly USA artist #1 markets. |
 | `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global and auto-discovers monthly global artist #1 markets. |
-| `strategy-bitcoin-purchases` | `/strategybtc` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active Polymarket date range. |
+| `strategy-bitcoin-purchases` | `/strategybtc` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active weekly Polymarket date range and auto-discovers new weekly markets. |
 | `tesla-deliveries` | `/tesla` | `#tesla` | `Tesla Deliveries Alerts` | `🚗` | Monitors Tesla production and deliveries press releases for Q2 2026 delivery updates. |
 | `trump-getty-photos` | `/trumpgetty` | `#trumpgetty` | `Trump Getty Alerts` | `📸` | Monitors Getty tagged editorial Donald Trump photo coverage by day using the public Getty search page reader fallback. |
 | `trump-schedule` | `/trumpschedule` | `#trumpschedule` | `Trump Schedule Alerts` | `🗓️` | General Roll Call Factbase daily Trump schedule feed with compact change alerts and no default Polymarket URL. |
 | `trump-truth` | `/trumptruth` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Monitors the Trump's Truth archive feed for @realDonaldTrump posts and parsed weekly Polymarket strike terms. |
 | `tsa-passengers` | `/tsa` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
-| `usgs-earthquakes` | `/earthquake` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Monitors the latest USGS 5.5+ earthquake in the May 4-May 10 market window. |
+| `usgs-earthquakes` | `/earthquake` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Tracks the USGS count of 5.5+ earthquakes in the active weekly market window. |
 | `volmex-bviv-low-strikes` | `/bviv` | `#bviv` | `BVIV Alerts` | `📉` | Monitors Volmex BVIV 1-minute low candles and alerts once when tracked low strikes are crossed. |
 | `volmex-eviv-high-strikes` | `/eviv` | `#eviv` | `EVIV Alerts` | `📈` | Monitors Volmex EVIV 1-minute high candles and alerts once when tracked high strikes are crossed. |
 | `white-house-aliens-nyc` | `/aliennyc` | `#aliennyc` | `Alien NYC Arrests Alerts` | `🛸` | Monitors the White House aliens table Total Arrests counter for New York, NY. |
@@ -110,11 +111,11 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Polling and alert sends live in `src/poller.ts`; reaction-role add/remove logic lives in `src/reactionRoles.ts`.
 - UMA Vote Commits polls Ethereum UMA Voting v2 `VoteCommitted` logs every minute, estimates voter stake with `getVoterStakePostUpdate(address)`, detects recommits from repeated voter/request commit keys, and filters by `/umacommits threshold`.
 - UMA Vote Reveals polls Ethereum UMA Voting v2 `VoteRevealed` logs every minute and filters by `/umareveals threshold`.
-- Market-end reminder lookup lives in `src/marketEnd.ts`; it uses queued ET windows when available, otherwise Polymarket Gamma API `endDate` by URL slug, stores the result in SQLite, backs off failed Gamma lookups, and sends shared 24h, 12h, 1h, and end alerts.
+- Market-end reminder lookup lives in `src/marketEnd.ts`; it uses queued ET windows when available, otherwise Polymarket Gamma API `endDate` by URL slug, stores the result in SQLite, backs off failed Gamma lookups, sends shared 24h, 12h, 1h, and end alerts, and suppresses rollover reminders when a successor queued market is already stored.
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and stale dated URLs are cleared when no queued or undated market is active.
-- Trump Truth, All-In Podcast, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, USGS Earthquakes, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
+- Trump Truth, All-In Podcast, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, Strategy Bitcoin Purchases, USGS Earthquakes, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 
@@ -139,6 +140,10 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
    DUNE_API_KEY=...
    KAITO_INFOMARKETS_API_URL=...
    KAITO_API_KEY=...
+   PREDICT_API_KEY=...
+   OPINION_API_KEY=...
+   OPINION_DEFAULT_TOPIC_RATE=0.08
+   OPINION_MIN_FEE_USD=0.5
    POLYGON_RPC_URL=...
    POLYGON_RPC_URLS=...
    POLYGON_WS_URL=...
@@ -175,6 +180,8 @@ Every integration uses the same command shape inside its own channel. Replace `/
 - `/bonbast interval minutes:1`
 - `/umacommits threshold value:250k`
 - `/umareveals threshold value:250k`
+- `/arb setup urls:https://predict.fun/market/ipos-before-2027 https://polymarket.com/event/ipos-before-2027 amount:25 min-edge:0.5`
+- `/arb watch urls:https://predict.fun/market/ipos-before-2027 https://polymarket.com/event/ipos-before-2027 outcome:Discord side:BOTH amount:25 min-edge:0.5`
 - `/bonbast pause`
 - `/bonbast resume`
 - `/bot summarize`
@@ -199,9 +206,10 @@ Status replies show both the configured base interval and the current effective 
 Use each channel's `updates` command to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
 Use `/bot clearerrors` to scan all integration channels and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
+Arbitrage replies are alert-only. `/arb setup` asks for a shared outcome and YES/NO/BOTH side through dropdowns, then alerts only when the best route is positive after configured platform fees and the minimum edge. Alerts include the buy/sell platform, side, executable amount, fees, and expected profit. Predict and Opinion checks require their API keys in `.env`.
 Bonbast replies use Discord embeds with compact fields, colored status accents, and clickable links.
 Use `/bonbast polymarket` once per market so future alerts include a clickable Polymarket link.
-The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.
+The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If a later queued market is already stored for the integration, rollover reminders for the current market are skipped. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.
 Use `/bonbast clear` to clear the current integration channel. You and the bot both need `Manage Messages`.
 
 ## Raspberry Pi Health Alerts
@@ -238,9 +246,9 @@ This local watchdog cannot send a Discord webhook while the whole Pi or its inte
 
 ## Polymarket URL Queue
 
-For most integrations, `/... polymarket url:<url>` appends or updates a queued Polymarket URL in `settingsJson.polymarketMarkets`. If the URL slug contains a date range such as `may-18-may-24`, the bot derives an ET window, keeps the current market active until the new window starts, switches automatically on the next poll/check, and prunes expired queued URLs after rollover. When no queued dated market is active and there is no undated fallback, the bot clears the active Polymarket URL so stale expired markets stop driving checks and reminders.
+For most integrations, `/... polymarket url:<url>` appends or updates a queued Polymarket URL in `settingsJson.polymarketMarkets`. If the URL slug contains a date range such as `may-18-may-24`, the bot derives an ET window, keeps the current market active until the new window starts, switches automatically on the next poll/check, suppresses old-market rollover reminders once a later queued market exists, and prunes expired queued URLs after rollover. When no queued dated market is active and there is no undated fallback, the bot clears the active Polymarket URL so stale expired markets stop driving checks and reminders.
 
-If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. TSA, USGS Earthquakes, and White House Full Lid use the shared queue plus adapter-specific auto-discovery for upcoming weekly markets. Tesla Deliveries uses the shared queue plus adapter-specific auto-discovery for upcoming quarterly delivery markets. NCEI Tornadoes uses adapter-specific monthly windows with Gamma `endDate` because monthly markets overlap the next month until the NCEI release date.
+If a URL has no parseable date range, the bot keeps it as an undated fallback for that integration. Market-end reminders for queued dated URLs use the queue's ET-derived `endAt` instead of Gamma `endDate`. Trump Truth uses a specialized queue because it stores all terms, resolved terms, active terms, and Gamma refresh timestamps per weekly market. Strategy Bitcoin Purchases, TSA, USGS Earthquakes, and White House Full Lid use the shared queue plus adapter-specific auto-discovery for upcoming weekly markets. Tesla Deliveries uses the shared queue plus adapter-specific auto-discovery for upcoming quarterly delivery markets. NCEI Tornadoes uses adapter-specific monthly windows with Gamma `endDate` because monthly markets overlap the next month until the NCEI release date.
 
 Trump Truth also supports:
 
@@ -340,7 +348,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Artist Song Releases and KPop Song Releases parse unresolved artist/group questions from Gamma, resolve Apple Music artist IDs through the public iTunes Search API, poll recent Apple song catalog entries hourly, filter obvious DJ-mix catalog noise, and alert only when a new 2026 track ID appears after the first stored check.
 - ISM Services PMI checks the Services report page plus the direct monthly report URL, stores `not published yet` before release, and polls every minute on the day before/day of the scheduled 10:00 AM ET release.
 - NCEI tornadoes monitors monthly U.S. tornado counts from the NCEI Tornadoes Time Series JSON endpoint, treats preliminary counts as resolution-relevant, and only alerts when the target month first becomes published.
-- USGS earthquakes monitors the official USGS event API for the latest 5.5+ earthquake in the active Polymarket date window and auto-discovers upcoming weekly 5.5+ earthquake markets into the shared queue.
+- USGS earthquakes monitors the official USGS event API count for 5.5+ earthquakes in the active Polymarket date window and auto-discovers upcoming weekly 5.5+ earthquake markets into the shared queue.
 - HKO Hong Kong precipitation uses Daily Extract as the official total, then adds the text-only Yesterday's Weather rainfall only when that report is newer than the latest Daily Extract day.
 - Met Office London precipitation uses Heathrow stationdata as the official monthly row and Infoclimat Heathrow climatology as daily cumulative alpha before the Met Office row appears.
 - White House Alien Arrests NYC reads the embedded Flourish table on `whitehouse.gov/aliens` and exact-matches the `New York, NY` row's `Total Arrests` counter.

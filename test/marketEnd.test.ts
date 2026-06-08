@@ -212,6 +212,45 @@ describe("Polymarket market end reminders", () => {
     database.close();
   });
 
+  it("skips market-end reminders when a successor market is already queued", async () => {
+    const database = createTestDatabase();
+    const currentUrl = "https://polymarket.com/event/how-many-jobs-added-in-may-945";
+    const nextUrl = "https://polymarket.com/event/how-many-jobs-added-in-june-20260605153057140";
+    const storedIntegration = database.createIntegration({
+      guildId: "guild",
+      channelId: "channel",
+      adapterId: "bls-jobs-added",
+      displayName: "BLS Jobs Added",
+      sourceUrl: "https://www.bls.gov/bls/newsrels.htm",
+      polymarketUrl: currentUrl,
+      settingsJson: JSON.stringify({
+        polymarketMarkets: [
+          {
+            url: currentUrl,
+            slug: "how-many-jobs-added-in-may-945",
+            startAt: "2026-05-01T04:00:00.000Z",
+            endAt: "2026-06-06T03:59:00.000Z",
+            addedAt: "2026-05-01T00:00:00.000Z"
+          },
+          {
+            url: nextUrl,
+            slug: "how-many-jobs-added-in-june-20260605153057140",
+            startAt: "2026-06-01T04:00:00.000Z",
+            endAt: "2026-07-04T03:59:00.000Z",
+            addedAt: "2026-06-05T00:00:00.000Z"
+          }
+        ]
+      }),
+      pollIntervalMinutes: 5
+    });
+    vi.stubGlobal("fetch", vi.fn());
+
+    await expect(getDueMarketEndReminders(database, storedIntegration, new Date("2026-06-06T02:59:00.000Z"))).resolves.toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+
+    database.close();
+  });
+
   it("backs off failed Gamma end-date lookups", async () => {
     const database = createTestDatabase();
     const storedIntegration = createIntegration(database, "https://polymarket.com/event/gamma-fails");

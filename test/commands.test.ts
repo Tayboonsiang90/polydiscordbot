@@ -89,7 +89,10 @@ describe("adapter commands", () => {
         [adapter.updateTagFilters, "tags"],
         [adapter.updateTagBlocklist, "tagblocks"],
         [adapter.updateAddressLabels, "addresses"],
-        [adapter.updateThreshold, "threshold"]
+        [adapter.updateThreshold, "threshold"],
+        [adapter.prepareArbitrageSetup, "setup"],
+        [adapter.configureArbitrageWatch, "watch"],
+        [adapter.getArbitrageWatch, "config"]
       ];
       for (const [enabled, subcommandName] of optionalSubcommands) {
         const matcher = expect.arrayContaining([expect.objectContaining({ name: subcommandName })]);

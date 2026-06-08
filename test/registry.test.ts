@@ -23,6 +23,7 @@ const expectedCommandIds = [
   ["claudecommits", "claude-code-commits"],
   ["claudedown", "claude-downtime"],
   ["cloudflare", "cloudflare-critical-incidents"],
+  ["arb", "cross-platform-arbitrage"],
   ["discord", "discord-critical-incidents"],
   ["eia", "eia-crude-spr"],
   ["fdic", "fdic-failed-banks"],
@@ -135,6 +136,9 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("arb").prepareArbitrageSetup).toBeDefined();
+    expect(getAdapterByCommandName("arb").configureArbitrageWatch).toBeDefined();
+    expect(getAdapterByCommandName("arb").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("fluhosp").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ornnh100").getPollIntervalMinutes?.({} as never)).toBe(60);
@@ -166,7 +170,9 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("trumpapproval").getPollIntervalMinutes?.({} as never, new Date("2026-06-05T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("spotifyglobal").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("fulllid").refreshSettings).toBeDefined();
   });
 });

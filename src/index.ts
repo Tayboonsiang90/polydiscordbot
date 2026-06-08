@@ -9,8 +9,10 @@ import {
   Partials,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
-  type ModalSubmitInteraction
+  type ModalSubmitInteraction,
+  type StringSelectMenuInteraction
 } from "discord.js";
+import { handleArbitrageSelectMenu } from "./arbitrageInteractions.js";
 import { loadConfig } from "./config.js";
 import { handleAdapterCommand, handleBotCommand, isAdapterCommand, isBotCommand } from "./commands.js";
 import { BotDatabase } from "./database.js";
@@ -97,6 +99,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.isStringSelectMenu()) {
+    try {
+      await handleArbitrageSelectMenu(interaction, database);
+    } catch (error) {
+      await sendInteractionFailure(interaction, error);
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand() || (!isAdapterCommand(interaction.commandName) && !isBotCommand(interaction.commandName))) {
     return;
   }
@@ -166,7 +177,7 @@ try {
 }
 
 async function sendInteractionFailure(
-  interaction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
+  interaction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction | StringSelectMenuInteraction,
   error: unknown
 ): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);

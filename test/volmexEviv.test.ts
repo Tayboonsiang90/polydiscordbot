@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildVolmexEvivHistoryUrl,
   extractVolmexEvivCandles,
   extractVolmexEvivHighStrikesFromGamma,
+  fetchVolmexEvivCandles,
   filterNewVolmexEvivStrikeCrossings,
   findVolmexEvivHighStrikeCrossings,
   formatVolmexEvivStrikeMonitorValue,
@@ -10,6 +11,10 @@ import {
 } from "../src/integrations/volmexEviv.js";
 
 describe("Volmex EVIV high strike monitor", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("extracts only unresolved high strikes from Polymarket Gamma markets", () => {
     expect(
       extractVolmexEvivHighStrikesFromGamma([
@@ -121,5 +126,37 @@ describe("Volmex EVIV high strike monitor", () => {
         to: new Date("2026-05-29T00:10:00.000Z")
       })
     ).toBe("https://rest-v2.volmex.finance/public/history?symbol=EVIV&resolution=1&from=1780012800&to=1780013400");
+  });
+
+  it("falls back to hourly EVIV candles when the 1-minute endpoint fails", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          t: [1_780_000_000],
+          h: [60.2],
+          l: [59.8],
+          c: [60.1]
+        })
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchVolmexEvivCandles({
+        from: new Date("2026-05-29T00:00:00.000Z"),
+        to: new Date("2026-05-29T00:10:00.000Z")
+      })
+    ).resolves.toEqual([
+      {
+        high: 60.2,
+        low: 59.8,
+        close: 60.1,
+        timestamp: "2026-05-28T20:26:40.000Z"
+      }
+    ]);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("resolution=1");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("resolution=60");
   });
 });

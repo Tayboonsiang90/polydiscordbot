@@ -248,6 +248,46 @@ export type ThresholdUpdateResult = {
   settingsJson: string;
 };
 
+export type ArbitrageWatchSide = "YES" | "NO" | "BOTH";
+
+export type ArbitrageSetupInput = {
+  urls: string[];
+  maxStakeUsd?: number;
+  minNetEdgeBps?: number;
+};
+
+export type ArbitrageWatchInput = ArbitrageSetupInput & {
+  outcome: string;
+  side: ArbitrageWatchSide;
+};
+
+export type ArbitrageSetupOutcome = {
+  label: string;
+  platformLabels: string[];
+};
+
+export type ArbitrageSetupResult = {
+  settingsJson: string;
+  message: string;
+  outcomes: ArbitrageSetupOutcome[];
+  selectedOutcome?: string;
+};
+
+export type ArbitrageWatchSummary = {
+  urls: string[];
+  outcome: string;
+  side: ArbitrageWatchSide;
+  maxStakeUsd: number;
+  minNetEdgeBps: number;
+  createdAt: string;
+};
+
+export type ArbitrageWatchResult = {
+  settingsJson: string;
+  message: string;
+  watch: ArbitrageWatchSummary | null;
+};
+
 export type WebsiteAdapter = {
   id: string;
   commandName: string;
@@ -305,4 +345,9 @@ export type WebsiteAdapter = {
   ): Promise<AddressLabelUpdateResult>;
   updateThreshold?(integration: Integration, thresholdQuery?: string): ThresholdUpdateResult | Promise<ThresholdUpdateResult>;
   getTagFilters?(integration: Integration): TagFilterEntry[];
+  prepareArbitrageSetup?(integration: Integration, input: ArbitrageSetupInput): Promise<ArbitrageSetupResult>;
+  configureArbitrageWatch?(integration: Integration, input: ArbitrageWatchInput): Promise<ArbitrageWatchResult>;
+  selectArbitrageOutcome?(integration: Integration, outcomeIndex: number): ArbitrageSetupResult;
+  selectArbitrageSide?(integration: Integration, side: ArbitrageWatchSide): ArbitrageWatchResult;
+  getArbitrageWatch?(integration: Integration): ArbitrageWatchSummary | null;
 };

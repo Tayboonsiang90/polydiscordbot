@@ -11,6 +11,7 @@ import {
 import type { Integration } from "../src/integrations/types.js";
 
 const mayMarketUrl = "https://polymarket.com/event/how-many-jobs-added-in-may-945";
+const juneMarketUrl = "https://polymarket.com/event/how-many-jobs-added-in-june-20260605153057140";
 
 function reportHtml(period: string, releaseDate: string, phrase: string): string {
   return `
@@ -108,6 +109,14 @@ describe("BLS jobs added adapter", () => {
     expect(getBlsJobsAddedPollIntervalMinutes(integration(), new Date("2026-05-31T16:00:00.000Z"))).toBe(60);
   });
 
+  it("parses timestamped monthly jobs-added market slugs", () => {
+    expect(parseJobsAddedMarketPeriod(juneMarketUrl, new Date("2026-06-06T00:00:00.000Z"))).toEqual({
+      year: 2026,
+      month: 6,
+      label: "June 2026"
+    });
+  });
+
   it("queues jobs markets through the scheduled release day instead of month end", () => {
     const result = upsertBlsJobsAddedPolymarketQueueUrl(integration({ polymarketUrl: null }), mayMarketUrl, new Date("2026-05-31T12:00:00.000Z"));
     const settings = JSON.parse(result.settingsJson ?? "{}") as { polymarketMarkets: Array<{ startAt: string; endAt: string }> };
@@ -119,7 +128,7 @@ describe("BLS jobs added adapter", () => {
     });
   });
 
-  it("auto-discovers active monthly jobs markets from Gamma search", async () => {
+  it("auto-discovers the timestamped June monthly jobs market from Gamma search", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -127,21 +136,74 @@ describe("BLS jobs added adapter", () => {
         json: async () => ({
           events: [
             {
-              slug: "how-many-jobs-added-in-may-945",
-              title: "How many jobs added in May?",
+              slug: "how-many-jobs-added-in-june-20260605153057140",
+              title: "How many jobs added in June?",
               active: true,
               closed: false,
-              tags: [{ slug: "nonfarm-payroll" }, { slug: "nfp" }]
+              tags: [{ slug: "nfp" }, { slug: "economy" }, { slug: "nonfarm-payroll" }]
             }
           ]
         })
       })
     );
 
-    const result = await refreshBlsJobsAddedPolymarketQueue(integration({ polymarketUrl: null }), new Date("2026-05-31T12:00:00.000Z"));
+    const result = await refreshBlsJobsAddedPolymarketQueue(integration({ polymarketUrl: null }), new Date("2026-06-06T03:00:00.000Z"));
     const settings = JSON.parse(result.settingsJson ?? "{}") as { polymarketMarkets: Array<{ slug: string }> };
 
-    expect(result.activeUrl).toBe(mayMarketUrl);
-    expect(settings.polymarketMarkets.map((market) => market.slug)).toEqual(["how-many-jobs-added-in-may-945"]);
+    expect(result.activeUrl).toBe(juneMarketUrl);
+    expect(settings.polymarketMarkets.map((market) => market.slug)).toEqual(["how-many-jobs-added-in-june-20260605153057140"]);
+    expect(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0])).toContain("events_tag=nonfarm-payroll");
+  });
+
+  it("keeps the previous monthly jobs market active through release day, then activates the discovered month", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "how-many-jobs-added-in-june-20260605153057140",
+              title: "How many jobs added in June?",
+              active: true,
+              closed: false,
+              tags: [{ slug: "nonfarm-payroll" }]
+            }
+          ]
+        })
+      })
+    );
+
+    const beforeMayExpiry = await refreshBlsJobsAddedPolymarketQueue(
+      integration({
+        polymarketUrl: mayMarketUrl,
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: mayMarketUrl,
+              slug: "how-many-jobs-added-in-may-945",
+              startAt: "2026-05-01T04:00:00.000Z",
+              endAt: "2026-06-06T03:59:00.000Z",
+              addedAt: "2026-05-01T04:00:00.000Z"
+            }
+          ]
+        })
+      }),
+      new Date("2026-06-06T03:00:00.000Z")
+    );
+
+    expect(beforeMayExpiry.activeUrl).toBe(mayMarketUrl);
+
+    const afterMayExpiry = await refreshBlsJobsAddedPolymarketQueue(
+      integration({
+        polymarketUrl: mayMarketUrl,
+        settingsJson: beforeMayExpiry.settingsJson
+      }),
+      new Date("2026-06-06T04:00:00.000Z")
+    );
+
+    expect(afterMayExpiry.activeUrl).toBe(juneMarketUrl);
+    const settings = JSON.parse(afterMayExpiry.settingsJson ?? "{}") as { polymarketMarkets: Array<{ slug: string }> };
+    expect(settings.polymarketMarkets.map((market) => market.slug)).toEqual(["how-many-jobs-added-in-june-20260605153057140"]);
   });
 });

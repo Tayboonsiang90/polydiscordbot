@@ -7,15 +7,18 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://x.com/WhiteHouse";
 const defaultPolymarketUrl = "https://polymarket.com/event/white-house-of-tweets-may-26-june-2-2026";
-const xApiBaseUrl = "https://api.twitter.com/2";
+const trumpFeedPostsUrl = "https://thetrumpfeed.org/api/posts";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const marketSearchQuery = "white house tweets";
 const marketSearchTag = "tweets-markets";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
-const maxXApiPages = 10;
-const defaultNitterFeedUrls = ["https://xcancel.com/WhiteHouse/rss"];
+const maxTrumpFeedPages = 5;
+const trumpFeedPageLimit = 200;
+const defaultNitterFeedUrls = ["https://nitter.net/WhiteHouse/rss", "https://xcancel.com/WhiteHouse/rss"];
+const publicFeedTimeoutMs = 30_000;
+const nitterFeedTimeoutMs = 30_000;
 
 export type WhiteHouseTweet = {
   id: string;
@@ -61,27 +64,20 @@ type GammaSearchEvent = {
   tags?: Array<{ slug?: unknown }>;
 };
 
-type XUserResponse = {
-  data?: {
-    id?: unknown;
-  };
+type TrumpFeedResponse = {
+  posts?: TrumpFeedPost[];
+  totalPages?: unknown;
 };
 
-type XTweetsResponse = {
-  data?: XTweet[];
-  meta?: {
-    next_token?: unknown;
-  };
-};
-
-type XTweet = {
+type TrumpFeedPost = {
   id?: unknown;
-  text?: unknown;
-  created_at?: unknown;
-  referenced_tweets?: Array<{ type?: unknown; id?: unknown }>;
+  platform?: unknown;
+  sourceUrl?: unknown;
+  authorHandle?: unknown;
+  contentText?: unknown;
+  excerpt?: unknown;
+  postedAt?: unknown;
 };
-
-let cachedWhiteHouseUserId: string | null = null;
 
 export const whiteHouseTweetsAdapter: WebsiteAdapter = {
   id: "white-house-tweets",
@@ -173,7 +169,7 @@ export function buildWhiteHouseTweetsMonitorValue(
   polymarketUrl: string,
   window: WhiteHouseTweetsMarketWindow,
   now: Date,
-  source = "X API"
+  source = "The Trump Feed public archive"
 ): string {
   const previousState = parseWhiteHouseTweetsStoredState(previousValue);
   const sameMarket = previousState.polymarketUrl === polymarketUrl;
@@ -294,26 +290,6 @@ export async function refreshWhiteHouseTweetsPolymarketQueue(
   }
 }
 
-export function normalizeWhiteHouseTweetFromApi(tweet: XTweet): WhiteHouseTweet | null {
-  if (!isNonEmptyString(tweet.id) || !isNonEmptyString(tweet.created_at)) {
-    return null;
-  }
-
-  const referenceTypes = new Set((tweet.referenced_tweets ?? []).map((reference) => reference.type).filter(isNonEmptyString));
-  if (referenceTypes.has("replied_to")) {
-    return null;
-  }
-
-  const type = referenceTypes.has("retweeted") ? "Repost" : referenceTypes.has("quoted") ? "Quote" : "Post";
-  return {
-    id: tweet.id,
-    text: isNonEmptyString(tweet.text) ? tweet.text : "",
-    createdAt: tweet.created_at,
-    type,
-    url: `https://x.com/WhiteHouse/status/${tweet.id}`
-  };
-}
-
 export function parseWhiteHouseTweetsNitterFeed(xml: string, feedUrl = defaultNitterFeedUrls[0]): WhiteHouseTweet[] {
   const $ = cheerio.load(xml, { xmlMode: true });
   const tweets: WhiteHouseTweet[] = [];
@@ -345,60 +321,91 @@ async function fetchWhiteHouseTweets(
   window: WhiteHouseTweetsMarketWindow,
   now: Date
 ): Promise<{ tweets: WhiteHouseTweet[]; source: string }> {
-  const bearerToken = getOptionalXBearerToken();
-  if (bearerToken) {
-    try {
-      return { tweets: await fetchWhiteHouseTweetsFromXApi(window, now, bearerToken), source: "X API" };
-    } catch (error) {
-      if (!allowNitterFallback()) {
-        throw error;
-      }
-    }
+  const errors: string[] = [];
+  try {
+    return { tweets: await fetchWhiteHouseTweetsFromTrumpFeed(window, now), source: "The Trump Feed public archive" };
+  } catch (error) {
+    errors.push(`The Trump Feed public archive: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  return { tweets: await fetchWhiteHouseTweetsFromNitterFeeds(), source: "Nitter/XCancel RSS" };
+  try {
+    return { tweets: await fetchWhiteHouseTweetsFromNitterFeeds(), source: "Nitter/XCancel RSS" };
+  } catch (error) {
+    errors.push(`Nitter/XCancel RSS: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Public White House X polling failed: ${errors.join(" | ")}`);
+  }
 }
 
-async function fetchWhiteHouseTweetsFromXApi(
-  window: WhiteHouseTweetsMarketWindow,
-  now: Date,
-  bearerToken: string
-): Promise<WhiteHouseTweet[]> {
-  const userId = await fetchWhiteHouseUserId(bearerToken);
+async function fetchWhiteHouseTweetsFromTrumpFeed(window: WhiteHouseTweetsMarketWindow, now: Date): Promise<WhiteHouseTweet[]> {
   const tweets: WhiteHouseTweet[] = [];
-  let nextToken: string | undefined;
-  const apiEndTime = new Date(Math.min(Date.parse(window.endAt) + 1000, now.getTime()));
-  if (apiEndTime.getTime() <= Date.parse(window.startAt)) {
-    return [];
-  }
+  const windowStartMs = Date.parse(window.startAt);
 
-  for (let page = 0; page < maxXApiPages; page += 1) {
-    const url = new URL(`${xApiBaseUrl}/users/${encodeURIComponent(userId)}/tweets`);
-    url.searchParams.set("max_results", "100");
-    url.searchParams.set("tweet.fields", "created_at,referenced_tweets");
-    url.searchParams.set("exclude", "replies");
-    url.searchParams.set("start_time", window.startAt);
-    url.searchParams.set("end_time", apiEndTime.toISOString());
-    if (nextToken) {
-      url.searchParams.set("pagination_token", nextToken);
+  for (let page = 1; page <= maxTrumpFeedPages; page += 1) {
+    const url = new URL(trumpFeedPostsUrl);
+    url.searchParams.set("platform", "potus-x");
+    url.searchParams.set("limit", String(trumpFeedPageLimit));
+    url.searchParams.set("page", String(page));
+
+    const response = await fetchWithTimeout(
+      url.toString(),
+      {
+        headers: {
+          accept: "application/json",
+          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+        }
+      },
+      publicFeedTimeoutMs
+    );
+    const payload = (await readTrumpFeedJson(response)) as TrumpFeedResponse;
+    const posts = payload.posts ?? [];
+    tweets.push(...posts.map(normalizeWhiteHouseTweetFromTrumpFeed).filter((tweet) => tweet !== null));
+
+    const oldestPostMs = Math.min(...posts.map((post) => Date.parse(String(post.postedAt ?? ""))).filter(Number.isFinite));
+    const totalPages = Number(payload.totalPages);
+    if (posts.length === 0 || (Number.isFinite(oldestPostMs) && oldestPostMs < windowStartMs) || (Number.isFinite(totalPages) && page >= totalPages)) {
+      break;
     }
 
-    const response = await fetchWithTimeout(url.toString(), {
-      headers: {
-        authorization: `Bearer ${bearerToken}`,
-        "user-agent": "PolymarketResolutionMonitorBot/0.1"
-      }
-    });
-    const payload = (await readXApiJson(response, "tweets")) as XTweetsResponse;
-    tweets.push(...(payload.data ?? []).map(normalizeWhiteHouseTweetFromApi).filter((tweet) => tweet !== null));
-
-    nextToken = isNonEmptyString(payload.meta?.next_token) ? payload.meta.next_token : undefined;
-    if (!nextToken) {
+    if (now.getTime() < windowStartMs) {
       break;
     }
   }
 
-  return sortTweets(tweets);
+  return sortTweets(tweets.filter((tweet) => Date.parse(tweet.createdAt) <= now.getTime()));
+}
+
+async function readTrumpFeedJson(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+  }
+
+  try {
+    return text ? (JSON.parse(text) as unknown) : {};
+  } catch {
+    throw new Error("returned invalid JSON");
+  }
+}
+
+export function normalizeWhiteHouseTweetFromTrumpFeed(post: TrumpFeedPost): WhiteHouseTweet | null {
+  if (post.platform !== "potus-x" || post.authorHandle !== "@WhiteHouse" || !isNonEmptyString(post.sourceUrl) || !isNonEmptyString(post.postedAt)) {
+    return null;
+  }
+
+  const createdAt = new Date(post.postedAt);
+  const id = extractTweetId(post.sourceUrl) ?? (typeof post.id === "number" || typeof post.id === "string" ? String(post.id) : null);
+  if (!id || Number.isNaN(createdAt.getTime())) {
+    return null;
+  }
+
+  const text = isNonEmptyString(post.contentText) ? post.contentText : isNonEmptyString(post.excerpt) ? post.excerpt : "";
+  return {
+    id,
+    text,
+    createdAt: createdAt.toISOString(),
+    type: inferTrumpFeedTweetType(text),
+    url: post.sourceUrl
+  };
 }
 
 async function fetchWhiteHouseTweetsFromNitterFeeds(): Promise<WhiteHouseTweet[]> {
@@ -413,12 +420,16 @@ async function fetchWhiteHouseTweetsFromNitterFeeds(): Promise<WhiteHouseTweet[]
           accept: "application/rss+xml, application/xml, text/xml",
           "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
         }
-      });
+      }, nitterFeedTimeoutMs);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
       const xml = await response.text();
+      if (isUnavailableNitterFeed(xml)) {
+        throw new Error("RSS feed returned an unavailable/whitelist placeholder");
+      }
+
       const feedTweets = parseWhiteHouseTweetsNitterFeed(xml, feedUrl);
       if (!feedTweets.length && !/<item[\s>]/i.test(xml)) {
         throw new Error("RSS feed returned no items");
@@ -437,52 +448,18 @@ async function fetchWhiteHouseTweetsFromNitterFeeds(): Promise<WhiteHouseTweet[]
   return uniqueTweets(tweets);
 }
 
-async function fetchWhiteHouseUserId(bearerToken: string): Promise<string> {
-  if (cachedWhiteHouseUserId) {
-    return cachedWhiteHouseUserId;
-  }
-
-  const response = await fetchWithTimeout(`${xApiBaseUrl}/users/by/username/WhiteHouse`, {
-    headers: {
-      authorization: `Bearer ${bearerToken}`,
-      "user-agent": "PolymarketResolutionMonitorBot/0.1"
-    }
-  });
-  const payload = (await readXApiJson(response, "user lookup")) as XUserResponse;
-  if (!isNonEmptyString(payload.data?.id)) {
-    throw new Error("X API user lookup did not return the @WhiteHouse user ID");
-  }
-
-  cachedWhiteHouseUserId = payload.data.id;
-  return cachedWhiteHouseUserId;
-}
-
-async function readXApiJson(response: Response, label: string): Promise<unknown> {
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`X API ${label} returned HTTP ${response.status}: ${text.slice(0, 300)}`);
-  }
-
-  try {
-    return text ? (JSON.parse(text) as unknown) : {};
-  } catch {
-    throw new Error(`X API ${label} returned invalid JSON`);
-  }
-}
-
-function getOptionalXBearerToken(): string | null {
-  const token = process.env.X_BEARER_TOKEN ?? process.env.TWITTER_BEARER_TOKEN;
-  return isNonEmptyString(token) ? token.trim() : null;
-}
-
-function allowNitterFallback(): boolean {
-  return process.env.WHITE_HOUSE_TWEETS_ALLOW_NITTER_FALLBACK?.toLowerCase() !== "false";
-}
-
 function getNitterFeedUrls(): string[] {
   const configured = process.env.WHITE_HOUSE_TWEETS_NITTER_FEEDS ?? process.env.WHITE_HOUSE_TWEETS_RSS_URLS;
   const urls = configured?.split(",").map((url) => url.trim()).filter(Boolean) ?? [];
-  return urls.length ? urls : defaultNitterFeedUrls;
+  return uniqueStrings([...urls, ...defaultNitterFeedUrls]);
+}
+
+function isUnavailableNitterFeed(xml: string): boolean {
+  return /RSS reader not yet whitelisted|RSS reader not yet whitelist/i.test(xml);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function resolveWhiteHouseTweetsQueue(
@@ -921,6 +898,14 @@ function inferNitterTweetType(title: string, description: string): WhiteHouseTwe
 
   if (/\bQuote(?:d)? Tweet\b/i.test(text) || /\bQT @/i.test(text)) {
     return "Quote";
+  }
+
+  return "Post";
+}
+
+function inferTrumpFeedTweetType(text: string): WhiteHouseTweet["type"] {
+  if (/^\s*RT @/i.test(text)) {
+    return "Repost";
   }
 
   return "Post";

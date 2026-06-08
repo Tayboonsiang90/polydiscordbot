@@ -1,10 +1,21 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
-import { parsePolymarketDateRangeWindow } from "../polymarketQueue.js";
+import {
+  parsePolymarketDateRangeWindow,
+  resolveIntegrationPolymarketQueue,
+  type PolymarketQueueMarket,
+  upsertPolymarketQueueUrl
+} from "../polymarketQueue.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.strategy.com/purchases";
 const defaultPolymarketUrl = "https://polymarket.com/event/will-microstrategy-announce-a-bitcoin-purchase-may-12-18";
+const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
+const strategyMarketSearchQuery = "microstrategy bitcoin purchase";
+const strategyMarketSearchTag = "microstrategy";
+const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
+const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
+const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 
 type StrategyPurchaseRow = {
   uid?: string;
@@ -26,6 +37,23 @@ type StrategyNextData = {
       bitcoinData?: StrategyPurchaseRow[];
     };
   };
+};
+
+type StrategyDiscoverySettings = {
+  polymarketMarkets?: PolymarketQueueMarket[];
+  lastStrategyDiscoveryAt?: string;
+};
+
+type GammaSearchResponse = {
+  events?: GammaSearchEvent[];
+};
+
+type GammaSearchEvent = {
+  slug?: unknown;
+  title?: unknown;
+  active?: unknown;
+  closed?: unknown;
+  tags?: Array<{ slug?: unknown }>;
 };
 
 export type StrategyBitcoinPurchase = {
@@ -103,6 +131,9 @@ export const strategyBitcoinPurchasesAdapter: WebsiteAdapter = {
   defaultChannelName: "strategybtc",
   alertRoleName: "Strategy BTC Alerts",
   alertRoleEmoji: "\uD83E\uDE99",
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshStrategyBitcoinPurchasesPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const response = await fetchWithTimeout(sourceUrl, {
       headers: {
@@ -125,6 +156,180 @@ export const strategyBitcoinPurchasesAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export async function refreshStrategyBitcoinPurchasesPolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  let resolved = resolveIntegrationPolymarketQueue(integration, now);
+  let settings = parseStrategyDiscoverySettings(resolved.settingsJson);
+  if (!shouldDiscoverStrategyMarkets(settings, now)) {
+    return resolved;
+  }
+
+  settings = { ...settings, lastStrategyDiscoveryAt: now.toISOString() };
+  resolved = {
+    settingsJson: JSON.stringify(settings),
+    activeUrl: resolved.activeUrl
+  };
+
+  try {
+    const existingSlugs = new Set((settings.polymarketMarkets ?? []).map((market) => market.slug));
+    for (const candidate of await fetchStrategyMarketSearchCandidates(now)) {
+      if (existingSlugs.has(candidate.slug)) {
+        continue;
+      }
+
+      resolved = upsertPolymarketQueueUrl(
+        {
+          ...integration,
+          settingsJson: resolved.settingsJson,
+          polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
+        },
+        candidate.url,
+        now
+      );
+      existingSlugs.add(candidate.slug);
+    }
+
+    return resolved;
+  } catch {
+    return resolved;
+  }
+}
+
+async function fetchStrategyMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const searchUrl = new URL(gammaSearchUrl);
+  searchUrl.searchParams.set("q", strategyMarketSearchQuery);
+  searchUrl.searchParams.set("events_status", "active");
+  searchUrl.searchParams.set("limit_per_type", "10");
+  searchUrl.searchParams.append("events_tag", strategyMarketSearchTag);
+
+  const response = await fetchWithTimeout(searchUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GammaSearchResponse;
+  return (payload.events ?? []).map((event) => normalizeStrategySearchEvent(event, now)).filter((candidate) => candidate !== null);
+}
+
+function normalizeStrategySearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
+  if (event.active === false || event.closed === true || !isNonEmptyString(event.slug) || !isNonEmptyString(event.title)) {
+    return null;
+  }
+
+  const slug = event.slug.trim();
+  const title = event.title.toLowerCase().trim();
+  if (!slug.startsWith("will-microstrategy-announce-a-bitcoin-purchase-") || !title.startsWith("will microstrategy announce a bitcoin purchase")) {
+    return null;
+  }
+
+  const tagSlugs = new Set((event.tags ?? []).map((tag) => tag.slug).filter(isNonEmptyString));
+  if (!tagSlugs.has(strategyMarketSearchTag)) {
+    return null;
+  }
+
+  const url = `https://polymarket.com/event/${slug}`;
+  return parsePolymarketDateRangeWindow(url, now) ? { slug, url } : null;
+}
+
+function shouldDiscoverStrategyMarkets(settings: StrategyDiscoverySettings, now: Date): boolean {
+  const markets = normalizeStrategyQueueMarkets(settings.polymarketMarkets);
+  if (hasQueuedFutureMarket(markets, now)) {
+    return false;
+  }
+
+  const activeMarket = getActiveMarket(markets, now);
+  const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
+  if (!isDiscoveryIntervalDue(settings.lastStrategyDiscoveryAt, now, intervalMs)) {
+    return false;
+  }
+
+  if (!activeMarket) {
+    return true;
+  }
+
+  return Date.parse(activeMarket.endAt ?? "") - now.getTime() <= marketDiscoveryLookaheadMs;
+}
+
+function parseStrategyDiscoverySettings(settingsJson: string | null): StrategyDiscoverySettings {
+  if (!settingsJson) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(settingsJson) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    const settings = parsed as StrategyDiscoverySettings;
+    return {
+      ...settings,
+      polymarketMarkets: normalizeStrategyQueueMarkets(settings.polymarketMarkets),
+      lastStrategyDiscoveryAt: typeof settings.lastStrategyDiscoveryAt === "string" ? settings.lastStrategyDiscoveryAt : undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
+function normalizeStrategyQueueMarkets(value: unknown): PolymarketQueueMarket[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((market) => {
+    if (!market || typeof market !== "object") {
+      return [];
+    }
+
+    const candidate = market as Partial<PolymarketQueueMarket>;
+    if (!isNonEmptyString(candidate.url) || !isNonEmptyString(candidate.slug)) {
+      return [];
+    }
+
+    return [
+      {
+        url: candidate.url,
+        slug: candidate.slug,
+        startAt: typeof candidate.startAt === "string" ? candidate.startAt : null,
+        endAt: typeof candidate.endAt === "string" ? candidate.endAt : null,
+        addedAt: typeof candidate.addedAt === "string" ? candidate.addedAt : new Date(0).toISOString()
+      }
+    ];
+  });
+}
+
+function hasQueuedFutureMarket(markets: PolymarketQueueMarket[], now: Date): boolean {
+  const nowMs = now.getTime();
+  return markets.some((market) => Boolean(market.startAt) && Date.parse(market.startAt!) > nowMs);
+}
+
+function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): PolymarketQueueMarket | null {
+  const nowMs = now.getTime();
+  return (
+    markets.find((market) => {
+      if (!market.startAt || !market.endAt) {
+        return false;
+      }
+
+      return nowMs >= Date.parse(market.startAt) && nowMs <= Date.parse(market.endAt);
+    }) ?? null
+  );
+}
+
+function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, intervalMs: number): boolean {
+  if (!lastDiscoveryAt) {
+    return true;
+  }
+
+  const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
+  return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
+}
 
 function extractNextData(html: string): StrategyNextData {
   const $ = cheerio.load(html);
@@ -201,4 +406,8 @@ function formatCurrency(value: number | null): string {
     currency: "USD",
     maximumFractionDigits: 0
   }).format(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }

@@ -134,6 +134,64 @@ describe("CDC flu hospitalization adapter", () => {
         addedAt: "2026-06-02T12:00:00.000Z"
       }
     ]);
+    expect(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0])).toContain("events_tag=flu");
+  });
+
+  it("auto-discovers and activates the week 22 flu hospitalization market after week 21 expires", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          events: [
+            {
+              slug: "flu-hospitalization-rate-week-22-2026",
+              title: "Flu Hospitalization Rate Week 22, 2026?",
+              active: true,
+              closed: false,
+              endDate: "2026-06-12T00:00:00Z",
+              tags: [{ slug: "flu" }, { slug: "influenza" }]
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshFluHospitalizationPolymarketQueue(
+      {
+        ...integration,
+        polymarketUrl: "https://polymarket.com/event/flu-hospitalization-rate-week-21-2026",
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: "https://polymarket.com/event/flu-hospitalization-rate-week-21-2026",
+              slug: "flu-hospitalization-rate-week-21-2026",
+              startAt: "2026-05-24T04:00:00.000Z",
+              endAt: "2026-06-06T03:59:00.000Z",
+              addedAt: "2026-06-02T12:00:00.000Z"
+            }
+          ]
+        })
+      },
+      new Date("2026-06-06T04:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      lastFluHospitalizationDiscoveryAt?: string;
+      polymarketMarkets?: Array<{ slug: string; startAt: string; endAt: string }>;
+    };
+
+    expect(result.activeUrl).toBe("https://polymarket.com/event/flu-hospitalization-rate-week-22-2026");
+    expect(settings.lastFluHospitalizationDiscoveryAt).toBe("2026-06-06T04:00:00.000Z");
+    expect(settings.polymarketMarkets).toEqual([
+      {
+        url: "https://polymarket.com/event/flu-hospitalization-rate-week-22-2026",
+        slug: "flu-hospitalization-rate-week-22-2026",
+        startAt: "2026-05-31T04:00:00.000Z",
+        endAt: "2026-06-13T03:59:00.000Z",
+        addedAt: "2026-06-06T04:00:00.000Z"
+      }
+    ]);
   });
 
   it("queues manually entered weekly markets with MMWR windows", () => {

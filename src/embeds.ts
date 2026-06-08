@@ -6,6 +6,8 @@ import type {
   AddressLabelImportIssue,
   AddressLabelUpdateResult,
   AddressPositionStatus,
+  ArbitrageSetupResult,
+  ArbitrageWatchResult,
   EventMonitorPost,
   Integration,
   StrikeSearchResult,
@@ -282,6 +284,34 @@ export function buildThresholdEmbed(integration: Integration, result: ThresholdU
       { name: "Changed", value: result.changed ? "yes" : "no", inline: true },
       { name: result.thresholdLabel, value: result.thresholdValue, inline: true },
       { name: "Result", value: result.message, inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildArbitrageSetupEmbed(integration: Integration, result: ArbitrageSetupResult): EmbedBuilder {
+  return baseEmbed(integration, "Arbitrage setup")
+    .addFields(
+      { name: "Result", value: truncateEmbedValue(result.message), inline: false },
+      ...(result.selectedOutcome ? [{ name: "Selected outcome", value: result.selectedOutcome, inline: true }] : []),
+      { name: "Shared outcomes", value: formatArbitrageOutcomes(result.outcomes), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildArbitrageWatchEmbed(integration: Integration, result: ArbitrageWatchResult): EmbedBuilder {
+  const watch = result.watch;
+  return baseEmbed(integration, "Arbitrage watch")
+    .addFields(
+      { name: "Result", value: truncateEmbedValue(result.message), inline: false },
+      ...(watch
+        ? [
+            { name: "Outcome", value: watch.outcome, inline: true },
+            { name: "Side", value: watch.side, inline: true },
+            { name: "Amount cap", value: `$${formatNumber(watch.maxStakeUsd, 2)}`, inline: true },
+            { name: "Minimum after-fee edge", value: `${formatNumber(watch.minNetEdgeBps / 100, 2)}%`, inline: true },
+            { name: "URLs", value: truncateEmbedValue(watch.urls.join("\n")), inline: false }
+          ]
+        : [])
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 }
@@ -1035,6 +1065,21 @@ function formatEasternDateTime(date: Date): string {
 
 function formatValue(value: string | null): string {
   return value ? truncateEmbedValue(value) : "not checked yet";
+}
+
+function formatArbitrageOutcomes(outcomes: ArbitrageSetupResult["outcomes"]): string {
+  if (!outcomes.length) {
+    return "none";
+  }
+
+  return truncateEmbedValue(
+    outcomes
+      .map((outcome, index) => {
+        const platformLabels = outcome.platformLabels.length ? ` (${outcome.platformLabels.join(" / ")})` : "";
+        return `${index + 1}. ${outcome.label}${platformLabels}`;
+      })
+      .join("\n")
+  );
 }
 
 function formatShareQuantity(value: number): string {

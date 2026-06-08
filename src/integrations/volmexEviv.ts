@@ -194,9 +194,13 @@ export function volmexEvivShouldAlertOnChange(_previousValue: string | null, cur
 }
 
 export function buildVolmexEvivHistoryUrl(range: { from: Date; to: Date }): string {
+  return buildVolmexEvivHistoryUrlForResolution(range, "1");
+}
+
+function buildVolmexEvivHistoryUrlForResolution(range: { from: Date; to: Date }, resolution: "1" | "60"): string {
   const url = new URL(volmexHistoryBaseUrl);
   url.searchParams.set("symbol", "EVIV");
-  url.searchParams.set("resolution", "1");
+  url.searchParams.set("resolution", resolution);
   url.searchParams.set("from", Math.floor(range.from.getTime() / 1_000).toString());
   url.searchParams.set("to", Math.floor(range.to.getTime() / 1_000).toString());
   return url.toString();
@@ -239,8 +243,35 @@ async function fetchVolmexEvivHighStrikes(polymarketUrl: string, fallbackStrikes
   return [];
 }
 
-async function fetchVolmexEvivCandles(range: { from: Date; to: Date }): Promise<VolmexEvivCandle[]> {
-  const response = await fetchWithTimeout(buildVolmexEvivHistoryUrl(range), {
+export async function fetchVolmexEvivCandles(range: { from: Date; to: Date }): Promise<VolmexEvivCandle[]> {
+  let minuteError: unknown = null;
+  try {
+    const minuteCandles = await fetchVolmexEvivCandlesForResolution(range, "1");
+    if (minuteCandles.length > 0) {
+      return minuteCandles;
+    }
+  } catch (error) {
+    minuteError = error;
+  }
+
+  try {
+    return await fetchVolmexEvivCandlesForResolution(range, "60");
+  } catch (hourlyError) {
+    if (minuteError) {
+      throw new Error(
+        `Volmex EVIV history endpoint failed for 1-minute candles (${formatErrorMessage(minuteError)}) and 60-minute fallback (${formatErrorMessage(hourlyError)})`
+      );
+    }
+
+    return [];
+  }
+}
+
+async function fetchVolmexEvivCandlesForResolution(
+  range: { from: Date; to: Date },
+  resolution: "1" | "60"
+): Promise<VolmexEvivCandle[]> {
+  const response = await fetchWithTimeout(buildVolmexEvivHistoryUrlForResolution(range, resolution), {
     headers: {
       accept: "application/json",
       "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
@@ -251,6 +282,10 @@ async function fetchVolmexEvivCandles(range: { from: Date; to: Date }): Promise<
   }
 
   return extractVolmexEvivCandles(await response.json());
+}
+
+function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function getHistoryRange(integration?: Integration): { from: Date; to: Date } {

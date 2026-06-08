@@ -4,6 +4,8 @@ import type { AdapterValue, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.pbc.gov.cn/en/3688110/3688181/index.html";
 const defaultPolymarketUrl = "https://polymarket.com/event/peoples-bank-of-china-rate-change-in-june";
+const pbocRetryDelaysMs = [10_000, 30_000];
+const pbocFetchTimeoutMs = 30_000;
 
 export type PbocAnnouncement = {
   title: string;
@@ -105,11 +107,7 @@ export function pbocRateChangeShouldAlertOnChange(previousValue: string | null, 
 }
 
 async function fetchLatestPbocAnnouncement(): Promise<PbocAnnouncement> {
-  const response = await fetchWithTimeout(sourceUrl, {
-    headers: {
-      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-    }
-  });
+  const response = await fetchPbocUrl(sourceUrl);
 
   if (!response.ok) {
     throw new Error(`PBoC announcements page returned HTTP ${response.status}`);
@@ -119,17 +117,39 @@ async function fetchLatestPbocAnnouncement(): Promise<PbocAnnouncement> {
 }
 
 async function fetchPbocAnnouncementDetail(url: string): Promise<PbocAnnouncementDetail> {
-  const response = await fetchWithTimeout(url, {
-    headers: {
-      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-    }
-  });
+  const response = await fetchPbocUrl(url);
 
   if (!response.ok) {
     throw new Error(`PBoC announcement detail returned HTTP ${response.status}`);
   }
 
   return extractPbocAnnouncementDetail(await response.text());
+}
+
+export async function fetchPbocUrl(url: string, retryDelaysMs = pbocRetryDelaysMs): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    try {
+      return await fetchWithTimeout(
+        url,
+        {
+          headers: {
+            "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+          }
+        },
+        pbocFetchTimeoutMs
+      );
+    } catch (error) {
+      lastError = error;
+      if (!isTransientPbocNetworkError(error) || attempt === retryDelaysMs.length) {
+        break;
+      }
+
+      await delay(retryDelaysMs[attempt]);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 function isPbocAnnouncementLink(href: string): boolean {
@@ -156,6 +176,17 @@ function extractSummary(value: string): string {
 
 function extractRateLine(value: string | null): string | null {
   return value?.match(/^Rate\(s\):\s*(.+)$/m)?.[1]?.trim() ?? null;
+}
+
+function isTransientPbocNetworkError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("eai_again");
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function normalizeText(value: string): string {

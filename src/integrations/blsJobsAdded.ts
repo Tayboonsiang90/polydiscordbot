@@ -9,6 +9,7 @@ const currentReportUrl = "https://www.bls.gov/news.release/empsit.nr0.htm";
 const defaultPolymarketUrl = "https://polymarket.com/event/how-many-jobs-added-in-may-945";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const jobsMarketSearchQuery = "how many jobs added";
+const jobsMarketSearchTag = "nonfarm-payroll";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 21 * 24 * 60 * 60_000;
@@ -360,6 +361,7 @@ async function fetchJobsMarketSearchCandidates(now: Date): Promise<Array<{ slug:
   searchUrl.searchParams.set("q", jobsMarketSearchQuery);
   searchUrl.searchParams.set("events_status", "active");
   searchUrl.searchParams.set("limit_per_type", "10");
+  searchUrl.searchParams.append("events_tag", jobsMarketSearchTag);
 
   const response = await fetchWithTimeout(searchUrl.toString(), {
     headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
