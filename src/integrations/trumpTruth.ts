@@ -114,13 +114,21 @@ export const trumpTruthAdapter: WebsiteAdapter = {
     const settings = await refreshTrumpTruthSettings(integration, false, now);
     const activeMarket = getActiveTrumpTruthMarket(settings.markets ?? [], now);
     const items = await fetchTrumpTruthArchiveItems();
-    const posts = items
+    const archivePosts = items
       .slice(0, maxPosts)
-      .map((item) => normalizeTrumpTruthArchiveItem(item, settings.strikeTerms ?? []))
+      .map((item) => normalizeTrumpTruthArchiveItem(item, settings.strikeTerms ?? []));
+    const posts = archivePosts
       .filter((post) => (activeMarket ? isPostInTrumpTruthMarketWindow(post, activeMarket) : false))
       .map((post) => attachTrumpTruthMarketAuditFields(post, activeMarket!, settings.parsedFromUrl));
 
-    return { posts, strikeTerms: settings.strikeTerms ?? [], polymarketUrl: settings.parsedFromUrl, observedAt: now };
+    return {
+      posts,
+      strikeTerms: settings.strikeTerms ?? [],
+      polymarketUrl: settings.parsedFromUrl,
+      checkTitle: "Event check complete",
+      checkFields: buildTrumpTruthCheckFields(posts, archivePosts[0], activeMarket, settings),
+      observedAt: now
+    };
   },
   async enrichEventPost(post: EventMonitorPost, strikeTerms: string[]): Promise<EventMonitorPost> {
     return enrichTrumpTruthPostWithOcr(post, strikeTerms);
@@ -725,6 +733,50 @@ function attachTrumpTruthMarketAuditFields(
       }
     ]
   };
+}
+
+function buildTrumpTruthCheckFields(
+  posts: EventMonitorPost[],
+  latestArchivePost: EventMonitorPost | undefined,
+  activeMarket: TrumpTruthMarket | null,
+  settings: TrumpTruthSettings
+): NonNullable<EventMonitorResult["checkFields"]> {
+  return [
+    { name: "New posts in active window", value: String(posts.length), inline: true },
+    {
+      name: "Active Polymarket market",
+      value: activeMarket
+        ? `${activeMarket.url}\nWindow: ${formatEasternDateTime(activeMarket.startAt)} to ${formatEasternDateTime(activeMarket.endAt)}`
+        : [
+            "none found",
+            "Auto-discovery only accepts compatible `what will Trump post this week` Truth Social markets.",
+            "Current active `what will Trump say` markets are not used because written Truth Social posts do not qualify for those rules."
+          ].join("\n"),
+      inline: false
+    },
+    {
+      name: "Latest archive feed post",
+      value: latestArchivePost
+        ? [`ID: ${latestArchivePost.id}`, `Posted: ${formatEasternDateTime(latestArchivePost.postedAt)}`, latestArchivePost.url].join("\n")
+        : "none returned from https://www.trumpstruth.org/feed",
+      inline: false
+    },
+    {
+      name: "Latest in active window",
+      value: posts[0] ? [`ID: ${posts[0].id}`, `Posted: ${formatEasternDateTime(posts[0].postedAt)}`, posts[0].url].join("\n") : "none",
+      inline: false
+    },
+    {
+      name: "Strike terms",
+      value: (settings.strikeTerms ?? []).length ? (settings.strikeTerms ?? []).join(", ") : "none parsed because no compatible active market is configured",
+      inline: false
+    },
+    {
+      name: "Source note",
+      value: "The bot reads Trump's Truth archive feed, not direct Truth Social. If the latest archive post is old, the archive source has not published newer posts yet.",
+      inline: false
+    }
+  ];
 }
 
 function isArchiveReTruth(...values: string[]): boolean {

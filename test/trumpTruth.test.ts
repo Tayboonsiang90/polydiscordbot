@@ -838,4 +838,60 @@ describe("Trump Truth archive feed", () => {
       matchedTerms: ["King"]
     });
   });
+
+  it("shows archive and market diagnostics when no compatible active market exists", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => `
+            <rss xmlns:truth="https://truthsocial.com/ns"><channel><item>
+              <title>Post</title>
+              <link>https://www.trumpstruth.org/statuses/2</link>
+              <description><![CDATA[<p>Latest archive post</p>]]></description>
+              <pubDate>Sat, 06 Jun 2026 20:24:17 +0000</pubDate>
+              <truth:originalUrl>https://truthsocial.com/@realDonaldTrump/116705031438300324</truth:originalUrl>
+              <truth:originalId>116705031438300324</truth:originalId>
+            </item></channel></rss>
+          `
+        })
+        .mockResolvedValueOnce({ ok: false })
+    );
+
+    expect(trumpTruthAdapter.fetchEventUpdates).toBeDefined();
+    const result = await trumpTruthAdapter.fetchEventUpdates!({
+      settingsJson: JSON.stringify({
+        lastDiscoveryAt: "2100-01-01T00:00:00.000Z",
+        markets: [
+          {
+            url: "https://polymarket.com/event/what-will-trump-post-this-week-may-31",
+            slug: "what-will-trump-post-this-week-may-31",
+            startAt: "2026-05-25T04:00:00.000Z",
+            endAt: "2026-06-01T03:59:00.000Z",
+            strikeTerms: ["Israel"],
+            resolvedTerms: [],
+            activeStrikeTerms: ["Israel"],
+            lastParsedAt: "2026-05-31T00:00:00.000Z"
+          }
+        ]
+      }),
+      polymarketUrl: "https://polymarket.com/event/what-will-trump-post-this-week-may-31"
+    } as Integration);
+
+    expect(result.posts).toEqual([]);
+    expect(result.checkFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Active Polymarket market",
+          value: expect.stringContaining("none found")
+        }),
+        expect.objectContaining({
+          name: "Latest archive feed post",
+          value: expect.stringContaining("116705031438300324")
+        })
+      ])
+    );
+  });
 });
