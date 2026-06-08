@@ -839,7 +839,7 @@ describe("Trump Truth archive feed", () => {
     });
   });
 
-  it("shows archive and market diagnostics when no compatible active market exists", async () => {
+  it("monitors archive posts in feed-only mode when no compatible active market exists", async () => {
     vi.stubGlobal(
       "fetch",
       vi
@@ -880,7 +880,13 @@ describe("Trump Truth archive feed", () => {
       polymarketUrl: "https://polymarket.com/event/what-will-trump-post-this-week-may-31"
     } as Integration);
 
-    expect(result.posts).toEqual([]);
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0]).toMatchObject({
+      id: "116705031438300324",
+      polymarketUrl: "not active",
+      strikeTerms: [],
+      matchedTerms: []
+    });
     expect(result.checkFields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -889,6 +895,10 @@ describe("Trump Truth archive feed", () => {
         }),
         expect.objectContaining({
           name: "Latest archive feed post",
+          value: expect.stringContaining("116705031438300324")
+        }),
+        expect.objectContaining({
+          name: "Latest monitored feed post",
           value: expect.stringContaining("116705031438300324")
         })
       ])

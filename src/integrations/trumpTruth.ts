@@ -117,9 +117,11 @@ export const trumpTruthAdapter: WebsiteAdapter = {
     const archivePosts = items
       .slice(0, maxPosts)
       .map((item) => normalizeTrumpTruthArchiveItem(item, settings.strikeTerms ?? []));
-    const posts = archivePosts
-      .filter((post) => (activeMarket ? isPostInTrumpTruthMarketWindow(post, activeMarket) : false))
-      .map((post) => attachTrumpTruthMarketAuditFields(post, activeMarket!, settings.parsedFromUrl));
+    const posts = activeMarket
+      ? archivePosts
+          .filter((post) => isPostInTrumpTruthMarketWindow(post, activeMarket))
+          .map((post) => attachTrumpTruthMarketAuditFields(post, activeMarket, settings.parsedFromUrl))
+      : archivePosts.map(attachTrumpTruthNoMarketFields);
 
     return {
       posts,
@@ -735,6 +737,24 @@ function attachTrumpTruthMarketAuditFields(
   };
 }
 
+function attachTrumpTruthNoMarketFields(post: EventMonitorPost): EventMonitorPost {
+  return {
+    ...post,
+    polymarketUrl: "not active",
+    strikeTerms: [],
+    matchedTerms: [],
+    fields: [
+      ...(post.fields ?? []),
+      {
+        name: "Market mode",
+        value: "No compatible active Polymarket Truth Social market is configured. This alert is feed-only; strike detection is disabled.",
+        inline: false
+      },
+      { name: "Posted at audit", value: `ET: ${formatEasternDateTime(post.postedAt)}\nUTC: ${post.postedAt.toISOString()}`, inline: false }
+    ]
+  };
+}
+
 function buildTrumpTruthCheckFields(
   posts: EventMonitorPost[],
   latestArchivePost: EventMonitorPost | undefined,
@@ -742,7 +762,7 @@ function buildTrumpTruthCheckFields(
   settings: TrumpTruthSettings
 ): NonNullable<EventMonitorResult["checkFields"]> {
   return [
-    { name: "New posts in active window", value: String(posts.length), inline: true },
+    { name: activeMarket ? "Posts in active window" : "Monitored feed posts", value: String(posts.length), inline: true },
     {
       name: "Active Polymarket market",
       value: activeMarket
@@ -762,7 +782,7 @@ function buildTrumpTruthCheckFields(
       inline: false
     },
     {
-      name: "Latest in active window",
+      name: activeMarket ? "Latest in active window" : "Latest monitored feed post",
       value: posts[0] ? [`ID: ${posts[0].id}`, `Posted: ${formatEasternDateTime(posts[0].postedAt)}`, posts[0].url].join("\n") : "none",
       inline: false
     },
