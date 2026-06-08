@@ -826,6 +826,7 @@ export function parseTrumpTruthMarketWindow(url: string, now = new Date()): { sl
   }
 
   const rangeMatch = slug.match(/what-will-trump-post-this-week-([a-z]+)-(\d+)-([a-z]+)-(\d+)/i);
+  const sameMonthRangeMatch = slug.match(/what-will-trump-post-this-week-([a-z]+)-(\d+)-(\d+)/i);
   const endOnlyMatch = slug.match(/what-will-trump-post-this-week-([a-z]+)-(\d+)$/i);
   const year = getEasternYear(now);
   const range = rangeMatch
@@ -835,6 +836,13 @@ export function parseTrumpTruthMarketWindow(url: string, now = new Date()): { sl
         endMonth: monthNumber(rangeMatch[3]),
         endDay: Number(rangeMatch[4])
       }
+    : sameMonthRangeMatch
+      ? {
+          startMonth: monthNumber(sameMonthRangeMatch[1]),
+          startDay: Number(sameMonthRangeMatch[2]),
+          endMonth: monthNumber(sameMonthRangeMatch[1]),
+          endDay: Number(sameMonthRangeMatch[3])
+        }
     : endOnlyMatch
       ? getWeekEndingRange(monthNumber(endOnlyMatch[1]), Number(endOnlyMatch[2]), year)
       : null;

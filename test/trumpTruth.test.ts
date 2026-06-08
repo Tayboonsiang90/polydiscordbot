@@ -122,6 +122,17 @@ describe("Trump Truth strike parser", () => {
 
     expect(
       parseTrumpTruthMarketWindow(
+        "https://polymarket.com/event/what-will-trump-post-this-week-june-9-14-20260608140318641",
+        new Date("2026-06-09T12:00:00.000Z")
+      )
+    ).toMatchObject({
+      slug: "what-will-trump-post-this-week-june-9-14-20260608140318641",
+      startAt: "2026-06-09T04:00:00.000Z",
+      endAt: "2026-06-15T03:59:00.000Z"
+    });
+
+    expect(
+      parseTrumpTruthMarketWindow(
         "https://polymarket.com/event/what-will-trump-post-this-week-may-24",
         new Date("2026-05-18T12:00:00.000Z")
       )
@@ -321,6 +332,7 @@ describe("Trump Truth strike parser", () => {
   });
 
   it("discovers the active Trump Truth market when the stored market is expired", async () => {
+    const nextUrl = "https://polymarket.com/event/what-will-trump-post-this-week-june-9-14-20260608140318641";
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -328,8 +340,8 @@ describe("Trump Truth strike parser", () => {
         json: async () => ({
           events: [
             {
-              slug: "what-will-trump-post-this-week-may-24",
-              title: "What will Trump post this week? (May 24)",
+              slug: "what-will-trump-post-this-week-june-9-14-20260608140318641",
+              title: "What will Trump post this week? (June 9 - 14)",
               active: true,
               closed: false,
               tags: [{ slug: "trump" }, { slug: "mention-markets" }]
@@ -373,10 +385,10 @@ describe("Trump Truth strike parser", () => {
         polymarketUrl: "https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17"
       } as Integration,
       false,
-      new Date("2026-05-18T12:00:00.000Z")
+      new Date("2026-06-09T12:00:00.000Z")
     );
 
-    expect(settings.parsedFromUrl).toBe("https://polymarket.com/event/what-will-trump-post-this-week-may-24");
+    expect(settings.parsedFromUrl).toBe(nextUrl);
     expect(settings.strikeTerms).toEqual(["Harvard"]);
   });
 });
