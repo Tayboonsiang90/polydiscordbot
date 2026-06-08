@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildUsgsApiUrl,
-  extractLatestUsgsEarthquakeValue,
+  extractUsgsEarthquakeCountValue,
   formatUsgsEarthquake,
   refreshEarthquakePolymarketQueue,
-  shouldAlertOnUsgsEarthquakeChange,
+  shouldAlertOnUsgsEarthquakeCountChange,
   type UsgsEarthquakeFeature
 } from "../src/integrations/usgsEarthquakes.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -19,7 +19,7 @@ const feature: UsgsEarthquakeFeature = {
   properties: {
     mag: 6.2,
     place: "10 km S of Test City",
-    time: Date.parse("2026-05-07T12:34:56.000Z"),
+    time: Date.parse("2026-06-09T12:34:56.000Z"),
     url: "https://earthquake.usgs.gov/earthquakes/eventpage/us7000test"
   },
   geometry: {
@@ -28,67 +28,92 @@ const feature: UsgsEarthquakeFeature = {
 };
 
 describe("USGS earthquakes adapter", () => {
-  it("formats the latest qualifying 5.5+ earthquake", () => {
-    expect(extractLatestUsgsEarthquakeValue({ features: [feature] })).toBe(
+  it("formats the active market count with matching USGS search parameters", () => {
+    expect(
+      extractUsgsEarthquakeCountValue(
+        { metadata: { count: 1 }, features: [feature] },
+        "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-june-8-june-14-20260605212535734"
+      )
+    ).toBe(
       [
-        "Event ID: us7000test",
-        "Magnitude: 6.2",
-        "Location: 10 km S of Test City",
-        "Time: 2026-05-07T12:34:56.000Z",
-        "Depth: 35 km",
-        "USGS: https://earthquake.usgs.gov/earthquakes/eventpage/us7000test"
+        "Metric: USGS 5.5+ earthquake count",
+        "Window ET: 2026-06-08 00:00 to 2026-06-14 23:59",
+        "Window UTC: 2026-06-08T04:00:00.000Z to 2026-06-15T03:59:00.000Z",
+        "Minimum magnitude: 5.5",
+        "Total earthquakes: 1",
+        "Events: us7000test: M6.2, 10 km S of Test City, 2026-06-09T12:34:56.000Z",
+        "Resolution: https://earthquake.usgs.gov/earthquakes/search/"
       ].join("\n")
     );
   });
 
-  it("returns a stable no-event value when the market window has no events", () => {
+  it("returns a stable zero-count value when the market window has no events", () => {
     expect(
-      extractLatestUsgsEarthquakeValue(
-        { features: [] },
+      extractUsgsEarthquakeCountValue(
+        { metadata: { count: 0 }, features: [] },
         "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-25-may-31"
       )
     ).toBe(
-      "No 5.5+ USGS earthquakes found in the 2026-05-25 to 2026-05-31 market window."
+      [
+        "Metric: USGS 5.5+ earthquake count",
+        "Window ET: 2026-05-25 00:00 to 2026-05-31 23:59",
+        "Window UTC: 2026-05-25T04:00:00.000Z to 2026-06-01T03:59:00.000Z",
+        "Minimum magnitude: 5.5",
+        "Total earthquakes: 0",
+        "Events: none",
+        "Resolution: https://earthquake.usgs.gov/earthquakes/search/"
+      ].join("\n")
     );
   });
 
-  it("rejects non-qualifying magnitudes", () => {
+  it("rejects non-qualifying magnitudes in the event detail formatter", () => {
     expect(() => formatUsgsEarthquake({ ...feature, properties: { ...feature.properties, mag: 5.4 } })).toThrow(
       "qualifying 5.5+ earthquake"
     );
   });
 
-  it("alerts only when the latest qualifying earthquake event ID changes", () => {
+  it("alerts only when the qualifying earthquake count increases", () => {
     const previous = [
-      "Event ID: us7000spqc",
-      "Magnitude: 6",
-      "Location: 33 km NW of Valparaíso, Chile",
-      "Time: 2026-05-31T21:34:18.009Z"
+      "Metric: USGS 5.5+ earthquake count",
+      "Total earthquakes: 2",
+      "Events: us7000spqc: M6, 33 km NW of Valparaiso, Chile, 2026-05-31T21:34:18.009Z"
     ].join("\n");
-    const sameEventWithCorrectedTime = [
-      "Event ID: us7000spqc",
-      "Magnitude: 6",
-      "Location: 33 km NW of Valparaíso, Chile",
-      "Time: 2026-05-31T21:34:18.026Z"
+    const sameCountWithCorrectedTime = [
+      "Metric: USGS 5.5+ earthquake count",
+      "Total earthquakes: 2",
+      "Events: us7000spqc: M6, 33 km NW of Valparaiso, Chile, 2026-05-31T21:34:18.026Z"
     ].join("\n");
-    const newEvent = sameEventWithCorrectedTime.replace("us7000spqc", "us7000new");
+    const higherCount = sameCountWithCorrectedTime.replace("Total earthquakes: 2", "Total earthquakes: 3");
+    const lowerCount = sameCountWithCorrectedTime.replace("Total earthquakes: 2", "Total earthquakes: 1");
 
-    expect(shouldAlertOnUsgsEarthquakeChange(previous, sameEventWithCorrectedTime)).toBe(false);
-    expect(shouldAlertOnUsgsEarthquakeChange(previous, newEvent)).toBe(true);
-    expect(shouldAlertOnUsgsEarthquakeChange(previous, "No 5.5+ USGS earthquakes found in the 2026-06-01 to 2026-06-07 market window.")).toBe(
-      false
+    expect(shouldAlertOnUsgsEarthquakeCountChange(previous, sameCountWithCorrectedTime)).toBe(false);
+    expect(shouldAlertOnUsgsEarthquakeCountChange(previous, higherCount)).toBe(true);
+    expect(shouldAlertOnUsgsEarthquakeCountChange(previous, lowerCount)).toBe(false);
+    expect(shouldAlertOnUsgsEarthquakeCountChange("Event ID: legacy", higherCount)).toBe(false);
+  });
+
+  it("uses the market rules UTC window for June 1 through June 7", () => {
+    const url = new URL(
+      buildUsgsApiUrl("https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-june-1-june-7-20260603201822187")
     );
+
+    expect(url.searchParams.get("starttime")).toBe("2026-06-01T04:00:00.000Z");
+    expect(url.searchParams.get("endtime")).toBe("2026-06-08T03:59:00.000Z");
   });
 
   it("builds a USGS API URL from the active Polymarket date window", () => {
-    const url = new URL(buildUsgsApiUrl("https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-25-may-31"));
+    const url = new URL(
+      buildUsgsApiUrl("https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-june-8-june-14-20260605212535734")
+    );
 
+    expect(url.searchParams.get("format")).toBe("geojson");
     expect(url.searchParams.get("minmagnitude")).toBe("5.5");
-    expect(url.searchParams.get("starttime")).toBe("2026-05-25T04:00:00.000Z");
-    expect(url.searchParams.get("endtime")).toBe("2026-06-01T03:59:00.000Z");
+    expect(url.searchParams.get("starttime")).toBe("2026-06-08T04:00:00.000Z");
+    expect(url.searchParams.get("endtime")).toBe("2026-06-15T03:59:00.000Z");
+    expect(url.searchParams.has("limit")).toBe(false);
   });
 
-  it("discovers and queues the next weekly 5.5 earthquake market near expiry", async () => {
+  it("discovers and queues the next weekly 5.5 earthquake market with a timestamped slug near expiry", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -96,15 +121,15 @@ describe("USGS earthquakes adapter", () => {
         json: async () => ({
           events: [
             {
-              slug: "how-many-6pt5-or-above-earthquakes-may-25-may-31",
-              title: "How many 6.5 or above earthquakes May 25 - May 31?",
+              slug: "how-many-6pt5-or-above-earthquakes-june-8-june-14-20260605212054030",
+              title: "How many 6.5 or above earthquakes June 8 - June 14?",
               active: true,
               closed: false,
               tags: [{ slug: "earthquakes" }]
             },
             {
-              slug: "how-many-5pt5-or-above-earthquakes-may-25-may-31",
-              title: "How many 5.5 or above earthquakes May 25 - May 31?",
+              slug: "how-many-5pt5-or-above-earthquakes-june-8-june-14-20260605212535734",
+              title: "How many 5.5 or above earthquakes June 8 - June 14?",
               active: true,
               closed: false,
               tags: [{ slug: "earthquakes" }]
@@ -119,28 +144,28 @@ describe("USGS earthquakes adapter", () => {
         settingsJson: JSON.stringify({
           polymarketMarkets: [
             {
-              url: "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-18-may-24",
-              slug: "how-many-5pt5-or-above-earthquakes-may-18-may-24",
-              startAt: "2026-05-18T04:00:00.000Z",
-              endAt: "2026-05-25T03:59:00.000Z",
-              addedAt: "2026-05-18T04:00:00.000Z"
+              url: "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-june-1-june-7-20260603201822187",
+              slug: "how-many-5pt5-or-above-earthquakes-june-1-june-7-20260603201822187",
+              startAt: "2026-06-01T04:00:00.000Z",
+              endAt: "2026-06-08T03:59:00.000Z",
+              addedAt: "2026-06-01T04:00:00.000Z"
             }
           ]
         }),
-        polymarketUrl: "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-18-may-24"
+        polymarketUrl: "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-june-1-june-7-20260603201822187"
       } as Integration,
-      new Date("2026-05-23T12:00:00.000Z")
+      new Date("2026-06-06T12:00:00.000Z")
     );
     const settings = JSON.parse(result.settingsJson ?? "{}") as {
       lastEarthquakeDiscoveryAt?: string;
       polymarketMarkets?: Array<{ slug: string }>;
     };
 
-    expect(settings.lastEarthquakeDiscoveryAt).toBe("2026-05-23T12:00:00.000Z");
+    expect(settings.lastEarthquakeDiscoveryAt).toBe("2026-06-06T12:00:00.000Z");
     expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual([
-      "how-many-5pt5-or-above-earthquakes-may-18-may-24",
-      "how-many-5pt5-or-above-earthquakes-may-25-may-31"
+      "how-many-5pt5-or-above-earthquakes-june-1-june-7-20260603201822187",
+      "how-many-5pt5-or-above-earthquakes-june-8-june-14-20260605212535734"
     ]);
-    expect(result.activeUrl).toBe("https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-18-may-24");
+    expect(result.activeUrl).toBe("https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-june-1-june-7-20260603201822187");
   });
 });

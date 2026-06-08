@@ -2,16 +2,21 @@ import { fetchWithTimeout } from "../http.js";
 import { parsePolymarketDateRangeWindow, resolveIntegrationPolymarketQueue, type PolymarketQueueMarket, upsertPolymarketQueueUrl } from "../polymarketQueue.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
-const sourceUrl = "https://earthquake.usgs.gov/earthquakes/browse/significant.php#sigdef";
+const sourceUrl = "https://earthquake.usgs.gov/earthquakes/search/";
 const usgsApiUrl = "https://earthquake.usgs.gov/fdsnws/event/1/query";
 const defaultPolymarketUrl = "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-4-may-10";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const earthquakeMarketSearchQuery = "5.5 earthquakes";
+const minimumMagnitude = "5.5";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 
 type UsgsEarthquakeFeatureCollection = {
+  metadata?: {
+    count?: number;
+    generated?: number;
+  };
   features?: UsgsEarthquakeFeature[];
 };
 
@@ -46,13 +51,18 @@ export type UsgsEarthquakeFeature = {
   } | null;
 };
 
-export function extractLatestUsgsEarthquakeValue(data: UsgsEarthquakeFeatureCollection, polymarketUrl = defaultPolymarketUrl): string {
-  const feature = data.features?.[0];
-  if (!feature) {
-    return `No 5.5+ USGS earthquakes found in the ${formatMarketWindow(polymarketUrl)} market window.`;
-  }
-
-  return formatUsgsEarthquake(feature);
+export function extractUsgsEarthquakeCountValue(data: UsgsEarthquakeFeatureCollection, polymarketUrl = defaultPolymarketUrl): string {
+  const total = typeof data.metadata?.count === "number" ? data.metadata.count : (data.features?.length ?? 0);
+  const events = (data.features ?? []).map(formatUsgsEarthquakeSummary);
+  return [
+    "Metric: USGS 5.5+ earthquake count",
+    `Window ET: ${formatMarketWindow(polymarketUrl)}`,
+    `Window UTC: ${formatMarketWindowUtc(polymarketUrl)}`,
+    `Minimum magnitude: ${minimumMagnitude}`,
+    `Total earthquakes: ${total}`,
+    `Events: ${events.length ? events.join(" | ") : "none"}`,
+    `Resolution: ${sourceUrl}`
+  ].join("\n");
 }
 
 export function formatUsgsEarthquake(feature: UsgsEarthquakeFeature): string {
@@ -85,7 +95,7 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
   defaultChannelName: "earthquake",
   alertRoleName: "USGS Earthquake Alerts",
   alertRoleEmoji: "\uD83C\uDF0E",
-  shouldAlertOnChange: shouldAlertOnUsgsEarthquakeChange,
+  shouldAlertOnChange: shouldAlertOnUsgsEarthquakeCountChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshEarthquakePolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
@@ -102,27 +112,30 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
     }
 
     const data = (await response.json()) as UsgsEarthquakeFeatureCollection;
-    const value = extractLatestUsgsEarthquakeValue(data, polymarketUrl);
+    const value = extractUsgsEarthquakeCountValue(data, polymarketUrl);
     return {
       value,
-      rawValue: value,
-      unit: "latest 5.5+ USGS earthquake",
+      rawValue: extractUsgsEarthquakeCount(value) ?? value,
+      unit: "USGS 5.5+ earthquake count",
       observedAt: new Date()
     };
   }
 };
 
-export function shouldAlertOnUsgsEarthquakeChange(previousValue: string | null, currentValue: string): boolean {
-  const currentEventId = extractUsgsEventId(currentValue);
-  if (!currentEventId) {
+export function shouldAlertOnUsgsEarthquakeCountChange(previousValue: string | null, currentValue: string): boolean {
+  const currentCount = extractUsgsEarthquakeCount(currentValue);
+  const previousCount = extractUsgsEarthquakeCount(previousValue);
+  if (currentCount === null || previousCount === null) {
     return false;
   }
 
-  return extractUsgsEventId(previousValue) !== currentEventId;
+  return Number(currentCount) > Number(previousCount);
 }
 
-function extractUsgsEventId(value: string | null): string | null {
-  return value?.match(/^Event ID:\s*(\S+)/m)?.[1] ?? null;
+export const shouldAlertOnUsgsEarthquakeChange = shouldAlertOnUsgsEarthquakeCountChange;
+
+function extractUsgsEarthquakeCount(value: string | null): string | null {
+  return value?.match(/^Total earthquakes:\s*(\d+)$/m)?.[1] ?? null;
 }
 
 export async function refreshEarthquakePolymarketQueue(
@@ -175,9 +188,8 @@ export function buildUsgsApiUrl(polymarketUrl: string): string {
 
   const url = new URL(usgsApiUrl);
   url.searchParams.set("format", "geojson");
-  url.searchParams.set("minmagnitude", "5.5");
+  url.searchParams.set("minmagnitude", minimumMagnitude);
   url.searchParams.set("orderby", "time");
-  url.searchParams.set("limit", "1");
   url.searchParams.set("starttime", window.startAt);
   url.searchParams.set("endtime", window.endAt);
   return url.toString();
@@ -326,16 +338,42 @@ function formatMarketWindow(polymarketUrl: string): string {
     return "configured";
   }
 
-  return `${formatEasternDate(new Date(window.startAt))} to ${formatEasternDate(new Date(window.endAt))}`;
+  return `${formatEasternDateTime(new Date(window.startAt))} to ${formatEasternDateTime(new Date(window.endAt))}`;
 }
 
-function formatEasternDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(date);
+function formatMarketWindowUtc(polymarketUrl: string): string {
+  const window = parsePolymarketDateRangeWindow(polymarketUrl);
+  if (!window) {
+    return "configured";
+  }
+
+  return `${window.startAt} to ${window.endAt}`;
+}
+
+function formatUsgsEarthquakeSummary(feature: UsgsEarthquakeFeature): string {
+  const magnitude = feature.properties?.mag ?? "unknown magnitude";
+  const place = feature.properties?.place?.trim() || "unknown location";
+  const time = feature.properties?.time ? new Date(feature.properties.time).toISOString() : "unknown time";
+  const id = feature.id ?? "unknown";
+  return `${id}: M${magnitude}, ${place}, ${time}`;
+}
+
+function formatEasternDateTime(date: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    })
+      .formatToParts(date)
+      .map((part) => [part.type, part.value])
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 function isNonEmptyString(value: unknown): value is string {
