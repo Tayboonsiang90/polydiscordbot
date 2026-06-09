@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractCdcFluHospitalizationReport,
+  fetchCdcFluHospitalizationWeeklyReport,
   formatCdcFluHospitalizationValue,
   parseFluHospitalizationMarketPeriod,
   refreshFluHospitalizationPolymarketQueue,
@@ -10,6 +11,7 @@ import {
 import type { Integration } from "../src/integrations/types.js";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -88,6 +90,19 @@ describe("CDC flu hospitalization adapter", () => {
     expect(
       shouldAlertOnCdcFluHospitalizationChange("Status: published\nValue: 87.2 per 100,000", "Status: published\nValue: 87.3 per 100,000")
     ).toBe(true);
+  });
+
+  it("treats CDC weekly report timeouts as unpublished instead of failing the check", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("The operation was aborted due to timeout"))
+    );
+
+    const reportPromise = fetchCdcFluHospitalizationWeeklyReport(2026, 22);
+    await vi.advanceTimersByTimeAsync(4_000);
+
+    await expect(reportPromise).resolves.toBeNull();
   });
 
   it("auto-discovers active weekly flu hospitalization markets", async () => {

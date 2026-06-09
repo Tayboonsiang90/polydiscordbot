@@ -15,6 +15,7 @@ const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 14 * 24 * 60 * 60_000;
 const latestPriorReportSearchWeeks = 8;
+const cdcWeeklyReportTimeoutMs = 5_000;
 
 export type FluHospitalizationPeriod = {
   year: number;
@@ -247,14 +248,16 @@ export function buildCdcFluWeeklyReportUrl(year: number, week: number): string {
   return `https://www.cdc.gov/fluview/surveillance/${year}-week-${week}.html`;
 }
 
-async function fetchCdcFluHospitalizationWeeklyReport(
+export async function fetchCdcFluHospitalizationWeeklyReport(
   year: number,
   week: number
 ): Promise<CdcFluHospitalizationReport | null> {
   const reportUrl = buildCdcFluWeeklyReportUrl(year, week);
-  const response = await fetchWithTimeout(reportUrl, {
-    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
-  });
+  const response = await fetchCdcWeeklyReportResponse(reportUrl);
+  if (!response) {
+    return null;
+  }
+
   if (response.status === 404) {
     return null;
   }
@@ -274,14 +277,47 @@ async function fetchLatestPriorCdcFluHospitalizationReport(
   targetPeriod: FluHospitalizationPeriod,
   maxWeeks: number
 ): Promise<CdcFluHospitalizationReport | null> {
-  for (let week = targetPeriod.week - 1; week >= Math.max(1, targetPeriod.week - maxWeeks); week -= 1) {
-    const report = await fetchCdcFluHospitalizationWeeklyReport(targetPeriod.year, week);
-    if (report) {
-      return report;
+  const minWeek = Math.max(1, targetPeriod.week - maxWeeks);
+  const reports = await Promise.all(
+    Array.from({ length: targetPeriod.week - minWeek }, (_, index) =>
+      fetchCdcFluHospitalizationWeeklyReport(targetPeriod.year, targetPeriod.week - index - 1)
+    )
+  );
+  return reports.find((report) => report !== null) ?? null;
+}
+
+async function fetchCdcWeeklyReportResponse(reportUrl: string): Promise<Response | null> {
+  try {
+    return await fetchWithTimeout(
+      reportUrl,
+      {
+        headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+      },
+      cdcWeeklyReportTimeoutMs
+    );
+  } catch (error) {
+    if (isCdcWeeklyReportUnavailableError(error)) {
+      return null;
     }
+
+    throw error;
+  }
+}
+
+function isCdcWeeklyReportUnavailableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
   }
 
-  return null;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("the operation was aborted") ||
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("und_err_connect_timeout") ||
+    message.includes("econnreset") ||
+    message.includes("eai_again")
+  );
 }
 
 function buildFluHospitalizationPeriod(year: number, week: number): FluHospitalizationPeriod {
