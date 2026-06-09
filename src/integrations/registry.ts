@@ -56,6 +56,7 @@ import { pbocRateChangeAdapter } from "./pbocRateChange.js";
 import { polymarketClarificationsAdapter } from "./polymarketClarifications.js";
 import { polymarketDisputesAdapter } from "./polymarketDisputes.js";
 import { polymarketProposalsAdapter } from "./polymarketProposals.js";
+import { portwatchHormuzShipsAdapter } from "./portwatchHormuzShips.js";
 import { powerballJackpotAdapter } from "./powerballJackpot.js";
 import { pythNaturalGasAdapter } from "./pythNaturalGas.js";
 import { pythWtiAdapter } from "./pythWti.js";
@@ -141,6 +142,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [polymarketClarificationsAdapter.id, polymarketClarificationsAdapter],
   [polymarketDisputesAdapter.id, polymarketDisputesAdapter],
   [polymarketProposalsAdapter.id, polymarketProposalsAdapter],
+  [portwatchHormuzShipsAdapter.id, portwatchHormuzShipsAdapter],
   [powerballJackpotAdapter.id, powerballJackpotAdapter],
   [pythNaturalGasAdapter.id, pythNaturalGasAdapter],
   [pythWtiAdapter.id, pythWtiAdapter],

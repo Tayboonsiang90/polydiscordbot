@@ -79,6 +79,18 @@ describe("Polymarket URL queue", () => {
     });
   });
 
+  it("parses week-of market slugs as seven-day ET windows", () => {
+    expect(
+      parsePolymarketDateRangeWindow(
+        "https://polymarket.com/event/how-many-ships-transit-the-strait-of-hormuz-week-of-june-1",
+        new Date("2026-06-03T12:00:00.000Z")
+      )
+    ).toEqual({
+      startAt: "2026-06-01T04:00:00.000Z",
+      endAt: "2026-06-08T03:59:00.000Z"
+    });
+  });
+
   it("parses month-only market slugs", () => {
     expect(
       parsePolymarketDateRangeWindow(

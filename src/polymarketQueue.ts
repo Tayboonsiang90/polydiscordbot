@@ -69,6 +69,21 @@ export function parsePolymarketDateRangeWindow(url: string, now = new Date()): {
     }
   }
 
+  for (let index = 0; index < parts.length - 3; index += 1) {
+    if (parts[index] !== "week" || parts[index + 1] !== "of") {
+      continue;
+    }
+
+    const startMonth = monthNumber(parts[index + 2]);
+    const startDay = parseDay(parts[index + 3]);
+    if (!startMonth || !startDay) {
+      continue;
+    }
+
+    const explicitYear = parts.slice(index + 4).map(parseYear).find((value): value is number => value !== null);
+    return buildWeekOfWindow(explicitYear ?? year, startMonth, startDay);
+  }
+
   for (let index = 0; index < parts.length - 1; index += 1) {
     const startMonth = monthNumber(parts[index]);
     const startDay = parseDay(parts[index + 1]);
@@ -127,6 +142,11 @@ function buildQuarterWindow(year: number, quarter: number): { startAt: string; e
   const endMonth = startMonth + 2;
   const endDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate();
   return buildEasternWindow(year, startMonth, 1, endMonth, endDay);
+}
+
+function buildWeekOfWindow(year: number, startMonth: number, startDay: number): { startAt: string; endAt: string } | null {
+  const endDate = new Date(Date.UTC(year, startMonth - 1, startDay + 6));
+  return buildEasternWindow(year, startMonth, startDay, endDate.getUTCMonth() + 1, endDate.getUTCDate());
 }
 
 function resolvePolymarketQueue(settings: Record<string, unknown>, currentUrl: string | null, now: Date): PolymarketQueueResolution {
