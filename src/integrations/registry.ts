@@ -38,6 +38,13 @@ import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
 import { nceiTornadoesAdapter } from "./nceiTornadoes.js";
 import { nasaGistempAdapter } from "./nasaGistemp.js";
 import { noaaNycPrecipAdapter } from "./noaaNycPrecip.js";
+import {
+  noaaAtlantaRainAdapter,
+  noaaBostonRainAdapter,
+  noaaDallasRainAdapter,
+  noaaDenverRainAdapter,
+  noaaSanFranciscoRainAdapter
+} from "./noaaDailyRain.js";
 import { noaaSeattlePrecipAdapter } from "./noaaSeattlePrecip.js";
 import { openAiChatGptOutagesAdapter } from "./openAiChatGptOutages.js";
 import { ornnB200IndexAdapter } from "./ornnB200Index.js";
@@ -117,7 +124,12 @@ const adapters = new Map<string, WebsiteAdapter>([
   [nbsPressReleaseAdapter.id, nbsPressReleaseAdapter],
   [nceiTornadoesAdapter.id, nceiTornadoesAdapter],
   [nasaGistempAdapter.id, nasaGistempAdapter],
+  [noaaAtlantaRainAdapter.id, noaaAtlantaRainAdapter],
+  [noaaBostonRainAdapter.id, noaaBostonRainAdapter],
+  [noaaDallasRainAdapter.id, noaaDallasRainAdapter],
+  [noaaDenverRainAdapter.id, noaaDenverRainAdapter],
   [noaaNycPrecipAdapter.id, noaaNycPrecipAdapter],
+  [noaaSanFranciscoRainAdapter.id, noaaSanFranciscoRainAdapter],
   [noaaSeattlePrecipAdapter.id, noaaSeattlePrecipAdapter],
   [openAiChatGptOutagesAdapter.id, openAiChatGptOutagesAdapter],
   [ornnB200IndexAdapter.id, ornnB200IndexAdapter],
