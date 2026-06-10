@@ -1,5 +1,12 @@
-﻿import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
+import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import {
+  buildNoaaMonthlyPrecipRequestBody,
+  extractNoaaMonthlyPrecipitationValue,
+  isValidNoaaMonthlyPrecipPeriod,
+  type NoaaMonthlyPrecipResponse,
+  type NoaaMonthlyPrecipSettings
+} from "./noaaMonthlyPrecip.js";
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 
 const sourceUrl = "https://www.weather.gov/wrh/climate?wfo=sew";
@@ -15,23 +22,13 @@ const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   requiredTagSlugs: ["precipitation"]
 };
 
-type NoaaSettings = {
-  year: number;
-  month: number;
-};
-
-type NoaaResponse = {
-  data?: Array<[string, string]>;
-  error?: string;
-};
-
-export function getNoaaSeattlePrecipSettings(integration?: Integration): NoaaSettings {
+export function getNoaaSeattlePrecipSettings(integration?: Integration): NoaaMonthlyPrecipSettings {
   if (!integration?.settingsJson) {
     return { year: defaultYear, month: defaultMonth };
   }
 
   try {
-    const settings = JSON.parse(integration.settingsJson) as Partial<NoaaSettings>;
+    const settings = JSON.parse(integration.settingsJson) as Partial<NoaaMonthlyPrecipSettings>;
     const year = Number(settings.year);
     const month = Number(settings.month);
     if (isValidNoaaSeattlePeriod(year, month)) {
@@ -44,20 +41,8 @@ export function getNoaaSeattlePrecipSettings(integration?: Integration): NoaaSet
   return { year: defaultYear, month: defaultMonth };
 }
 
-export function extractNoaaSeattlePrecipitationValue(response: NoaaResponse, settings: NoaaSettings): string {
-  if (response.error) {
-    throw new Error(`NOAA returned error: ${response.error}`);
-  }
-
-  const row = response.data?.[0];
-  const rawValue = row?.[1];
-  if (!rawValue || rawValue === "M") {
-    throw new Error("Could not find Seattle monthly precipitation in the NOAA response");
-  }
-
-  const normalizedValue = normalizePrecipitationValue(rawValue);
-  const period = row[0] ?? `${settings.year}-${padMonth(settings.month)}`;
-  return `${normalizedValue} inches (${period})`;
+export function extractNoaaSeattlePrecipitationValue(response: NoaaMonthlyPrecipResponse, settings: NoaaMonthlyPrecipSettings): string {
+  return extractNoaaMonthlyPrecipitationValue(response, settings, "Seattle Area");
 }
 
 export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
@@ -83,14 +68,14 @@ export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
         "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
         "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
       },
-      body: buildNoaaRequestBody(settings)
+      body: buildNoaaMonthlyPrecipRequestBody(stationId, settings)
     });
 
     if (!response.ok) {
       throw new Error(`NOAA returned HTTP ${response.status}`);
     }
 
-    const json = (await response.json()) as NoaaResponse;
+    const json = (await response.json()) as NoaaMonthlyPrecipResponse;
     const value = extractNoaaSeattlePrecipitationValue(json, settings);
     return {
       value,
@@ -102,41 +87,5 @@ export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
 };
 
 export function isValidNoaaSeattlePeriod(year: number, month: number): boolean {
-  return Number.isInteger(year) && Number.isInteger(month) && year >= 1900 && year <= 2100 && month >= 1 && month <= 12;
+  return isValidNoaaMonthlyPrecipPeriod(year, month);
 }
-
-function buildNoaaRequestBody(settings: NoaaSettings): URLSearchParams {
-  const periodEndDate = `${settings.year}-${padMonth(settings.month)}-${lastDayOfMonth(settings)}`;
-  const params = {
-    sid: stationId,
-    date: periodEndDate,
-    elems: [{ name: "pcpn", interval: "mly", duration: "mly", reduce: "sum" }]
-  };
-
-  return new URLSearchParams({
-    params: JSON.stringify(params),
-    output: "json"
-  });
-}
-
-function normalizePrecipitationValue(value: string): string {
-  if (value === "T") {
-    return "T";
-  }
-
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue) || numericValue < 0 || numericValue >= 100) {
-    throw new Error(`Invalid NOAA Seattle precipitation value: ${value}`);
-  }
-
-  return numericValue.toFixed(2);
-}
-
-function lastDayOfMonth(settings: NoaaSettings): string {
-  return String(new Date(settings.year, settings.month, 0).getDate()).padStart(2, "0");
-}
-
-function padMonth(month: number): string {
-  return String(month).padStart(2, "0");
-}
-

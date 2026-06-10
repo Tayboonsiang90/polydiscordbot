@@ -95,9 +95,9 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `noaa-boston-rain` | `/bostonrain` | `#bostonrain` | `NOAA Boston Rain Alerts` | `☔` | Monitors NOAA Boston Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
 | `noaa-dallas-rain` | `/dallasrain` | `#dallasrain` | `NOAA Dallas Rain Alerts` | `☔` | Monitors NOAA Dallas Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
 | `noaa-denver-rain` | `/denverrain` | `#denverrain` | `NOAA Denver Rain Alerts` | `☔` | Monitors NOAA Denver Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
-| `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation for Polymarket resolution checks. |
+| `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation with latest daily row details so new 0.00 or trace days still alert. |
 | `noaa-san-francisco-rain` | `/sfrain` | `#sfrain` | `NOAA SF Rain Alerts` | `☔` | Monitors NOAA San Francisco City daily precipitation for the June 9 rain market and alerts when the value finalizes. |
-| `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation for Polymarket resolution checks. |
+| `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation with latest daily row details so new 0.00 or trace days still alert. |
 | `ncei-tornadoes` | `/tornadoes` | `#tornadoes` | `NCEI Tornado Alerts` | `🌪️` | Monitors NCEI U.S. Tornadoes monthly time-series counts and auto-discovers monthly tornado markets. |
 
 ## Archived Integrations
@@ -359,6 +359,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - NCEI tornadoes monitors monthly U.S. tornado counts from the NCEI Tornadoes Time Series JSON endpoint, treats preliminary counts as resolution-relevant, and only alerts when the target month first becomes published.
 - USGS earthquakes monitors the official USGS event API count for 5.5+ earthquakes in the active Polymarket date window and auto-discovers upcoming weekly 5.5+ earthquake markets into the shared queue.
 - HKO Hong Kong precipitation uses Daily Extract as the official total, then adds the text-only Yesterday's Weather rainfall only when that report is newer than the latest Daily Extract day.
+- NOAA NYC and Seattle monthly precipitation use RCC ACIS daily rows instead of only the monthly sum, so newly posted `0.00` or `T` days still change `lastValue` and alert.
 - Met Office London precipitation uses Heathrow stationdata as the official monthly row and Infoclimat Heathrow climatology as daily cumulative alpha before the Met Office row appears.
 - White House Alien Arrests NYC reads the embedded Flourish table on `whitehouse.gov/aliens` and exact-matches the `New York, NY` row's `Total Arrests` counter.
 - White House Full Lid monitors Roll Call's Factba.se calendar and Forth's WH pool page for today's ET full lid; it polls every minute during 8:00 AM-8:30 PM ET and hourly off-hours.

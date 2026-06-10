@@ -32,16 +32,41 @@ const noaaIntegration: Integration = {
 };
 
 describe("NOAA Seattle precipitation adapter", () => {
-  it("extracts Sum precipitation from the NOAA monthly response", () => {
-    const value = extractNoaaSeattlePrecipitationValue({ data: [["2026-05", "1.23"]] }, { year: 2026, month: 5 });
+  it("extracts monthly precipitation from NOAA daily rows", () => {
+    const value = extractNoaaSeattlePrecipitationValue(
+      {
+        data: [
+          ["2026-05-01", "1.20"],
+          ["2026-05-02", "0.03"],
+          ["2026-05-03", "0.00"]
+        ]
+      },
+      { year: 2026, month: 5 }
+    );
 
-    expect(value).toBe("1.23 inches (2026-05)");
+    expect(value).toContain("Metric: NOAA monthly precipitation");
+    expect(value).toContain("Location: Seattle Area");
+    expect(value).toContain("Period: 2026-05");
+    expect(value).toContain("Reported days: 3/31");
+    expect(value).toContain("Total precipitation: 1.23 inches");
+    expect(value).toContain("Latest reported day: 2026-05-03");
+    expect(value).toContain("Latest day value: 0.00 inches");
   });
 
-  it("keeps trace precipitation as T", () => {
-    const value = extractNoaaSeattlePrecipitationValue({ data: [["2026-05", "T"]] }, { year: 2026, month: 5 });
+  it("keeps trace precipitation as a latest-day update", () => {
+    const value = extractNoaaSeattlePrecipitationValue(
+      {
+        data: [
+          ["2026-05-01", "0.00"],
+          ["2026-05-02", "T"]
+        ]
+      },
+      { year: 2026, month: 5 }
+    );
 
-    expect(value).toBe("T inches (2026-05)");
+    expect(value).toContain("Total precipitation: 0.00 inches");
+    expect(value).toContain("Latest reported day: 2026-05-02");
+    expect(value).toContain("Latest day value: T inches");
   });
 
   it("reads stored year and month settings", () => {

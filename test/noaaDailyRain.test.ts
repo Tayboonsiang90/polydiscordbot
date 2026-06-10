@@ -56,6 +56,17 @@ describe("NOAA daily rain adapters", () => {
     expect(value).toContain("Value: T inches");
   });
 
+  it("keeps zero precipitation as an available finalized value", () => {
+    const value = extractNoaaDailyRainValue(
+      { data: [["2026-06-09", "0.00"]] },
+      { year: 2026, month: 6, day: 9 },
+      "Dallas Area"
+    );
+
+    expect(value).toContain("Value: 0.00 inches");
+    expect(value).toContain("Status: NOAA value available");
+  });
+
   it("stores pending status instead of throwing before NOAA finalizes", () => {
     const value = extractNoaaDailyRainValue(
       { data: [["2026-06-09", "M"]] },
