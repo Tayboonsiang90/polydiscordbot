@@ -6,7 +6,12 @@ import type {
   WebsiteAdapter
 } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
-import { getEthGetLogsChunkBlocks } from "../rpcProviders.js";
+import {
+  advanceLastScannedBlock,
+  formatEthGetLogsBackfillMode,
+  getEthGetLogsChunkBlocks,
+  planEthGetLogsScan
+} from "../rpcProviders.js";
 
 export const polymarketBulletinBoardAddress = "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7";
 export const polymarketBulletinBoardSourceUrl = `https://polygonscan.com/address/${polymarketBulletinBoardAddress}`;
@@ -146,16 +151,21 @@ export async function fetchPolymarketClarificationUpdates(
   let activeRpcUrl = latestBlockResult.rpcUrl;
   const confirmations = getIntegerSetting(settings.confirmations, defaultConfirmations, 0, 1_000);
   const confirmedLatestBlock = Math.max(0, latestBlock - confirmations);
-  const fromBlock = getNextFromBlock(settings, confirmedLatestBlock);
-  const toBlock = fromBlock <= confirmedLatestBlock
-    ? Math.min(confirmedLatestBlock, fromBlock + getMaxScanBlocksPerRun(settings) - 1)
-    : confirmedLatestBlock;
+  const scanPlan = planEthGetLogsScan(
+    activeRpcUrl,
+    getNextFromBlock(settings, confirmedLatestBlock),
+    confirmedLatestBlock,
+    getMaxScanBlocksPerRun(settings)
+  );
+  const fromBlock = scanPlan.fromBlock;
+  const toBlock = scanPlan.toBlock;
 
   const logsResult = fromBlock <= toBlock
     ? await fetchAncillaryDataUpdateLogs(rpcUrls, fromBlock, toBlock, activeRpcUrl)
     : { result: [], rpcUrl: activeRpcUrl };
   const logs = logsResult.result;
   activeRpcUrl = logsResult.rpcUrl;
+  const backfillMode = formatEthGetLogsBackfillMode(scanPlan);
   const detailsByQuestionId = new Map<string, QuestionDetails | null>();
   const posts: EventMonitorPost[] = [];
 
@@ -185,8 +195,9 @@ export async function fetchPolymarketClarificationUpdates(
     strikeTerms: [],
     settingsJson: JSON.stringify({
       ...settings,
-      lastScannedBlock: toBlock,
+      lastScannedBlock: advanceLastScannedBlock(settings.lastScannedBlock, toBlock),
       lastScanStartedBlock: fromBlock <= toBlock ? fromBlock : undefined,
+      lastScanRequestedFromBlock: scanPlan.skippedToLiveHead ? scanPlan.requestedFromBlock : undefined,
       lastScanCompletedAt: now.toISOString()
     }),
     checkTitle: "UMA alert check",
@@ -194,6 +205,7 @@ export async function fetchPolymarketClarificationUpdates(
       { name: "Clarifications in scanned range", value: String(logs.length), inline: true },
       { name: "Scanned blocks", value: fromBlock <= toBlock ? `${fromBlock} to ${toBlock}` : "already at latest block", inline: false },
       { name: "Confirmed head", value: String(confirmedLatestBlock), inline: true },
+      ...(backfillMode ? [{ name: "Backfill mode", value: backfillMode, inline: false }] : []),
       { name: "Data source", value: `${activeRpcUrl} via eth_getLogs fallback`, inline: false },
       ...(rpcUrls.length > 1 ? [{ name: "RPC fallback pool", value: `${rpcUrls.length} endpoints configured`, inline: true }] : [])
     ],

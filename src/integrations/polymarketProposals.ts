@@ -1,7 +1,12 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import { fetchWithTimeout } from "../http.js";
 import { enrichEventPostAddressProfiles, updateAddressLabelsInSettingsJson } from "../addressLabels.js";
-import { getEthGetLogsChunkBlocks } from "../rpcProviders.js";
+import {
+  advanceLastScannedBlock,
+  formatEthGetLogsBackfillMode,
+  getEthGetLogsChunkBlocks,
+  planEthGetLogsScan
+} from "../rpcProviders.js";
 import {
   defaultPolygonRpcUrl,
   defaultPolygonRpcUrls,
@@ -235,16 +240,21 @@ export async function fetchPolymarketProposalUpdates(
   let activeRpcUrl = latestBlockResult.rpcUrl;
   const confirmations = getIntegerSetting(settings.confirmations, defaultConfirmations, 0, 1_000);
   const confirmedLatestBlock = Math.max(0, latestBlock - confirmations);
-  const fromBlock = getNextFromBlock(settings, confirmedLatestBlock);
-  const toBlock = fromBlock <= confirmedLatestBlock
-    ? Math.min(confirmedLatestBlock, fromBlock + getMaxScanBlocksPerRun(settings) - 1)
-    : confirmedLatestBlock;
+  const scanPlan = planEthGetLogsScan(
+    activeRpcUrl,
+    getNextFromBlock(settings, confirmedLatestBlock),
+    confirmedLatestBlock,
+    getMaxScanBlocksPerRun(settings)
+  );
+  const fromBlock = scanPlan.fromBlock;
+  const toBlock = scanPlan.toBlock;
 
   const logsResult = fromBlock <= toBlock
     ? await fetchProposalLogs(rpcUrls, fromBlock, toBlock, activeRpcUrl)
     : { result: [], rpcUrl: activeRpcUrl };
   const logs = logsResult.result;
   activeRpcUrl = logsResult.rpcUrl;
+  const backfillMode = formatEthGetLogsBackfillMode(scanPlan);
   const marketByQuestionId = new Map<string, ClobMarket | null>();
   const liquidityByTokenId = new Map<string, ProposedSideLiquidityCheck>();
   const posts: EventMonitorPost[] = [];
@@ -286,8 +296,9 @@ export async function fetchPolymarketProposalUpdates(
     settingsJson: JSON.stringify({
       ...settings,
       tagFilters,
-      lastScannedBlock: toBlock,
+      lastScannedBlock: advanceLastScannedBlock(settings.lastScannedBlock, toBlock),
       lastScanStartedBlock: fromBlock <= toBlock ? fromBlock : undefined,
+      lastScanRequestedFromBlock: scanPlan.skippedToLiveHead ? scanPlan.requestedFromBlock : undefined,
       lastScanCompletedAt: now.toISOString()
     }),
     checkTitle: "UMA proposal check",
@@ -297,6 +308,7 @@ export async function fetchPolymarketProposalUpdates(
       { name: "Configured proposal tags", value: formatConfiguredTagFilters(tagFilters), inline: false },
       { name: "Scanned blocks", value: fromBlock <= toBlock ? `${fromBlock} to ${toBlock}` : "already at latest block", inline: false },
       { name: "Confirmed head", value: String(confirmedLatestBlock), inline: true },
+      ...(backfillMode ? [{ name: "Backfill mode", value: backfillMode, inline: false }] : []),
       { name: "Data source", value: `${activeRpcUrl} via eth_getLogs fallback`, inline: false },
       { name: "Watched oracle contracts", value: String(optimisticOracleAddresses.length), inline: true },
       { name: "Polymarket adapter filter", value: formatWatchedAdapterAddresses(), inline: false },

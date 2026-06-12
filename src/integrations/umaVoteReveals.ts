@@ -1,5 +1,11 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import { fetchWithTimeout } from "../http.js";
+import {
+  advanceLastScannedBlock,
+  formatEthGetLogsBackfillMode,
+  getEthGetLogsChunkBlocks,
+  planEthGetLogsScan
+} from "../rpcProviders.js";
 import { parseSettingsJson, stringifySettingsJson } from "../settingsJson.js";
 import type {
   AdapterValue,
@@ -132,9 +138,15 @@ export const umaVoteRevealsAdapter: WebsiteAdapter = {
     const latestBlockResponse = await fetchLatestBlockNumber(rpcUrls, settings.lastRpcUrl);
     const confirmations = getIntegerSetting(settings.confirmations, defaultConfirmations, 0, 128);
     const confirmedLatestBlock = Math.max(0, latestBlockResponse.result - confirmations);
-    const fromBlock = getNextFromBlock(settings, confirmedLatestBlock);
     const maxScanBlocks = getIntegerSetting(settings.maxScanBlocksPerRun, defaultMaxScanBlocksPerRun, 1, maxScanBlocksPerRunLimit);
-    const toBlock = fromBlock <= confirmedLatestBlock ? Math.min(confirmedLatestBlock, fromBlock + maxScanBlocks - 1) : confirmedLatestBlock;
+    const scanPlan = planEthGetLogsScan(
+      latestBlockResponse.rpcUrl,
+      getNextFromBlock(settings, confirmedLatestBlock),
+      confirmedLatestBlock,
+      maxScanBlocks
+    );
+    const fromBlock = scanPlan.fromBlock;
+    const toBlock = scanPlan.toBlock;
     const logResponse =
       fromBlock <= toBlock
         ? await fetchVoteRevealLogs(rpcUrls, fromBlock, toBlock, latestBlockResponse.rpcUrl)
@@ -151,7 +163,8 @@ export const umaVoteRevealsAdapter: WebsiteAdapter = {
       settingsJson: stringifySettingsJson({
         ...parseSettingsJson(integration.settingsJson),
         umaRevealThresholdWei: thresholdWei.toString(),
-        lastScannedBlock: toBlock,
+        lastScannedBlock: advanceLastScannedBlock(settings.lastScannedBlock, toBlock),
+        lastScanRequestedFromBlock: scanPlan.skippedToLiveHead ? scanPlan.requestedFromBlock : undefined,
         lastRpcUrl: logResponse.rpcUrl
       }),
       checkTitle: "UMA reveal check complete",
@@ -163,7 +176,8 @@ export const umaVoteRevealsAdapter: WebsiteAdapter = {
         confirmedLatestBlock,
         logsScanned: decodedEvents.length,
         matchingReveals: posts.length,
-        votingStatus
+        votingStatus,
+        backfillMode: formatEthGetLogsBackfillMode(scanPlan)
       })
     };
   },
@@ -498,6 +512,7 @@ function buildCheckFields(input: {
   logsScanned: number;
   matchingReveals: number;
   votingStatus: { roundId: number; phase: number } | null;
+  backfillMode?: string;
 }): Array<{ name: string; value: string; inline?: boolean }> {
   return [
     { name: "Minimum vote weight", value: `${formatUmaTokenAmount(input.thresholdWei)} UMA`, inline: true },
@@ -507,6 +522,7 @@ function buildCheckFields(input: {
       inline: true
     },
     { name: "Blocks scanned", value: `${input.fromBlock} to ${input.toBlock}`, inline: false },
+    ...(input.backfillMode ? [{ name: "Backfill mode", value: input.backfillMode, inline: false }] : []),
     { name: "Latest block", value: `${input.latestBlock} (${input.confirmedLatestBlock} confirmed)`, inline: true },
     { name: "Reveal logs scanned", value: String(input.logsScanned), inline: true },
     { name: "Matching reveals", value: String(input.matchingReveals), inline: true }
@@ -526,8 +542,9 @@ async function fetchVoteRevealLogs(
 ): Promise<RpcResult<EthereumLog[]>> {
   const logs: EthereumLog[] = [];
   let activeRpcUrl = preferredRpcUrl;
-  for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += rpcLogChunkBlocks) {
-    const chunkTo = Math.min(toBlock, chunkFrom + rpcLogChunkBlocks - 1);
+  const chunkBlocks = getEthGetLogsChunkBlocks(activeRpcUrl ?? rpcUrls[0], rpcLogChunkBlocks);
+  for (let chunkFrom = fromBlock; chunkFrom <= toBlock; chunkFrom += chunkBlocks) {
+    const chunkTo = Math.min(toBlock, chunkFrom + chunkBlocks - 1);
     const response = await fetchVoteRevealLogRange(rpcUrls, chunkFrom, chunkTo, activeRpcUrl);
     activeRpcUrl = response.rpcUrl;
     logs.push(...response.result);

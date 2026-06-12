@@ -278,6 +278,44 @@ describe("fetchPolymarketClarificationUpdates", () => {
     });
   });
 
+  it("uses an Alchemy live-tail scan when the stored cursor is stale", async () => {
+    const rpcUrl = "https://polygon-mainnet.g.alchemy.com/v2/test-key";
+    const logParams: Array<{ fromBlock?: string; toBlock?: string }> = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (url.toString() !== rpcUrl) {
+        throw new Error(`Unexpected fetch: ${url.toString()}`);
+      }
+
+      const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, string>> };
+      if (body.method === "eth_blockNumber") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+      }
+      if (body.method === "eth_getLogs") {
+        logParams.push(body.params[0]);
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: [] });
+      }
+
+      throw new Error(`Unexpected RPC method: ${body.method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketClarificationUpdates(
+      { settingsJson: JSON.stringify({ rpcUrl, lastScannedBlock: 100 }) } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(logParams).toEqual([
+      { address: "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7", fromBlock: "0x3df", toBlock: "0x3e8", topics: [ancillaryDataUpdatedTopic] }
+    ]);
+    expect(result.checkFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Backfill mode" })]));
+    expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
+      rpcUrl,
+      lastScannedBlock: 1000,
+      lastScanStartedBlock: 991,
+      lastScanRequestedFromBlock: 101
+    });
+  });
+
   it("skips mined clarification logs already alerted from the pending tx path", async () => {
     const rpcUrl = "https://rpc.example";
     const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
