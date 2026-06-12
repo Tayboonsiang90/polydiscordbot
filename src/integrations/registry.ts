@@ -21,6 +21,7 @@ import { claudeDowntimeAdapter } from "./claudeDowntime.js";
 import { cloudflareCriticalAdapter } from "./cloudflareCritical.js";
 import { crossPlatformArbitrageAdapter } from "./crossPlatformArbitrage.js";
 import { discordCriticalAdapter } from "./discordCritical.js";
+import { ecdsaFailAdapter } from "./ecdsaFail.js";
 import { eiaCrudeSprAdapter } from "./eiaCrudeSpr.js";
 import { fdicFailedBanksAdapter } from "./fdicFailedBanks.js";
 import { fredEggPriceAdapter } from "./fredEggPrice.js";
@@ -108,6 +109,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [cloudflareCriticalAdapter.id, cloudflareCriticalAdapter],
   [crossPlatformArbitrageAdapter.id, crossPlatformArbitrageAdapter],
   [discordCriticalAdapter.id, discordCriticalAdapter],
+  [ecdsaFailAdapter.id, ecdsaFailAdapter],
   [eiaCrudeSprAdapter.id, eiaCrudeSprAdapter],
   [fdicFailedBanksAdapter.id, fdicFailedBanksAdapter],
   [fredEggPriceAdapter.id, fredEggPriceAdapter],

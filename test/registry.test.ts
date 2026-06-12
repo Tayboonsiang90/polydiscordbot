@@ -25,6 +25,7 @@ const expectedCommandIds = [
   ["cloudflare", "cloudflare-critical-incidents"],
   ["arb", "cross-platform-arbitrage"],
   ["discord", "discord-critical-incidents"],
+  ["ecdsafail", "ecdsa-fail"],
   ["eia", "eia-crude-spr"],
   ["fdic", "fdic-failed-banks"],
   ["eggs", "fred-egg-price"],
