@@ -857,6 +857,10 @@ function formatEventPostMessageContent(integration: Integration, post: EventMoni
     return undefined;
   }
 
+  if (!post.matchedTerms.length && (integration.adapterId === "trump-truth" || integration.adapterId === "elon-x-strikes")) {
+    return undefined;
+  }
+
   if (!post.matchedTerms.length) {
     const title = post.alertTitle ?? "New post";
     return roleMention ? `${roleMention}\n**${title}**` : `**${title}**`;

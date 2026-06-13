@@ -376,7 +376,27 @@ describe("adapter commands", () => {
     expect(results).toContain("...and 2 more result(s). Open the search link for the full list.");
   });
 
-  it("mentions alert roles for non-strike event alerts by default", () => {
+  it("mentions alert roles for non-strike generic event alerts by default", () => {
+    const post: EventMonitorPost = {
+      id: "123",
+      type: "Article",
+      alertTitle: "New article",
+      text: "Hello world",
+      qualifyingText: "Hello world",
+      postedAt: new Date("2026-05-06T00:00:00.000Z"),
+      url: "https://www.whitehouse.gov/briefings-statements/example",
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: []
+    };
+    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "white-house-briefings" }, post);
+
+    expect(payload.content).toBe("<@&role>\n**New article**");
+    expect(payload.allowedMentions).toEqual({ roles: ["role"] });
+  });
+
+  it("does not mention alert roles for non-strike Trump Truth or Elon X alerts", () => {
     const post: EventMonitorPost = {
       id: "123",
       type: "Truth",
@@ -389,10 +409,12 @@ describe("adapter commands", () => {
       matchedTerms: [],
       strikeTerms: ["King"]
     };
-    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "trump-truth" }, post);
 
-    expect(payload.content).toBe("<@&role>\n**New post**");
-    expect(payload.allowedMentions).toEqual({ roles: ["role"] });
+    for (const adapterId of ["trump-truth", "elon-x-strikes"]) {
+      const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId }, post);
+      expect(payload.content).toBeUndefined();
+      expect(payload.allowedMentions).toEqual({ parse: [] });
+    }
   });
 
   it("does not mention alert roles for event alerts that opt out", () => {
