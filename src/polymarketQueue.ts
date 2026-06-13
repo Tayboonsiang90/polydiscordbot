@@ -105,6 +105,9 @@ export function parsePolymarketDateRangeWindow(url: string, now = new Date()): {
     if (endMonth && endDay) {
       return buildEasternWindow(year, startMonth, startDay, endMonth, endDay);
     }
+
+    const explicitYear = parts.slice(index + 2).map(parseYear).find((value): value is number => value !== null);
+    return buildEasternWindow(explicitYear ?? year, startMonth, startDay, startMonth, startDay);
   }
 
   const monthWindow = parsePolymarketMonthWindow(url, now);

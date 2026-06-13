@@ -77,6 +77,16 @@ describe("Polymarket URL queue", () => {
       startAt: "2026-05-29T04:00:00.000Z",
       endAt: "2026-05-30T03:59:00.000Z"
     });
+
+    expect(
+      parsePolymarketDateRangeWindow(
+        "https://polymarket.com/market/will-the-white-house-call-a-full-lid-by-630pm-on-june-20-20260612215749899",
+        new Date("2026-06-13T12:00:00.000Z")
+      )
+    ).toEqual({
+      startAt: "2026-06-20T04:00:00.000Z",
+      endAt: "2026-06-21T03:59:00.000Z"
+    });
   });
 
   it("parses week-of market slugs as seven-day ET windows", () => {

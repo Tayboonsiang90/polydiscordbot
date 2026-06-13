@@ -109,6 +109,38 @@ describe("White House full lid monitor", () => {
     expect(searchUrl).toContain("q=full+lid");
     expect(searchUrl).toContain("events_tag=lid");
   });
+
+  it("discovers single-day Full Lid markets with compact 630pm slugs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          events: [
+            {
+              slug: "will-the-white-house-call-a-full-lid-by-630pm-on-june-20-20260612215749899",
+              title: "Will the White House call a full lid by 6:30PM on June 20?",
+              active: true,
+              closed: false,
+              tags: [{ slug: "lid" }]
+            }
+          ]
+        })
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await refreshWhiteHouseFullLidPolymarketQueue(buildIntegration(), new Date("2026-06-13T12:00:00.000Z"));
+    const settings = JSON.parse(result.settingsJson ?? "{}");
+
+    expect(settings.polymarketMarkets).toEqual([
+      {
+        url: "https://polymarket.com/event/will-the-white-house-call-a-full-lid-by-630pm-on-june-20-20260612215749899",
+        slug: "will-the-white-house-call-a-full-lid-by-630pm-on-june-20-20260612215749899",
+        startAt: "2026-06-20T04:00:00.000Z",
+        endAt: "2026-06-21T03:59:00.000Z",
+        addedAt: "2026-06-13T12:00:00.000Z"
+      }
+    ]);
+  });
 });
 
 function buildIntegration(overrides: Partial<Integration> = {}): Integration {

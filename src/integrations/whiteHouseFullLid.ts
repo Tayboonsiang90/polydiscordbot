@@ -309,10 +309,7 @@ function normalizeFullLidSearchEvent(event: GammaSearchEvent, now: Date): { slug
     return null;
   }
 
-  if (
-    !event.slug.startsWith("will-the-white-house-call-a-full-lid-by-630-pm-") ||
-    !event.title.toLowerCase().startsWith("will the white house call a full lid by 6:30 pm")
-  ) {
+  if (!isFullLidMarketSlug(event.slug) || !isFullLidMarketTitle(event.title)) {
     return null;
   }
 
@@ -323,6 +320,16 @@ function normalizeFullLidSearchEvent(event: GammaSearchEvent, now: Date): { slug
 
   const url = `https://polymarket.com/event/${event.slug}`;
   return parsePolymarketDateRangeWindow(url, now) ? { slug: event.slug, url } : null;
+}
+
+function isFullLidMarketSlug(slug: string): boolean {
+  return /^will-the-white-house-call-a-full-lid-by-630-?pm(?:-|$)|^will-the-white-house-call-a-full-lid-by-630pm(?:-|$)/.test(
+    slug
+  );
+}
+
+function isFullLidMarketTitle(title: string): boolean {
+  return /^will the white house call a full lid by 6:30\s?pm\b/i.test(title);
 }
 
 function shouldDiscoverFullLidMarkets(settings: FullLidDiscoverySettings, now: Date): boolean {
