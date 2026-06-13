@@ -193,27 +193,13 @@ function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): Polymarke
   );
 }
 
-function getFallbackUrl(markets: PolymarketQueueMarket[], currentUrl: string | null, now: Date): string | null {
+function getFallbackUrl(markets: PolymarketQueueMarket[], currentUrl: string | null, _now: Date): string | null {
   const undatedMarket = markets.find((market) => !market.startAt || !market.endAt);
   if (undatedMarket) {
     return undatedMarket.url;
   }
 
-  if (!currentUrl) {
-    return null;
-  }
-
-  return isCurrentUrlStillUsable(currentUrl, now) ? currentUrl : null;
-}
-
-function isCurrentUrlStillUsable(currentUrl: string, now: Date): boolean {
-  const window = parsePolymarketDateRangeWindow(currentUrl, now);
-  if (!window) {
-    return true;
-  }
-
-  const nowMs = now.getTime();
-  return nowMs >= Date.parse(window.startAt) && nowMs <= Date.parse(window.endAt);
+  return currentUrl;
 }
 
 function pruneExpiredMarkets(markets: PolymarketQueueMarket[], activeMarket: PolymarketQueueMarket | null, now: Date): PolymarketQueueMarket[] {

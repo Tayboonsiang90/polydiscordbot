@@ -283,7 +283,7 @@ describe("NYT front page adapter", () => {
     expect(result.activeUrl).toBe("https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31");
   });
 
-  it("seeds the queue from a legacy stored URL and clears it after that week expires", async () => {
+  it("keeps a legacy stored URL as fallback after that week expires", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -301,11 +301,11 @@ describe("NYT front page adapter", () => {
     );
     const settings = JSON.parse(result.settingsJson ?? "{}") as { polymarketMarkets?: unknown[] };
 
-    expect(result.activeUrl).toBeNull();
+    expect(result.activeUrl).toBe("https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24");
     expect(settings.polymarketMarkets).toEqual([]);
   });
 
-  it("does not reuse expired NYT strike terms when no current market is active", async () => {
+  it("keeps expired NYT strike terms when the expired market remains attached", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -327,8 +327,8 @@ describe("NYT front page adapter", () => {
       new Date("2026-06-03T02:04:30.000Z")
     );
 
-    expect(settings.nytStrikeTerms).toEqual([]);
-    expect(settings.nytParsedFromUrl).toBeUndefined();
+    expect(settings.nytStrikeTerms).toEqual(["Ukraine"]);
+    expect(settings.nytParsedFromUrl).toBe("https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24");
     expect(settings.polymarketMarkets).toEqual([]);
   });
 
