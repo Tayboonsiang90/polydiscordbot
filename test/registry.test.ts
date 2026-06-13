@@ -59,6 +59,7 @@ const expectedCommandIds = [
   ["nychomevalue", "parcl-nyc-home-value"],
   ["pboc", "pboc-rate-change"],
   ["powerball", "powerball-jackpot"],
+  ["mentions", "polymarket-mention-markets"],
   ["umaclarifications", "polymarket-clarifications"],
   ["umadispute", "polymarket-disputes"],
   ["umaproposals", "polymarket-proposals"],

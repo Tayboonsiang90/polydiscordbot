@@ -109,6 +109,10 @@ describe("adapter commands", () => {
       name: "alignedsale",
       description: "Manage Aligned Layer Sale"
     });
+    expect(commandByName.get("mentions")).toMatchObject({
+      name: "mentions",
+      description: "Manage Polymarket Mention Markets"
+    });
   });
 
   it("registers UMA address bulk import and export options", () => {
