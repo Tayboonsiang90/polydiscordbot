@@ -108,7 +108,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  if (!interaction.isChatInputCommand() || (!isAdapterCommand(interaction.commandName) && !isBotCommand(interaction.commandName))) {
+  if (!interaction.isChatInputCommand()) {
+    return;
+  }
+
+  if (!isAdapterCommand(interaction.commandName) && !isBotCommand(interaction.commandName)) {
+    await interaction.reply({
+      content: `Command \`/${interaction.commandName}\` is registered in Discord but is not loaded by this bot runtime. Current runtime commit: \`${runtimeGitCommit}\`. Restart the bot or re-run command registration after deploy.`,
+      flags: MessageFlags.Ephemeral
+    });
     return;
   }
 
