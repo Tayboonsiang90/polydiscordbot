@@ -61,6 +61,7 @@ const expectedCommandIds = [
   ["umaclarifications", "polymarket-clarifications"],
   ["umadispute", "polymarket-disputes"],
   ["umaproposals", "polymarket-proposals"],
+  ["babmandeb", "portwatch-bab-el-mandeb"],
   ["hormuzships", "portwatch-hormuz-ships"],
   ["umacommits", "uma-vote-commits"],
   ["umareveals", "uma-vote-reveals"],
