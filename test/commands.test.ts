@@ -376,10 +376,30 @@ describe("adapter commands", () => {
     expect(results).toContain("...and 2 more result(s). Open the search link for the full list.");
   });
 
-  it("does not mention alert roles for non-strike Trump Truth event alerts", () => {
+  it("mentions alert roles for non-strike event alerts by default", () => {
     const post: EventMonitorPost = {
       id: "123",
       type: "Truth",
+      text: "Hello world",
+      qualifyingText: "Hello world",
+      postedAt: new Date("2026-05-06T00:00:00.000Z"),
+      url: "https://truthsocial.com/@realDonaldTrump/123",
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: ["King"]
+    };
+    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "trump-truth" }, post);
+
+    expect(payload.content).toBe("<@&role>\n**New post**");
+    expect(payload.allowedMentions).toEqual({ roles: ["role"] });
+  });
+
+  it("does not mention alert roles for event alerts that opt out", () => {
+    const post: EventMonitorPost = {
+      id: "123",
+      type: "Truth",
+      mentionAlertRole: false,
       text: "Hello world",
       qualifyingText: "Hello world",
       postedAt: new Date("2026-05-06T00:00:00.000Z"),

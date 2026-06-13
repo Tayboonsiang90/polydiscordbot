@@ -853,11 +853,11 @@ function parseAddressLabelCustomId(
 
 function formatEventPostMessageContent(integration: Integration, post: EventMonitorPost): string | undefined {
   const roleMention = integration.alertRoleId ? `<@&${integration.alertRoleId}>` : undefined;
-  if (!post.matchedTerms.length) {
-    if (!post.mentionAlertRole) {
-      return undefined;
-    }
+  if (post.mentionAlertRole === false) {
+    return undefined;
+  }
 
+  if (!post.matchedTerms.length) {
     const title = post.alertTitle ?? "New post";
     return roleMention ? `${roleMention}\n**${title}**` : `**${title}**`;
   }
