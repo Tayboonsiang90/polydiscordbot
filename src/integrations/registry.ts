@@ -180,6 +180,10 @@ export function getAdapter(adapterId: string): WebsiteAdapter {
   return adapter;
 }
 
+export function hasAdapter(adapterId: string): boolean {
+  return adapters.has(adapterId);
+}
+
 export function getAdapterByCommandName(commandName: string): WebsiteAdapter {
   const adapter = listAdapters().find((candidate) => candidate.commandName === commandName);
   if (!adapter) {

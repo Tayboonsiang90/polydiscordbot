@@ -18,7 +18,7 @@ import {
   transientRepeatedErrorNoticeWindowMs,
   type ErrorNoticeState
 } from "./errorNotices.js";
-import { getAdapter } from "./integrations/registry.js";
+import { getAdapter, hasAdapter } from "./integrations/registry.js";
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "./integrations/types.js";
 import { getDueMarketEndReminders, getStoredOrFetchPolymarketEndDate, type MarketEndReminder } from "./marketEnd.js";
 import { resolveIntegrationPolymarketQueue } from "./polymarketQueue.js";
@@ -362,7 +362,15 @@ export class PollScheduler {
 
   refresh(): void {
     const activeIntegrations = this.database.listActiveIntegrations();
-    const activeIds = new Set(activeIntegrations.map((integration) => integration.id));
+    const knownActiveIntegrations = activeIntegrations.filter((integration) => {
+      if (hasAdapter(integration.adapterId)) {
+        return true;
+      }
+
+      this.pauseUnknownAdapterIntegration(integration);
+      return false;
+    });
+    const activeIds = new Set(knownActiveIntegrations.map((integration) => integration.id));
 
     for (const id of this.timers.keys()) {
       if (!activeIds.has(id)) {
@@ -371,7 +379,7 @@ export class PollScheduler {
       }
     }
 
-    for (const integration of activeIntegrations) {
+    for (const integration of knownActiveIntegrations) {
       const pollIntervalMinutes = getEffectivePollIntervalMinutes(integration);
       const existing = this.timers.get(integration.id);
       if (existing && existing.pollIntervalMinutes !== pollIntervalMinutes) {
@@ -564,6 +572,11 @@ export class PollScheduler {
 
   private async runDueDailySnapshots(): Promise<void> {
     for (const integration of this.database.listActiveIntegrations()) {
+      if (!hasAdapter(integration.adapterId)) {
+        this.pauseUnknownAdapterIntegration(integration);
+        continue;
+      }
+
       const adapter = getAdapter(integration.adapterId);
       const snapshotDate = getDueSnapshotDate(integration, adapter);
       if (!snapshotDate || this.snapshotRuns.has(integration.id)) {
@@ -600,6 +613,11 @@ export class PollScheduler {
 
   private async runDueMarketEndReminders(now: Date = new Date()): Promise<void> {
     for (const integration of this.database.listActiveIntegrations()) {
+      if (!hasAdapter(integration.adapterId)) {
+        this.pauseUnknownAdapterIntegration(integration);
+        continue;
+      }
+
       let activeIntegration = integration;
       try {
         activeIntegration = activateQueuedPolymarket(this.database, integration, now);
@@ -626,6 +644,11 @@ export class PollScheduler {
         logMarketEndLookupError(activeIntegration, error);
       }
     }
+  }
+
+  private pauseUnknownAdapterIntegration(integration: Integration): void {
+    console.warn(`Pausing removed integration ${integration.adapterId} (database id ${integration.id}) because no adapter is registered.`);
+    this.database.setStatus(integration.id, "paused");
   }
 
   private async sendMarketEndReminder(
