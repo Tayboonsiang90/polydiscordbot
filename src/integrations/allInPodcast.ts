@@ -9,7 +9,10 @@ import {
 import { parseSettingsJson } from "../settingsJson.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
-const sourceUrl = "https://allin.com/episodes";
+const allInEpisodesUrl = "https://allin.com/episodes";
+const allInYoutubeChannelUrl = "https://www.youtube.com/@allin/videos";
+const allInYoutubeFeedUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=UCESLZhusAkFfsNsApnjF_Cg";
+const sourceUrl = allInYoutubeChannelUrl;
 const defaultPolymarketUrl = "https://polymarket.com/event/what-will-be-said-on-the-next-all-in-podcast-may-8";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const allInMarketSearchQuery = "what will be said on the next all-in podcast";
@@ -21,6 +24,8 @@ export type AllInEpisode = {
   title: string;
   date: string;
   url: string;
+  publishedAt?: string;
+  source: "YouTube RSS" | "allin.com";
 };
 
 type AllInDiscoverySettings = {
@@ -41,7 +46,33 @@ type GammaSearchEvent = {
 
 export function extractLatestAllInEpisodeValue(html: string): string {
   const episode = extractLatestAllInEpisode(html);
-  return [`Title: ${episode.title}`, `Date: ${episode.date}`, `URL: ${episode.url}`].join("\n");
+  return formatAllInEpisodeValue(episode);
+}
+
+export function extractLatestAllInYoutubeEpisodeValue(feedXml: string): string {
+  const episode = extractLatestAllInYoutubeEpisode(feedXml);
+  return formatAllInEpisodeValue(episode);
+}
+
+export function extractLatestAllInYoutubeEpisode(feedXml: string): AllInEpisode {
+  const $ = cheerio.load(feedXml, { xmlMode: true });
+  const entry = $("entry").first();
+  const title = normalizeText(entry.find("title").first().text());
+  const videoId = normalizeText(entry.find("yt\\:videoId").first().text());
+  const href = entry.find('link[rel="alternate"]').first().attr("href");
+  const publishedAt = normalizeText(entry.find("published").first().text());
+
+  if (!title || (!href && !videoId) || !publishedAt) {
+    throw new Error("Could not find the latest All-In episode in the YouTube feed");
+  }
+
+  return {
+    title,
+    date: publishedAt,
+    publishedAt,
+    url: href ?? `https://www.youtube.com/watch?v=${videoId}`,
+    source: "YouTube RSS"
+  };
 }
 
 export function extractLatestAllInEpisode(html: string): AllInEpisode {
@@ -60,7 +91,8 @@ export function extractLatestAllInEpisode(html: string): AllInEpisode {
   return {
     title,
     date,
-    url: normalizeYoutubeUrl(href)
+    url: normalizeYoutubeUrl(href),
+    source: "allin.com"
   };
 }
 
@@ -73,21 +105,46 @@ export const allInPodcastAdapter: WebsiteAdapter = {
   defaultChannelName: "allinpod",
   alertRoleName: "All-In Podcast Alerts",
   alertRoleEmoji: "\uD83C\uDFA7",
+  getPollIntervalMinutes: () => 1,
+  getPollIntervalReason: () => "YouTube channel RSS polling every minute for new All-In uploads",
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshAllInPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
   async fetchCurrentValue(): Promise<AdapterValue> {
-    const response = await fetchWithTimeout(sourceUrl, {
+    let youtubeFailure = "unknown error";
+    try {
+      const youtubeResponse = await fetchWithTimeout(allInYoutubeFeedUrl, {
+        headers: {
+          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+        }
+      });
+
+      if (youtubeResponse.ok) {
+        const value = extractLatestAllInYoutubeEpisodeValue(await youtubeResponse.text());
+        return {
+          value,
+          rawValue: value,
+          unit: "latest episode",
+          observedAt: new Date()
+        };
+      }
+
+      youtubeFailure = `HTTP ${youtubeResponse.status}`;
+    } catch (error) {
+      youtubeFailure = formatFetchFailure(error);
+    }
+
+    const fallbackResponse = await fetchWithTimeout(allInEpisodesUrl, {
       headers: {
         "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
       }
     });
 
-    if (!response.ok) {
-      throw new Error(`All-In returned HTTP ${response.status}`);
+    if (!fallbackResponse.ok) {
+      throw new Error(`All-In YouTube feed failed (${youtubeFailure}); allin.com returned HTTP ${fallbackResponse.status}`);
     }
 
-    const value = extractLatestAllInEpisodeValue(await response.text());
+    const value = extractLatestAllInEpisodeValue(await fallbackResponse.text());
     return {
       value,
       rawValue: value,
@@ -96,6 +153,15 @@ export const allInPodcastAdapter: WebsiteAdapter = {
     };
   }
 };
+
+function formatAllInEpisodeValue(episode: AllInEpisode): string {
+  const dateLine = episode.publishedAt ? `Published: ${episode.publishedAt}` : `Date: ${episode.date}`;
+  return [`Title: ${episode.title}`, dateLine, `URL: ${episode.url}`, `Source: ${episode.source}`].join("\n");
+}
+
+function formatFetchFailure(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export async function refreshAllInPolymarketQueue(
   integration: Integration,
