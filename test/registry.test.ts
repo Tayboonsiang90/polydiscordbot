@@ -75,6 +75,7 @@ const expectedCommandIds = [
   ["xagusd", "pyth-xagusd-strikes"],
   ["xauusd", "pyth-xauusd-strikes"],
   ["trumpapproval", "silver-trump-approval"],
+  ["spiderman", "spider-man-trailer"],
   ["spotifyglobal", "spotify-top-50-global"],
   ["spotifyusa", "spotify-top-50-usa"],
   ["strategybtc", "strategy-bitcoin-purchases"],
@@ -193,6 +194,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("eviv").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("eviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("trumpapproval").getPollIntervalMinutes?.({} as never, new Date("2026-06-05T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("spiderman").fetchEventUpdates).toBeDefined();
+    expect(getAdapterByCommandName("spiderman").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("spotifyglobal").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();
