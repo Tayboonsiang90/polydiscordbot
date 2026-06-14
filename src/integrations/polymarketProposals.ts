@@ -342,6 +342,28 @@ export async function buildPolymarketProposalPostFromLog(
   return enrichEventPostAddressProfiles(normalizePolymarketProposalEvent(proposal, market, tagMatch, liquidityCheck));
 }
 
+export async function refreshPolymarketProposalPost(post: EventMonitorPost): Promise<EventMonitorPost> {
+  if (post.type !== "Polymarket UMA proposal" || !post.prioritySummary) {
+    return post;
+  }
+
+  const prioritySummary = { ...post.prioritySummary };
+  delete prioritySummary.proposerProfile;
+  delete prioritySummary.proposerAligned;
+  delete prioritySummary.proposerHedge;
+  delete prioritySummary.disputerProfile;
+  delete prioritySummary.disputerAligned;
+  delete prioritySummary.disputerHedge;
+
+  return enrichEventPostAddressProfiles(
+    {
+      ...post,
+      prioritySummary
+    },
+    { bypassProfileCache: true }
+  );
+}
+
 export function decodeProposePriceLog(log: PolygonLog): PolymarketProposalEvent | null {
   if ((getTopic(log, 0) ?? "").toLowerCase() !== proposePriceTopic.toLowerCase()) {
     return null;

@@ -19,7 +19,8 @@ import {
   buildStatusEmbed,
   buildUpdateLogsEmbed,
   parseAddressLabelButtonCustomId,
-  parseEventDetailsCustomId
+  parseEventDetailsCustomId,
+  parseEventRefreshCustomId
 } from "../src/embeds.js";
 import type { EventMonitorPost, Integration } from "../src/integrations/types.js";
 
@@ -475,6 +476,45 @@ describe("adapter commands", () => {
   it("keeps event technical details behind a Show more button", () => {
     const post: EventMonitorPost = {
       id: "0x3333333333333333333333333333333333333333333333333333333333333333:0x5",
+      type: "Polymarket clarification",
+      alertTitle: "Polymarket clarification",
+      sourceLabel: "On-chain tx",
+      buttonLabel: "Open transaction",
+      mentionAlertRole: true,
+      text: "Clarification issued.",
+      qualifyingText: "Clarification issued.",
+      postedAt: new Date("2026-05-20T00:00:00.000Z"),
+      url: "https://polygonscan.com/tx/0xtx",
+      polymarketUrl: "https://polymarket.com/market/test",
+      hiddenFields: [{ name: "Condition ID", value: "0xcondition", inline: false }],
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: []
+    };
+    const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "polymarket-clarifications" }, post);
+    const embed = payload.embeds[0].toJSON();
+    const components = payload.components[0].toJSON().components;
+    const detailsEmbed = buildEventPostDetailsEmbed({ ...checkedIntegration, adapterId: "polymarket-clarifications" }, post).toJSON();
+
+    expect(embed.fields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Condition ID" })]));
+    expect(components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Open transaction", style: 5, url: post.url }),
+        expect.objectContaining({ label: "Show more", style: 2 })
+      ])
+    );
+    const showMoreButton = components.find((component) => "custom_id" in component && component.label === "Show more") as
+      | { custom_id?: string }
+      | undefined;
+    const customId = showMoreButton?.custom_id;
+    expect(parseEventDetailsCustomId(String(customId))).toEqual({ integrationId: checkedIntegration.id, eventId: post.id });
+    expect(detailsEmbed.fields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Condition ID", value: "0xcondition" })]));
+  });
+
+  it("uses a Refresh data button for UMA proposal details", () => {
+    const post: EventMonitorPost = {
+      id: "0x3333333333333333333333333333333333333333333333333333333333333333:0x5",
       type: "Polymarket UMA proposal",
       alertTitle: "Polymarket UMA proposal",
       sourceLabel: "On-chain tx",
@@ -493,23 +533,18 @@ describe("adapter commands", () => {
       strikeTerms: []
     };
     const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId: "polymarket-proposals" }, post);
-    const embed = payload.embeds[0].toJSON();
     const components = payload.components[0].toJSON().components;
-    const detailsEmbed = buildEventPostDetailsEmbed({ ...checkedIntegration, adapterId: "polymarket-proposals" }, post).toJSON();
 
-    expect(embed.fields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Condition ID" })]));
     expect(components).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Open transaction", style: 5, url: post.url }),
-        expect.objectContaining({ label: "Show more", style: 2 })
+        expect.objectContaining({ label: "Refresh data", style: 2 })
       ])
     );
-    const showMoreButton = components.find((component) => "custom_id" in component && component.label === "Show more") as
+    const refreshButton = components.find((component) => "custom_id" in component && component.label === "Refresh data") as
       | { custom_id?: string }
       | undefined;
-    const customId = showMoreButton?.custom_id;
-    expect(parseEventDetailsCustomId(String(customId))).toEqual({ integrationId: checkedIntegration.id, eventId: post.id });
-    expect(detailsEmbed.fields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Condition ID", value: "0xcondition" })]));
+    expect(parseEventRefreshCustomId(String(refreshButton?.custom_id))).toEqual({ integrationId: checkedIntegration.id, eventId: post.id });
   });
 
   it("adds address label buttons for UMA proposer and disputer fields", () => {

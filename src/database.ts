@@ -351,6 +351,17 @@ export class BotDatabase {
     return row ? deserializeEventAlert(row) : null;
   }
 
+  updateEventAlertPost(integrationId: number, eventId: string, post: EventMonitorPost, now = new Date()): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE event_alerts
+         SET postJson = ?, updatedAt = ?
+         WHERE integrationId = ? AND eventId = ?`
+      )
+      .run(serializeEventPost(post), now.toISOString(), integrationId, eventId);
+    return result.changes > 0;
+  }
+
   recordSnapshot(id: number, value: string, checkedAt: Date, snapshotDate: string): Integration {
     this.db
       .prepare(

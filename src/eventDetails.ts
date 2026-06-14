@@ -15,10 +15,13 @@ import {
   buildAddressLabelModalCustomId,
   buildAddressLabelsEmbed,
   buildEventPostDetailsEmbed,
+  buildEventPostMessagePayload,
   parseAddressLabelButtonCustomId,
   parseAddressLabelModalCustomId,
-  parseEventDetailsCustomId
+  parseEventDetailsCustomId,
+  parseEventRefreshCustomId
 } from "./embeds.js";
+import { refreshPolymarketProposalPost } from "./integrations/polymarketProposals.js";
 
 export async function handleEventDetailsButton(
   interaction: ButtonInteraction,
@@ -27,6 +30,12 @@ export async function handleEventDetailsButton(
   const addressLabel = parseAddressLabelButtonCustomId(interaction.customId);
   if (addressLabel) {
     await interaction.showModal(buildAddressLabelModal(addressLabel));
+    return true;
+  }
+
+  const refresh = parseEventRefreshCustomId(interaction.customId);
+  if (refresh) {
+    await handleEventRefreshButton(interaction, database, refresh);
     return true;
   }
 
@@ -50,6 +59,42 @@ export async function handleEventDetailsButton(
     flags: MessageFlags.Ephemeral
   });
   return true;
+}
+
+async function handleEventRefreshButton(
+  interaction: ButtonInteraction,
+  database: BotDatabase,
+  parsed: { integrationId: number; eventId: string }
+): Promise<void> {
+  const alert = database.getEventAlert(parsed.integrationId, parsed.eventId);
+  if (!alert) {
+    await interaction.reply({
+      content: "Stored alert data is no longer available for refresh.",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  const integration = database.getIntegrationById(parsed.integrationId);
+  if (integration.adapterId !== "polymarket-proposals" || alert.post.type !== "Polymarket UMA proposal") {
+    await interaction.reply({
+      content: "This alert does not support refresh.",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const refreshedPost = await refreshPolymarketProposalPost(alert.post);
+  database.updateEventAlertPost(integration.id, alert.eventId, refreshedPost);
+  const payload = buildEventPostMessagePayload(integration, refreshedPost);
+  await interaction.message.edit({
+    content: payload.content ?? null,
+    embeds: payload.embeds,
+    components: payload.components,
+    allowedMentions: { parse: [] }
+  });
+  await interaction.editReply("Refreshed proposal data and updated this alert.");
 }
 
 export async function handleEventDetailsModalSubmit(

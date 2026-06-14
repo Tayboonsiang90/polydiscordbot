@@ -25,6 +25,7 @@ const successColor = 0x2ecc71;
 const warningColor = 0xf1c40f;
 const errorColor = 0xe74c3c;
 const eventDetailsCustomIdPrefix = "event-details:";
+const eventRefreshCustomIdPrefix = "event-refresh:";
 const addressLabelButtonCustomIdPrefix = "address-label:";
 const addressLabelModalCustomIdPrefix = "address-label-modal:";
 const addressPattern = /^0x[0-9a-fA-F]{40}$/;
@@ -530,6 +531,22 @@ export function parseEventDetailsCustomId(customId: string): { integrationId: nu
   return Number.isSafeInteger(integrationId) && integrationId > 0 && eventId ? { integrationId, eventId } : null;
 }
 
+export function parseEventRefreshCustomId(customId: string): { integrationId: number; eventId: string } | null {
+  if (!customId.startsWith(eventRefreshCustomIdPrefix)) {
+    return null;
+  }
+
+  const payload = customId.slice(eventRefreshCustomIdPrefix.length);
+  const separatorIndex = payload.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex === payload.length - 1) {
+    return null;
+  }
+
+  const integrationId = Number(payload.slice(0, separatorIndex));
+  const eventId = payload.slice(separatorIndex + 1);
+  return Number.isSafeInteger(integrationId) && integrationId > 0 && eventId ? { integrationId, eventId } : null;
+}
+
 export function parseAddressLabelButtonCustomId(
   customId: string
 ): { integrationId: number; role: AddressLabelButtonRole; address: string } | null {
@@ -783,14 +800,15 @@ function buildEventDetailsButton(integration: Integration, post: EventMonitorPos
     return null;
   }
 
-  const customId = `${eventDetailsCustomIdPrefix}${integration.id}:${post.id}`;
+  const isRefreshableProposal = integration.adapterId === "polymarket-proposals" && post.type === "Polymarket UMA proposal";
+  const customId = `${isRefreshableProposal ? eventRefreshCustomIdPrefix : eventDetailsCustomIdPrefix}${integration.id}:${post.id}`;
   if (customId.length > 100) {
     return null;
   }
 
   return new ButtonBuilder()
     .setCustomId(customId)
-    .setLabel("Show more")
+    .setLabel(isRefreshableProposal ? "Refresh data" : "Show more")
     .setStyle(ButtonStyle.Secondary);
 }
 

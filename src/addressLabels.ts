@@ -57,6 +57,14 @@ type ActorExposureStatuses = {
   hedge?: AddressPositionStatus;
 };
 
+type AddressProfileEnrichmentOptions = {
+  bypassProfileCache?: boolean;
+};
+
+type AddressProfileFetchOptions = {
+  bypassCache?: boolean;
+};
+
 const profileCache = new Map<string, ProfileCacheEntry>();
 
 export function getAddressLabelsFromSettingsJson(settingsJson: string | null): AddressLabelEntry[] {
@@ -210,15 +218,23 @@ export function exportAddressLabelsCsv(labels: AddressLabelEntry[]): string {
   return `${lines.join("\n")}\n`;
 }
 
-export async function enrichEventPostAddressProfiles(post: EventMonitorPost): Promise<EventMonitorPost> {
+export async function enrichEventPostAddressProfiles(
+  post: EventMonitorPost,
+  options: AddressProfileEnrichmentOptions = {}
+): Promise<EventMonitorPost> {
   const summary = post.prioritySummary;
   if (!summary) {
     return post;
   }
 
+  const now = new Date();
   const [proposerProfile, disputerProfile] = await Promise.all([
-    summary.proposer ? fetchPolymarketAddressProfileStatus(summary.proposer) : Promise.resolve(undefined),
-    summary.disputer ? fetchPolymarketAddressProfileStatus(summary.disputer) : Promise.resolve(undefined)
+    summary.proposer
+      ? fetchPolymarketAddressProfileStatus(summary.proposer, now, { bypassCache: options.bypassProfileCache })
+      : Promise.resolve(undefined),
+    summary.disputer
+      ? fetchPolymarketAddressProfileStatus(summary.disputer, now, { bypassCache: options.bypassProfileCache })
+      : Promise.resolve(undefined)
   ]);
   const proposedOutcome = summary.proposedOutcomeSide;
   const oppositeOutcome = getOppositeOutcome(proposedOutcome);
@@ -250,14 +266,15 @@ export async function enrichEventPostAddressProfiles(post: EventMonitorPost): Pr
 
 export async function fetchPolymarketAddressProfileStatus(
   address: string,
-  now = new Date()
+  now = new Date(),
+  options: AddressProfileFetchOptions = {}
 ): Promise<AddressProfileStatus | undefined> {
   const normalized = normalizeAddress(address);
   if (!normalized) {
     return undefined;
   }
 
-  const cached = profileCache.get(normalized);
+  const cached = options.bypassCache ? undefined : profileCache.get(normalized);
   if (cached && cached.expiresAtMs > now.getTime()) {
     return cached.status;
   }

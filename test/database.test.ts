@@ -279,10 +279,20 @@ describe("BotDatabase alert role metadata", () => {
 
     database.markEventAlertSent(integration.id, post.id, new Date("2026-05-21T00:00:33.000Z"));
     expect(database.claimPendingEventAlerts(integration.id, new Date("2026-05-21T00:10:00.000Z"))).toEqual([]);
+    expect(
+      database.updateEventAlertPost(
+        integration.id,
+        post.id,
+        { ...post, text: "Clarification refreshed." },
+        new Date("2026-05-21T00:00:34.000Z")
+      )
+    ).toBe(true);
     expect(database.getEventAlert(integration.id, post.id)).toMatchObject({
       eventId: post.id,
       status: "sent",
-      sentAt: "2026-05-21T00:00:33.000Z"
+      sentAt: "2026-05-21T00:00:33.000Z",
+      updatedAt: "2026-05-21T00:00:34.000Z",
+      post: expect.objectContaining({ text: "Clarification refreshed." })
     });
 
     database.close();

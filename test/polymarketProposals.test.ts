@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { testOnlyAddressLabelHelpers } from "../src/addressLabels.js";
+import { fetchPolymarketAddressProfileStatus, testOnlyAddressLabelHelpers } from "../src/addressLabels.js";
 import { buildEventPostEmbed } from "../src/embeds.js";
 import {
   decodeProposePriceLog,
@@ -7,6 +7,7 @@ import {
   getPolymarketProposalTagChannelName,
   getPolymarketProposalTagFiltersFromSettingsJson,
   proposePriceTopic,
+  refreshPolymarketProposalPost,
   resolvePolymarketProposalChannelIds,
   setPolymarketProposalTagChannel,
   searchPolymarketProposalTags,
@@ -405,6 +406,88 @@ describe("fetchPolymarketProposalUpdates", () => {
         })
       ])
     );
+  });
+
+  it("refreshes proposal profile data instead of reusing cached lookup failures", async () => {
+    const conditionId = `0x${"a".repeat(64)}`;
+    const proxyWallet = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let profileCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const target = url.toString();
+        if (target.startsWith("https://gamma-api.polymarket.com/public-profile")) {
+          profileCalls += 1;
+          if (profileCalls === 1) {
+            throw new Error("temporary timeout");
+          }
+
+          return jsonResponse({ proxyWallet, displayUsernamePublic: true, name: "KnownProposer" });
+        }
+
+        if (target.startsWith("https://data-api.polymarket.com/trades")) {
+          return jsonResponse([{ proxyWallet, side: "BUY" }]);
+        }
+
+        if (target.startsWith("https://data-api.polymarket.com/positions")) {
+          return jsonResponse([
+            {
+              conditionId,
+              outcome: "Yes",
+              size: "5",
+              currentValue: "4.5",
+              avgPrice: "0.8",
+              curPrice: "0.9"
+            }
+          ]);
+        }
+
+        throw new Error(`Unexpected fetch: ${target}`);
+      })
+    );
+
+    await expect(fetchPolymarketAddressProfileStatus(proposer)).resolves.toMatchObject({ error: "temporary timeout" });
+    const refreshed = await refreshPolymarketProposalPost({
+      id: "0xtx:0x1",
+      type: "Polymarket UMA proposal",
+      text: "Proposal opened.",
+      qualifyingText: "Proposal opened.",
+      postedAt: new Date("2026-05-21T00:00:00.000Z"),
+      url: "https://polygonscan.com/tx/0xtx",
+      prioritySummary: {
+        proposer,
+        conditionId,
+        proposedOutcomeSide: "YES",
+        proposerAligned: {
+          address: proposer,
+          profileWallet: proposer,
+          conditionId,
+          side: "YES",
+          hasPosition: false,
+          checkedAt: "2026-05-21T00:00:00.000Z",
+          sourceUrl: "old",
+          error: "old error"
+        }
+      },
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: []
+    });
+
+    expect(profileCalls).toBe(2);
+    expect(refreshed.prioritySummary?.proposerProfile).toMatchObject({
+      address: proposer,
+      profileWallet: proxyWallet,
+      profileName: "KnownProposer"
+    });
+    expect(refreshed.prioritySummary?.proposerProfile?.error).toBeUndefined();
+    expect(refreshed.prioritySummary?.proposerAligned).toMatchObject({
+      profileWallet: proxyWallet,
+      side: "YES",
+      hasPosition: true,
+      size: 5
+    });
   });
 
   it("does not mark liquidity when the proposed-side CLOB book is unavailable", async () => {
