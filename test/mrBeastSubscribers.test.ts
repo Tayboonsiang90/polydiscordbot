@@ -95,4 +95,9 @@ describe("MrBeast YouTube subscribers adapter", () => {
     expect(mrBeastSubscribersAdapter.shouldAlertOnChange?.(previous, currentProjectionOnly)).toBe(false);
     expect(mrBeastSubscribersAdapter.shouldAlertOnChange?.(previous, currentSubscribersChanged)).toBe(true);
   });
+
+  it("polls the YouTube counter every minute", () => {
+    expect(mrBeastSubscribersAdapter.getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(mrBeastSubscribersAdapter.getPollIntervalReason?.({} as never)).toContain("every minute");
+  });
 });

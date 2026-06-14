@@ -130,6 +130,8 @@ export const mrBeastViewsAdapter: WebsiteAdapter = {
   legacyChannelNames: ["mrbeast", "mrbeast-views"],
   alertRoleName: "MrBeast Views Alerts",
   alertRoleEmoji: "\uD83D\uDC40",
+  getPollIntervalMinutes: () => 1,
+  getPollIntervalReason: () => "YouTube About metadata polling every minute for MrBeast total-view counter changes",
   shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
     const previousViews = parseMrBeastStoredViews(previousValue);
     const currentViews = parseMrBeastStoredViews(currentValue);

@@ -125,4 +125,9 @@ describe("MrBeast YouTube views adapter", () => {
 
     expect(mrBeastViewsAdapter.shouldAlertOnChange?.(previousBadVideoCount, correctedChannelCount)).toBe(false);
   });
+
+  it("polls the YouTube counter every minute", () => {
+    expect(mrBeastViewsAdapter.getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(mrBeastViewsAdapter.getPollIntervalReason?.({} as never)).toContain("every minute");
+  });
 });

@@ -122,6 +122,8 @@ export const mrBeastSubscribersAdapter: WebsiteAdapter = {
   defaultChannelName: "mrbeastsubs",
   alertRoleName: "MrBeast Subs Alerts",
   alertRoleEmoji: "\uD83D\uDC65",
+  getPollIntervalMinutes: () => 1,
+  getPollIntervalReason: () => "YouTube About metadata polling every minute for MrBeast subscriber counter changes",
   shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
     const previousSubscribers = parseMrBeastStoredSubscribers(previousValue);
     const currentSubscribers = parseMrBeastStoredSubscribers(currentValue);
