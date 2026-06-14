@@ -85,6 +85,27 @@ export async function fetchAppleAppStoreChart(feedUrl: string): Promise<AppStore
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
+export function extractAppStoreTopApps(response: AppStoreChartResponse, count: number, chartLabel: string): string {
+  const apps = response.feed?.results?.slice(0, count) ?? [];
+  if (apps.length < count) {
+    throw new Error(`Could not find ${count} ${chartLabel} apps in the Apple App Store chart response`);
+  }
+
+  return apps
+    .map((app, index) => {
+      if (!app.name) {
+        throw new Error("Apple App Store chart response included an app without a name");
+      }
+
+      return `${index + 1}. ${app.name}`;
+    })
+    .join("\n");
+}
+
+export function shouldAlertOnAppStoreTop2Change(previousValue: string | null, currentValue: string): boolean {
+  return getTopTwoLines(previousValue) !== getTopTwoLines(currentValue);
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -341,4 +362,8 @@ function parseGammaDate(value: unknown): Date | null {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function getTopTwoLines(value: string | null): string {
+  return (value ?? "").split(/\r?\n/).slice(0, 2).join("\n");
 }

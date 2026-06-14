@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BotDatabase } from "../src/database.js";
 import {
   clearLatestErrorNoticeState,
+  captureDailySnapshot,
   formatErrorNoticeDiscordMessage,
   getDueSnapshotDate,
   getEffectivePollIntervalMinutes,
@@ -29,6 +30,7 @@ afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
     tempDir = null;
   }
+  vi.unstubAllGlobals();
 });
 
 function createTestDatabase(): BotDatabase {
@@ -41,7 +43,7 @@ const snapshotIntegration: Integration = {
   guildId: "guild",
   channelId: "channel",
   adapterId: "free-app-store",
-  displayName: "Free App Store Top 2",
+  displayName: "Free App Store Top 5",
   sourceUrl: "https://apps.apple.com/us/charts/iphone",
   polymarketUrl: null,
   alertRoleId: null,
@@ -64,7 +66,7 @@ const snapshotIntegration: Integration = {
 const snapshotAdapter: WebsiteAdapter = {
   id: "free-app-store",
   commandName: "freeappstore",
-  displayName: "Free App Store Top 2",
+  displayName: "Free App Store Top 5",
   sourceUrl: "https://apps.apple.com/us/charts/iphone",
   defaultChannelName: "freeappstore",
   alertRoleName: "Free App Store Alerts",
@@ -344,6 +346,44 @@ describe("getDueSnapshotDate", () => {
         new Date("2026-05-08T16:02:00.000Z")
       )
     ).toBeNull();
+  });
+});
+
+describe("captureDailySnapshot", () => {
+  it("stores the top 5 snapshot but alerts only when the top 2 change", async () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "freeappstore",
+      adapterId: "free-app-store",
+      displayName: "Free App Store Top 5",
+      sourceUrl: "https://apps.apple.com/us/charts/iphone",
+      polymarketUrl: "https://polymarket.com/event/1-free-app-in-the-us-apple-app-store-on-may-8",
+      pollIntervalMinutes: 5
+    });
+    const previousSnapshot = ["1. App 1", "2. App 2", "3. App 3", "4. App 4", "5. App 5"].join("\n");
+    const currentSnapshot = ["1. App 1", "2. App 2", "3. New App 3", "4. App 4", "5. App 5"].join("\n");
+    database.recordSnapshot(integration.id, previousSnapshot, new Date("2026-05-08T16:00:00.000Z"), "2026-05-08");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          feed: {
+            results: ["App 1", "App 2", "New App 3", "App 4", "App 5"].map((name) => ({ name }))
+          }
+        })
+      })
+    );
+
+    const result = await captureDailySnapshot(database, database.getIntegrationById(integration.id), "2026-05-09");
+    const stored = database.getIntegrationById(integration.id);
+
+    expect(result.shouldAlert).toBe(false);
+    expect(result.snapshotValue).toBe(currentSnapshot);
+    expect(stored.snapshotDate).toBe("2026-05-09");
+    expect(stored.snapshotValue).toBe(currentSnapshot);
+    database.close();
   });
 });
 

@@ -33,6 +33,7 @@ import { ismServicesPmiAdapter } from "./ismServicesPmi.js";
 import { kaitoMindshareAdapter } from "./kaitoMindshare.js";
 import { kmaSeoulPrecipAdapter } from "./kmaSeoulPrecip.js";
 import { londonPrecipAdapter } from "./londonPrecip.js";
+import { joeRoganPodcastAdapter } from "./joeRoganPodcast.js";
 import { mrBeastSubscribersAdapter } from "./mrBeastSubscribers.js";
 import { mrBeastViewsAdapter } from "./mrBeastViews.js";
 import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
@@ -125,6 +126,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [kpopSongReleasesAdapter.id, kpopSongReleasesAdapter],
   [kmaSeoulPrecipAdapter.id, kmaSeoulPrecipAdapter],
   [londonPrecipAdapter.id, londonPrecipAdapter],
+  [joeRoganPodcastAdapter.id, joeRoganPodcastAdapter],
   [mrBeastSubscribersAdapter.id, mrBeastSubscribersAdapter],
   [mrBeastViewsAdapter.id, mrBeastViewsAdapter],
   [nbsPressReleaseAdapter.id, nbsPressReleaseAdapter],

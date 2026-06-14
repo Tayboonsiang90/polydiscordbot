@@ -102,7 +102,7 @@ describe("BotDatabase alert role metadata", () => {
       guildId: "guild",
       channelId: "freeappstore",
       adapterId: "free-app-store",
-      displayName: "Free App Store Top 2",
+      displayName: "Free App Store Top 5",
       sourceUrl: "https://apps.apple.com/us/charts/iphone",
       pollIntervalMinutes: 5
     });

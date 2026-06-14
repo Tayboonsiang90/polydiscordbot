@@ -71,7 +71,7 @@ export class BotDatabase {
     this.db = new Database(databasePath);
     this.db.pragma("journal_mode = WAL");
     this.migrate();
-    this.normalizeAppStoreTop2State();
+    this.normalizeAppStoreDisplayNames();
   }
 
   close(): void {
@@ -553,16 +553,16 @@ export class BotDatabase {
     return rows.some((row) => row.name === columnName);
   }
 
-  private normalizeAppStoreTop2State(): void {
+  private normalizeAppStoreDisplayNames(): void {
     const updates = [
-      { adapterId: "free-app-store", displayName: "Free App Store Top 2" },
-      { adapterId: "paid-app-store", displayName: "Paid App Store Top 2" }
+      { adapterId: "free-app-store", displayName: "Free App Store Top 5" },
+      { adapterId: "paid-app-store", displayName: "Paid App Store Top 5" }
     ];
 
-    const select = this.db.prepare("SELECT id, displayName, lastValue, snapshotValue FROM integrations WHERE adapterId = ?");
+    const select = this.db.prepare("SELECT id, displayName FROM integrations WHERE adapterId = ?");
     const update = this.db.prepare(
       `UPDATE integrations
-       SET displayName = ?, lastValue = ?, snapshotValue = ?, updatedAt = ?
+       SET displayName = ?, updatedAt = ?
        WHERE id = ?`
     );
 
@@ -570,34 +570,20 @@ export class BotDatabase {
       const rows = select.all(item.adapterId) as Array<{
         id: number;
         displayName: string;
-        lastValue: string | null;
-        snapshotValue: string | null;
       }>;
       for (const row of rows) {
-        const lastValue = keepFirstTwoLines(row.lastValue);
-        const snapshotValue = keepFirstTwoLines(row.snapshotValue);
-        if (row.displayName === item.displayName && row.lastValue === lastValue && row.snapshotValue === snapshotValue) {
+        if (row.displayName === item.displayName) {
           continue;
         }
 
         update.run(
           item.displayName,
-          lastValue,
-          snapshotValue,
           new Date().toISOString(),
           row.id
         );
       }
     }
   }
-}
-
-function keepFirstTwoLines(value: string | null): string | null {
-  if (!value) {
-    return value;
-  }
-
-  return value.split(/\r?\n/).slice(0, 2).join("\n");
 }
 
 function toIsoString(value: Date | string): string {

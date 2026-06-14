@@ -38,6 +38,7 @@ export type SnapshotResult = {
   integration: Integration;
   snapshotDate: string;
   snapshotValue: string;
+  shouldAlert: boolean;
 };
 
 export type EventCheckResult = {
@@ -294,7 +295,11 @@ export async function captureDailySnapshot(
 
   const adapterValue = await adapter.fetchCurrentValue(integration);
   const detectedAt = new Date();
-  const snapshotChanged = integration.snapshotValue !== null && integration.snapshotValue !== adapterValue.value;
+  const snapshotChanged =
+    integration.snapshotValue !== null &&
+    integration.snapshotValue !== adapterValue.value &&
+    (adapter.shouldAlertOnChange ? adapter.shouldAlertOnChange(integration.snapshotValue, adapterValue.value) : true);
+  const shouldAlert = integration.snapshotValue === null || snapshotChanged;
   const updatedIntegration = database.recordSnapshot(integration.id, adapterValue.value, adapterValue.observedAt, snapshotDate);
   if (snapshotChanged) {
     database.recordUpdateLog({
@@ -311,7 +316,8 @@ export async function captureDailySnapshot(
   return {
     integration: updatedIntegration,
     snapshotDate,
-    snapshotValue: adapterValue.value
+    snapshotValue: adapterValue.value,
+    shouldAlert
   };
 }
 
@@ -592,7 +598,9 @@ export class PollScheduler {
         }
 
         const result = await captureDailySnapshot(this.database, latest, latestSnapshotDate);
-        await this.sendSnapshot(latest.channelId, result);
+        if (result.shouldAlert) {
+          await this.sendSnapshot(latest.channelId, result);
+        }
         this.clearErrorNoticeState(latest.id);
       } catch (error) {
         await this.sendErrorIfDue(integration.channelId, integration, error).catch(logSchedulerError);

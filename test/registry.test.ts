@@ -5,6 +5,7 @@ const expectedCommandIds = [
   ["aaa", "aaa-regular-gas"],
   ["alignedsale", "aligned-layer-sale"],
   ["allin", "all-in-podcast"],
+  ["joerogan", "joe-rogan-podcast"],
   ["songreleases", "apple-artist-song-releases"],
   ["arenaai", "arena-ai-no-style-control"],
   ["aws", "aws-disrupted-events"],
@@ -137,6 +138,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("elonx").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("elonx").getPollIntervalMinutes?.({ polymarketUrl: "https://polymarket.com/event/what-will-elon-post-this-week-june-15-21-20260612141418431", settingsJson: null } as never, new Date("2026-06-15T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("allin").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("joerogan").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("joerogan").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();

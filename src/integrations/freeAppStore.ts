@@ -1,47 +1,31 @@
 ﻿import type { AdapterValue, WebsiteAdapter } from "./types.js";
 import type { Integration } from "./types.js";
 import {
+  extractAppStoreTopApps,
   fetchAppleAppStoreChart,
   refreshAppStorePolymarketQueue,
+  shouldAlertOnAppStoreTop2Change,
   upsertAppStorePolymarketMarket,
   type AppStoreChartResponse,
   type AppStoreMarketDiscoveryConfig
 } from "./appleAppStore.js";
 
 const sourceUrl = "https://apps.apple.com/us/charts/iphone";
-const feedUrl = "https://rss.applemarketingtools.com/api/v2/us/apps/top-free/2/apps.json";
+const feedUrl = "https://rss.applemarketingtools.com/api/v2/us/apps/top-free/5/apps.json";
 const marketDiscoveryConfig: AppStoreMarketDiscoveryConfig = {
   chartType: "free",
   searchQuery: "free app in the us apple app store",
   lastDiscoveryAtKey: "lastFreeAppStoreMarketDiscoveryAt"
 };
 
-type AppStoreChartResult = {
-  name?: string;
-  artistName?: string;
-};
-
-export function extractFreeAppStoreTop2(response: AppStoreChartResponse): string {
-  const apps = response.feed?.results?.slice(0, 2) ?? [];
-  if (apps.length < 2) {
-    throw new Error("Could not find 2 free iPhone apps in the Apple App Store chart response");
-  }
-
-  return apps
-    .map((app, index) => {
-      if (!app.name) {
-        throw new Error("Apple App Store chart response included an app without a name");
-      }
-
-      return `${index + 1}. ${app.name}`;
-    })
-    .join("\n");
+export function extractFreeAppStoreTop5(response: AppStoreChartResponse): string {
+  return extractAppStoreTopApps(response, 5, "free iPhone");
 }
 
 export const freeAppStoreAdapter: WebsiteAdapter = {
   id: "free-app-store",
   commandName: "freeappstore",
-  displayName: "Free App Store Top 2",
+  displayName: "Free App Store Top 5",
   sourceUrl,
   defaultPolymarketUrl: "https://polymarket.com/event/1-free-app-in-the-us-apple-app-store-on-may-8",
   defaultChannelName: "freeappstore",
@@ -54,8 +38,9 @@ export const freeAppStoreAdapter: WebsiteAdapter = {
     windowMinutes: 5,
     label: "12:00 PM ET snapshot"
   },
+  shouldAlertOnChange: shouldAlertOnAppStoreTop2Change,
   getPollIntervalReason(): string {
-    return "Regular top-2 free App Store chart checks plus 30-minute daily Polymarket market discovery.";
+    return "Regular top-5 free App Store chart checks; alerts only when top 2 change; 30-minute daily Polymarket market discovery.";
   },
   async refreshSettings(integration: Integration, options?: { force?: boolean }): Promise<string> {
     return (await refreshAppStorePolymarketQueue(integration, marketDiscoveryConfig, new Date(), options?.force)).settingsJson ?? integration.settingsJson ?? "{}";
@@ -65,7 +50,7 @@ export const freeAppStoreAdapter: WebsiteAdapter = {
   },
   async fetchCurrentValue(): Promise<AdapterValue> {
     const json = await fetchAppleAppStoreChart(feedUrl);
-    const value = extractFreeAppStoreTop2(json);
+    const value = extractFreeAppStoreTop5(json);
     return {
       value,
       rawValue: value,

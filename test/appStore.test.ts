@@ -23,7 +23,7 @@ const integration: Integration = {
   guildId: "guild",
   channelId: "channel",
   adapterId: "free-app-store",
-  displayName: "Free App Store Top 2",
+  displayName: "Free App Store Top 5",
   sourceUrl: "https://apps.apple.com/us/charts/iphone",
   polymarketUrl: "https://polymarket.com/event/1-free-app-in-the-us-apple-app-store-on-may-8",
   alertRoleId: null,
