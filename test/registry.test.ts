@@ -6,6 +6,7 @@ const expectedCommandIds = [
   ["alignedsale", "aligned-layer-sale"],
   ["allin", "all-in-podcast"],
   ["joerogan", "joe-rogan-podcast"],
+  ["lemonade", "lemonade-stand-podcast"],
   ["songreleases", "apple-artist-song-releases"],
   ["arenaai", "arena-ai-no-style-control"],
   ["aws", "aws-disrupted-events"],
@@ -140,6 +141,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("allin").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("joerogan").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("joerogan").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("lemonade").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("lemonade").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();
