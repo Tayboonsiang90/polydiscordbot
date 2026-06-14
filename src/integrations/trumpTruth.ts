@@ -934,12 +934,45 @@ function extractImageUrls(html: string): string[] {
     .map((element) => {
       const node = $(element);
       const linkedImage = node.is("img") ? node.closest("a").attr("href") : node.attr("href");
-      return isImageUrl(linkedImage) ? linkedImage : node.attr("src") ?? linkedImage;
+      const srcImage = node.is("img") ? node.attr("src") : undefined;
+      const imageUrl = getUsableArchiveImageUrl(linkedImage) ?? getUsableArchiveImageUrl(srcImage);
+      return imageUrl;
     })
     .filter(isNonEmptyString)
     .filter((url) => /^https?:\/\//.test(url))
     .filter(isImageUrl);
   return dedupeImageUrls(urls);
+}
+
+function getUsableArchiveImageUrl(value: string | undefined): string | undefined {
+  if (!isImageUrl(value) || isPlaceholderArchiveImageUrl(value)) {
+    return undefined;
+  }
+
+  return normalizeTruthSocialImageSize(value);
+}
+
+function isPlaceholderArchiveImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.hostname === "www.trumpstruth.org" && url.pathname === "/images/image-placeholder-icon.png";
+  } catch {
+    return false;
+  }
+}
+
+function normalizeTruthSocialImageSize(value: string): string {
+  try {
+    const url = new URL(value);
+    if (url.hostname.startsWith("static-assets") && url.hostname.endsWith(".truthsocial.com")) {
+      url.pathname = url.pathname.replace("/small/", "/original/");
+      return url.toString();
+    }
+  } catch {
+    return value;
+  }
+
+  return value;
 }
 
 function dedupeImageUrls(urls: string[]): string[] {

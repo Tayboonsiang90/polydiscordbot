@@ -629,6 +629,31 @@ describe("Trump Truth archive feed", () => {
     expect(post.imageUrls).toEqual(["https://truth-archive.example/attachments/16198/53c7a1811e48bca3.png"]);
   });
 
+  it("uses Truth Social image src when archive wraps it in a placeholder link", () => {
+    const post = normalizeTrumpTruthArchiveItem(
+      {
+        id: "123",
+        archiveUrl: "https://www.trumpstruth.org/statuses/39249",
+        originalUrl: "https://truthsocial.com/@realDonaldTrump/116748742142548222",
+        originalId: "116748742142548222",
+        postedAt: new Date("2026-06-14T13:40:29.000Z"),
+        html: `
+          <div class="status-details-attachment__media">
+            <a href="https://www.trumpstruth.org/images/image-placeholder-icon.png">
+              <img src="https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/media_attachments/files/116/748/400/377/105/310/small/5b7851ebd7a70ff4.jpg" alt="">
+            </a>
+          </div>
+        `,
+        title: "Post"
+      },
+      []
+    );
+
+    expect(post.imageUrls).toEqual([
+      "https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/media_attachments/files/116/748/400/377/105/310/original/5b7851ebd7a70ff4.jpg"
+    ]);
+  });
+
   it("matches strike terms from archive image descriptions", () => {
     const post = normalizeTrumpTruthArchiveItem(
       {
