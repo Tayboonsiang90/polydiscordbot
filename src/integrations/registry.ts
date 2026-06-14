@@ -40,6 +40,7 @@ import { mrBeastViewsAdapter } from "./mrBeastViews.js";
 import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
 import { nceiTornadoesAdapter } from "./nceiTornadoes.js";
 import { nasaGistempAdapter } from "./nasaGistemp.js";
+import { nytFrontPageAdapter } from "./nytFrontPage.js";
 import { noaaNycPrecipAdapter } from "./noaaNycPrecip.js";
 import {
   noaaAtlantaRainAdapter,
@@ -135,6 +136,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [nbsPressReleaseAdapter.id, nbsPressReleaseAdapter],
   [nceiTornadoesAdapter.id, nceiTornadoesAdapter],
   [nasaGistempAdapter.id, nasaGistempAdapter],
+  [nytFrontPageAdapter.id, nytFrontPageAdapter],
   [noaaAtlantaRainAdapter.id, noaaAtlantaRainAdapter],
   [noaaBostonRainAdapter.id, noaaBostonRainAdapter],
   [noaaDallasRainAdapter.id, noaaDallasRainAdapter],

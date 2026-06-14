@@ -13,7 +13,8 @@ import { findMatchedStrikeTerms } from "./trumpTruth.js";
 import type { AdapterValue, EventMonitorOptions, EventMonitorPost, EventMonitorResult, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://nytimes.pressreader.com/the-new-york-times/";
-const defaultPolymarketUrl = "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-18-may-24";
+const defaultPolymarketUrl =
+  "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-june-15-june-21-20260612213503327";
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const nytMarketSearchQuery = "NYT front page headlines";

@@ -45,6 +45,7 @@ const expectedCommandIds = [
   ["nbs", "nbs-press-release"],
   ["gistemp", "nasa-gistemp-temperature"],
   ["tornadoes", "ncei-tornadoes"],
+  ["nytfront", "nyt-front-page"],
   ["atlantarain", "noaa-atlanta-rain"],
   ["bostonrain", "noaa-boston-rain"],
   ["dallasrain", "noaa-dallas-rain"],
@@ -196,6 +197,9 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("trumpapproval").getPollIntervalMinutes?.({} as never, new Date("2026-06-05T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("spiderman").fetchEventUpdates).toBeDefined();
     expect(getAdapterByCommandName("spiderman").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("nytfront").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("nytfront").supportsStrikes).toBe(true);
+    expect(getAdapterByCommandName("nytfront").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("spotifyglobal").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();

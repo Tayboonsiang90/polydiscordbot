@@ -6,6 +6,7 @@ import {
   findNytStrikeTermBoxes,
   formatNytHistoricalIssueRows,
   getNytFrontPageMarketIssueDates,
+  nytFrontPageAdapter,
   parseNytFrontPageSettings,
   refreshNytFrontPageSettings,
   refreshNytFrontPagePolymarketQueue
@@ -44,6 +45,22 @@ function pageHtml(): string {
 describe("NYT front page adapter", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("uses the revived June 15-21 market as the default URL", () => {
+    const defaultUrl = nytFrontPageAdapter.defaultPolymarketUrl;
+    expect(defaultUrl).toBe(
+      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-june-15-june-21-20260612213503327"
+    );
+    expect(getNytFrontPageMarketIssueDates(defaultUrl!)).toEqual([
+      "2026-06-15",
+      "2026-06-16",
+      "2026-06-17",
+      "2026-06-18",
+      "2026-06-19",
+      "2026-06-20",
+      "2026-06-21"
+    ]);
   });
 
   it("extracts strike terms from NYT Gamma questions", () => {
