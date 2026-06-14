@@ -1,8 +1,20 @@
 ﻿import type { AdapterValue, WebsiteAdapter } from "./types.js";
-import { fetchAppleAppStoreChart, type AppStoreChartResponse } from "./appleAppStore.js";
+import type { Integration } from "./types.js";
+import {
+  fetchAppleAppStoreChart,
+  refreshAppStorePolymarketQueue,
+  upsertAppStorePolymarketMarket,
+  type AppStoreChartResponse,
+  type AppStoreMarketDiscoveryConfig
+} from "./appleAppStore.js";
 
 const sourceUrl = "https://apps.apple.com/us/charts/iphone";
 const feedUrl = "https://rss.applemarketingtools.com/api/v2/us/apps/top-free/2/apps.json";
+const marketDiscoveryConfig: AppStoreMarketDiscoveryConfig = {
+  chartType: "free",
+  searchQuery: "free app in the us apple app store",
+  lastDiscoveryAtKey: "lastFreeAppStoreMarketDiscoveryAt"
+};
 
 type AppStoreChartResult = {
   name?: string;
@@ -41,6 +53,15 @@ export const freeAppStoreAdapter: WebsiteAdapter = {
     minute: 0,
     windowMinutes: 5,
     label: "12:00 PM ET snapshot"
+  },
+  getPollIntervalReason(): string {
+    return "Regular top-2 free App Store chart checks plus 30-minute daily Polymarket market discovery.";
+  },
+  async refreshSettings(integration: Integration, options?: { force?: boolean }): Promise<string> {
+    return (await refreshAppStorePolymarketQueue(integration, marketDiscoveryConfig, new Date(), options?.force)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  async upsertPolymarketMarket(integration: Integration, url: string): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+    return upsertAppStorePolymarketMarket(integration, url, marketDiscoveryConfig);
   },
   async fetchCurrentValue(): Promise<AdapterValue> {
     const json = await fetchAppleAppStoreChart(feedUrl);

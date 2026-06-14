@@ -46,12 +46,12 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `fdic-failed-banks` | `/fdic` | `#fdic-failed-banks` | `FDIC Failed Bank Alerts` | `🏦` | Monitors the latest row in the FDIC Failed Bank List for new bank failures. |
 | `fred-egg-price` | `/eggs` | `#eggs` | `FRED Egg Price Alerts` | `🥚` | Monitors FRED April 2026 Eggs, Grade A, Large cost per dozen and release-date polling. |
 | `fred-ground-beef` | `/beef` | `#beef` | `FRED Ground Beef Alerts` | `🥩` | Monitors FRED 2026 Ground beef, 100% beef cost per pound and release-date polling. |
-| `free-app-store` | `/freeappstore` | `#freeappstore` | `Free App Store Alerts` | `🆓` | Monitors the US iPhone App Store Top Free Apps top 2 list for Polymarket resolution checks. |
+| `free-app-store` | `/freeappstore` | `#freeappstore` | `Free App Store Alerts` | `🆓` | Monitors the US iPhone App Store Top Free Apps top 2 list and auto-discovers daily #1/#2 Free App Store markets. |
 | `nbs-press-release` | `/nbs` | `#nbs-press` | `NBS Press Release Alerts` | `🇨🇳` | Monitors China NBS English press releases hourly and alerts when the latest item changes. |
 | `ornn-b200-index` | `/ornnb200` | `#ornnb200` | `ORNN B200 Alerts` | `🖥️` | Monitors finalized ORNN B200 Index daily chart values for GPU rental-price resolution checks. |
 | `ornn-h100-index` | `/ornnh100` | `#ornnh100` | `ORNN H100 Alerts` | `🖥️` | Monitors finalized ORNN H100 Index daily chart values and auto-discovers active H100 GPU rental-price markets. |
 | `ornn-h200-index` | `/ornnh200` | `#ornnh200` | `ORNN H200 Alerts` | `🖥️` | Monitors finalized ORNN H200 Index daily chart values for GPU rental-price resolution checks. |
-| `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Monitors the US iPhone App Store Top Paid Apps top 2 list for Polymarket resolution checks. |
+| `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Monitors the US iPhone App Store Top Paid Apps top 2 list and auto-discovers daily Paid App Store markets. |
 | `parcl-dc-home-value` | `/dchomevalue` | `#dchomevalue` | `DC Home Value Alerts` | `🏠` | Monitors Parcl DC Metro Sales Price Index data and calculates the June 30 median home-value settlement. |
 | `parcl-nyc-home-value` | `/nychomevalue` | `#nychomevalue` | `NYC Home Value Alerts` | `🏙️` | Monitors Parcl NYC Sales Price Index data and calculates the June 30 median home-value settlement. |
 | `pboc-rate-change` | `/pboc` | `#pboc` | `PBoC Rate Alerts` | `🏦` | Monitors PBoC official announcements for extracted operation-rate changes in the June rate-change market. |
@@ -126,7 +126,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and the stored current URL remains as fallback even after expiry so source monitoring keeps running.
-- Trump Truth, Elon X, All-In Podcast, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, Strategy Bitcoin Purchases, USGS Earthquakes, Portwatch Hormuz Ships, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
+- Trump Truth, Elon X, All-In Podcast, App Store daily charts, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, Strategy Bitcoin Purchases, USGS Earthquakes, Portwatch Hormuz Ships, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
 
@@ -374,7 +374,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Give each adapter a unique `alertRoleName` and `alertRoleEmoji`.
 - Keep scraping logic isolated in adapters.
 - Use simple HTTP parsing first; add browser automation later only for JavaScript-rendered sources.
-- Free and Paid App Store integrations monitor Apple's US iPhone chart feeds and compare the top 2 list; both capture separate 12:00 PM ET daily snapshots via snapshot storage fields.
+- Free and Paid App Store integrations monitor Apple's US iPhone chart feeds, compare the top 2 list, capture separate 12:00 PM ET daily snapshots via snapshot storage fields, and auto-discover active daily App Store markets through Gamma search. Free discovery accepts `#1` and `#2` Free App Store markets; Paid discovery accepts Paid App Store markets.
 - Spotify USA and Spotify Global monitor public Spotify Top 50 playlist pages and store the #1 track plus primary artist profile names.
 - Arena AI monitors the server-rendered no-style-control leaderboard and stores only the top 3 model names/ranks so score/vote movements do not trigger alerts.
 - Tesla deliveries monitors Tesla production and delivery press releases through the matching official SEC 8-K exhibit because direct local requests to `ir.tesla.com/press` are Akamai-blocked; it auto-discovers active quarterly Polymarket delivery markets into the shared queue.
