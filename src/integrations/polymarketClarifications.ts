@@ -340,6 +340,10 @@ export function decodePendingPolymarketClarificationTransaction(
 export function hasSeenClarificationTx(eventSeenPostIds: string[] | undefined, transactionHash: string): boolean {
   const normalizedHash = transactionHash.toLowerCase();
   return (eventSeenPostIds ?? []).some((eventId) => {
+    if (typeof eventId !== "string") {
+      return false;
+    }
+
     const normalizedEventId = eventId.toLowerCase();
     return (
       normalizedEventId === normalizedHash ||

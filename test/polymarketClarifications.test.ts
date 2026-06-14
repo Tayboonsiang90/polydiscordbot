@@ -9,6 +9,7 @@ import {
   defaultPolygonRpcUrls,
   buildFastPolymarketClarificationPostFromLog,
   fetchPolymarketClarificationUpdates,
+  hasSeenClarificationTx,
   postUpdateSelector,
   normalizePolymarketClarificationLog,
   parsePolymarketAncillaryData,
@@ -347,6 +348,16 @@ describe("fetchPolymarketClarificationUpdates", () => {
     );
 
     expect(result.posts).toHaveLength(0);
+  });
+
+  it("ignores malformed seen clarification ids from stored settings", () => {
+    expect(
+      hasSeenClarificationTx(
+        [undefined, null, 123, `pending:${transactionHash}`] as unknown as string[],
+        transactionHash
+      )
+    ).toBe(true);
+    expect(hasSeenClarificationTx([undefined] as unknown as string[], transactionHash)).toBe(false);
   });
 
   it("splits eth_getLogs requests when an RPC rejects the block range", async () => {

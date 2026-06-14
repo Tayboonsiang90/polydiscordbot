@@ -412,19 +412,21 @@ function hasSeenEventId(settingsJson: string | null, eventId: string): boolean {
     ? eventId.slice("pending:".length)
     : eventId.split(":")[0] ?? eventId;
   return (
-    settings.eventSeenPostIds.some((candidate) => candidate.toLowerCase() === eventId.toLowerCase()) ||
+    settings.eventSeenPostIds.some((candidate) => typeof candidate === "string" && candidate.toLowerCase() === eventId.toLowerCase()) ||
     hasSeenClarificationTx(settings.eventSeenPostIds, transactionHash)
   );
 }
 
 function addSeenEventId(existing: string[] | undefined, eventId: string): string[] {
-  return [eventId, ...(existing ?? []).filter((candidate) => candidate !== eventId)].slice(0, maxSeenEventIds);
+  return [eventId, ...(existing ?? []).filter((candidate) => typeof candidate === "string" && candidate !== eventId)].slice(0, maxSeenEventIds);
 }
 
 function addSeenEventIds(existing: string[] | undefined, eventIds: string[]): string[] {
   return [
     ...eventIds,
-    ...(existing ?? []).filter((candidate) => !eventIds.some((eventId) => eventId.toLowerCase() === candidate.toLowerCase()))
+    ...(existing ?? []).filter(
+      (candidate) => typeof candidate === "string" && !eventIds.some((eventId) => eventId.toLowerCase() === candidate.toLowerCase())
+    )
   ].slice(0, maxSeenEventIds);
 }
 
