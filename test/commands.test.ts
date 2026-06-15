@@ -15,6 +15,7 @@ import {
   buildIntegrationSummaryEmbeds,
   buildLastEmbed,
   buildMarketEndManualUpdatedEmbed,
+  buildMarketRolloverEmbed,
   buildStrikeSearchEmbed,
   buildStatusEmbed,
   buildUpdateLogsEmbed,
@@ -213,13 +214,30 @@ describe("adapter commands", () => {
     );
   });
 
+  it("formats market rollover alerts separately from value changes", () => {
+    const embed = buildMarketRolloverEmbed(checkedIntegration, {
+      previousPolymarketUrl: "https://polymarket.com/event/old-market",
+      currentPolymarketUrl: "https://polymarket.com/event/new-market"
+    }).toJSON();
+
+    expect(embed.title).toBe("Bonbast USD/IRR - Market rollover");
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Previous Polymarket", value: "https://polymarket.com/event/old-market" }),
+        expect.objectContaining({ name: "Active Polymarket", value: "https://polymarket.com/event/new-market" }),
+        expect.objectContaining({ name: "Source value", value: expect.stringContaining("new baseline") })
+      ])
+    );
+  });
+
   it("formats check results with current and last stored timestamps", () => {
     const embed = buildCheckEmbed({
       integration: { ...checkedIntegration, lastValue: "181300", lastCheckedAt: "2026-05-06T02:43:30.000Z" },
       previousValue: "181200",
       previousCheckedAt: "2026-05-06T02:40:00.000Z",
       currentValue: "181300",
-      changed: true
+      changed: true,
+      marketRollover: null
     }).toJSON();
 
     expect(embed.description).toBeUndefined();

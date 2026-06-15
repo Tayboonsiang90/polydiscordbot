@@ -128,6 +128,7 @@ No archived integrations currently.
 - SQLite stores integration state, Polymarket URL, market-end metadata, adapter settings JSON, timestamps, and role metadata; keep timestamps as ISO strings.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and the stored current URL remains as fallback even after expiry so source monitoring keeps running.
+- Market URL rollover sends a dedicated `Market rollover` alert and stores the newly fetched source value as the baseline, so the bot does not mislabel window-only changes as normal `Value changed` alerts.
 - Trump Truth, Elon X, All-In Podcast, Joe Rogan Podcast, Lemonade Stand Podcast, App Store daily charts, NYT Front Page, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, Strategy Bitcoin Purchases, USGS Earthquakes, Portwatch Hormuz Ships, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup

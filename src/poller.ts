@@ -4,6 +4,7 @@ import {
   buildAlertEmbed,
   buildErrorEmbed,
   buildEventPostMessagePayload,
+  buildMarketRolloverEmbed,
   buildMarketEndMissingEmbed,
   buildMarketEndReminderEmbed,
   buildSnapshotCapturedEmbed
@@ -32,6 +33,7 @@ export type CheckResult = {
   previousCheckedAt: string | null;
   currentValue: string;
   changed: boolean;
+  marketRollover: MarketRollover | null;
 };
 
 export type SnapshotResult = {
@@ -47,6 +49,7 @@ export type EventCheckResult = {
   strikeTerms: string[];
   latestSeenId: string | null;
   latestSeenUrl: string | null;
+  marketRollover: MarketRollover | null;
   checkTitle?: string;
   checkFields?: Array<{ name: string; value: string; inline?: boolean }>;
 };
@@ -54,6 +57,11 @@ export type EventCheckResult = {
 export type EventCheckOptions = {
   queueAlerts?: boolean;
   historicalCheck?: boolean;
+};
+
+export type MarketRollover = {
+  previousPolymarketUrl: string | null;
+  currentPolymarketUrl: string | null;
 };
 
 const maxEventSeenPostIds = 100;
@@ -78,6 +86,14 @@ export function buildSnapshotMessagePayload(result: SnapshotResult) {
   };
 }
 
+export function buildMarketRolloverMessagePayload(integration: Integration, rollover: MarketRollover) {
+  return {
+    content: integration.alertRoleId ? `<@&${integration.alertRoleId}>` : undefined,
+    embeds: [buildMarketRolloverEmbed(integration, rollover)],
+    allowedMentions: integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
+  };
+}
+
 export function buildMarketEndReminderMessagePayload(integration: Integration, reminder: MarketEndReminder) {
   return {
     content: integration.alertRoleId ? `<@&${integration.alertRoleId}>` : undefined,
@@ -90,14 +106,27 @@ export function hasValueChanged(previousValue: string | null, currentValue: stri
   return previousValue !== null && previousValue !== currentValue;
 }
 
+export function shouldRecordValueChange(
+  previousValue: string | null,
+  currentValue: string,
+  marketRollover: MarketRollover | null,
+  shouldAlertOnChange?: (previousValue: string | null, currentValue: string) => boolean
+): boolean {
+  return !marketRollover && hasValueChanged(previousValue, currentValue) && (shouldAlertOnChange?.(previousValue, currentValue) ?? true);
+}
+
 export async function checkIntegration(database: BotDatabase, integration: Integration): Promise<CheckResult> {
-  integration = activateQueuedPolymarket(database, integration);
+  let activation = activateQueuedPolymarket(database, integration);
+  integration = activation.integration;
+  let marketRollover = activation.rollover;
   const adapter = getAdapter(integration.adapterId);
   if (adapter.refreshSettings) {
     const refreshedSettingsJson = await adapter.refreshSettings(integration);
     if (refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson) {
       integration = database.setSettingsJson(integration.id, refreshedSettingsJson);
-      integration = activateQueuedPolymarket(database, integration);
+      activation = activateQueuedPolymarket(database, integration);
+      integration = activation.integration;
+      marketRollover = marketRollover ?? activation.rollover;
     }
   }
 
@@ -105,10 +134,20 @@ export async function checkIntegration(database: BotDatabase, integration: Integ
   const detectedAt = new Date();
   const previousValue = integration.lastValue;
   const previousCheckedAt = integration.lastCheckedAt;
-  const changed =
-    hasValueChanged(previousValue, adapterValue.value) &&
-    (adapter.shouldAlertOnChange ? adapter.shouldAlertOnChange(previousValue, adapterValue.value) : true);
+  const changed = shouldRecordValueChange(previousValue, adapterValue.value, marketRollover, adapter.shouldAlertOnChange);
   const updatedIntegration = database.recordCheck(integration.id, adapterValue.value, adapterValue.observedAt, changed);
+  if (marketRollover) {
+    database.recordUpdateLog({
+      integrationId: updatedIntegration.id,
+      adapterId: updatedIntegration.adapterId,
+      kind: "market_rollover",
+      dedupeKey: marketRollover.currentPolymarketUrl ?? "not-set",
+      title: "Market rollover",
+      summary: formatMarketRolloverSummary(marketRollover),
+      sourceAt: adapterValue.observedAt,
+      detectedAt
+    });
+  }
   if (changed) {
     database.recordUpdateLog({
       integrationId: updatedIntegration.id,
@@ -126,7 +165,8 @@ export async function checkIntegration(database: BotDatabase, integration: Integ
     previousValue,
     previousCheckedAt,
     currentValue: adapterValue.value,
-    changed
+    changed,
+    marketRollover
   };
 }
 
@@ -135,7 +175,9 @@ export async function checkEventIntegration(
   integration: Integration,
   options: EventCheckOptions = {}
 ): Promise<EventCheckResult> {
-  integration = activateQueuedPolymarket(database, integration);
+  let activation = activateQueuedPolymarket(database, integration);
+  integration = activation.integration;
+  let marketRollover = activation.rollover;
   const adapter = getAdapter(integration.adapterId);
   if (!adapter.fetchEventUpdates) {
     throw new Error(`Adapter does not support event updates: ${adapter.id}`);
@@ -146,12 +188,15 @@ export async function checkEventIntegration(
     refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson
       ? database.setSettingsJson(integration.id, refreshedSettingsJson)
       : integration;
-  settingsIntegration = activateQueuedPolymarket(database, settingsIntegration);
+  activation = activateQueuedPolymarket(database, settingsIntegration);
+  settingsIntegration = activation.integration;
+  marketRollover = marketRollover ?? activation.rollover;
   const result = await adapter.fetchEventUpdates(settingsIntegration, { historicalCheck: options.historicalCheck });
-  const activeIntegration =
-    result.polymarketUrl && result.polymarketUrl !== settingsIntegration.polymarketUrl
-      ? database.setPolymarketUrl(settingsIntegration.id, result.polymarketUrl)
-      : settingsIntegration;
+  let activeIntegration = settingsIntegration;
+  if (result.polymarketUrl && result.polymarketUrl !== settingsIntegration.polymarketUrl) {
+    marketRollover = marketRollover ?? buildMarketRollover(settingsIntegration.polymarketUrl, result.polymarketUrl);
+    activeIntegration = database.setPolymarketUrl(settingsIntegration.id, result.polymarketUrl);
+  }
   const currentIntegration = database.getIntegrationById(activeIntegration.id);
   const latestSeenId = result.posts[0]?.id ?? currentIntegration.lastValue;
   const baseSettingsJson = mergeEventSeenPostIds(result.settingsJson ?? activeIntegration.settingsJson, currentIntegration.settingsJson);
@@ -180,6 +225,18 @@ export async function checkEventIntegration(
   const updatedIntegration = latestSeenId
     ? database.recordCheck(eventStateIntegration.id, latestSeenId, result.observedAt)
     : database.recordCheck(eventStateIntegration.id, "no-posts", result.observedAt);
+  if (marketRollover) {
+    database.recordUpdateLog({
+      integrationId: updatedIntegration.id,
+      adapterId: updatedIntegration.adapterId,
+      kind: "market_rollover",
+      dedupeKey: marketRollover.currentPolymarketUrl ?? "not-set",
+      title: "Market rollover",
+      summary: formatMarketRolloverSummary(marketRollover),
+      sourceAt: result.observedAt,
+      detectedAt: result.observedAt
+    });
+  }
 
   return {
     integration: updatedIntegration,
@@ -187,6 +244,7 @@ export async function checkEventIntegration(
     strikeTerms: result.strikeTerms,
     latestSeenId: latestSeenId ?? null,
     latestSeenUrl: result.posts[0]?.url ?? null,
+    marketRollover,
     checkTitle: result.checkTitle,
     checkFields: result.checkFields
   };
@@ -411,11 +469,17 @@ export class PollScheduler {
         if (adapter.fetchEventUpdates) {
           await this.sendDueEventAlerts(latest.id);
           const result = await checkEventIntegration(this.database, latest, { queueAlerts: true });
+          if (result.marketRollover) {
+            await this.sendMarketRollover(latest.channelId, result.integration, result.marketRollover);
+          }
           for (const post of result.newPosts) {
             await this.sendClaimedEventPost(result.integration, post);
           }
         } else {
           const result = await checkIntegration(this.database, latest);
+          if (result.marketRollover) {
+            await this.sendMarketRollover(latest.channelId, result.integration, result.marketRollover);
+          }
           if (result.changed) {
             await this.sendAlert(latest.channelId, result);
           }
@@ -439,6 +503,15 @@ export class PollScheduler {
     }
 
     await channel.send(buildAlertMessagePayload(result));
+  }
+
+  private async sendMarketRollover(channelId: string, integration: Integration, rollover: MarketRollover): Promise<void> {
+    const channel = await this.client.channels.fetch(channelId);
+    if (!isSendableChannel(channel)) {
+      return;
+    }
+
+    await channel.send(buildMarketRolloverMessagePayload(integration, rollover));
   }
 
   private async sendErrorIfDue(channelId: string, integration: Integration, error: unknown): Promise<void> {
@@ -628,7 +701,13 @@ export class PollScheduler {
 
       let activeIntegration = integration;
       try {
-        activeIntegration = activateQueuedPolymarket(this.database, integration, now);
+        const queue = resolveIntegrationPolymarketQueue(integration, now);
+        if (queue.activeUrl !== integration.polymarketUrl) {
+          continue;
+        }
+        if (queue.settingsJson && queue.settingsJson !== integration.settingsJson) {
+          activeIntegration = this.database.setSettingsJson(integration.id, queue.settingsJson);
+        }
         if (!activeIntegration.polymarketUrl) {
           continue;
         }
@@ -839,17 +918,36 @@ export function clearLatestErrorNoticeState(settingsJson: string | null): string
   return JSON.stringify(nextSettings);
 }
 
-function activateQueuedPolymarket(database: BotDatabase, integration: Integration, now = new Date()): Integration {
+export function activateQueuedPolymarket(
+  database: BotDatabase,
+  integration: Integration,
+  now = new Date()
+): { integration: Integration; rollover: MarketRollover | null } {
   const queue = resolveIntegrationPolymarketQueue(integration, now);
   let updated = integration;
   if (queue.settingsJson && queue.settingsJson !== updated.settingsJson) {
     updated = database.setSettingsJson(updated.id, queue.settingsJson);
   }
+  const previousPolymarketUrl = updated.polymarketUrl;
   if (queue.activeUrl !== updated.polymarketUrl) {
     updated = database.setPolymarketUrl(updated.id, queue.activeUrl);
   }
 
-  return updated;
+  return {
+    integration: updated,
+    rollover:
+      previousPolymarketUrl !== updated.polymarketUrl
+        ? buildMarketRollover(previousPolymarketUrl, updated.polymarketUrl)
+        : null
+  };
+}
+
+function buildMarketRollover(previousPolymarketUrl: string | null, currentPolymarketUrl: string | null): MarketRollover {
+  return { previousPolymarketUrl, currentPolymarketUrl };
+}
+
+function formatMarketRolloverSummary(rollover: MarketRollover): string {
+  return [`Previous: ${rollover.previousPolymarketUrl ?? "not set"}`, `Current: ${rollover.currentPolymarketUrl ?? "not set"}`].join("\n");
 }
 
 export function getEffectivePollIntervalMinutes(integration: Integration, now: Date = new Date()): number {

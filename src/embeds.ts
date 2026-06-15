@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
 import { formatAddressWithLabel, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
 import type { IntegrationUpdateLog } from "./database.js";
-import type { CheckResult, EventCheckResult, SnapshotResult } from "./poller.js";
+import type { CheckResult, EventCheckResult, MarketRollover, SnapshotResult } from "./poller.js";
 import type {
   AddressLabelImportIssue,
   AddressLabelUpdateResult,
@@ -141,13 +141,20 @@ export function buildUpdateLogsEmbed(integration: Integration, logs: Integration
 }
 
 export function buildCheckEmbed(result: CheckResult): EmbedBuilder {
-  const title = result.changed ? "Value changed" : "Current value";
+  const title = result.marketRollover ? "Market rollover" : result.changed ? "Value changed" : "Current value";
   const embed = baseEmbed(result.integration, title)
     .addFields(
       { name: "Current", value: formatValue(result.currentValue), inline: true },
       { name: "Current retrieved at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false },
       { name: "Last stored", value: formatValue(result.previousValue), inline: true },
       { name: "Last retrieved at", value: formatSingaporeDateTime(result.previousCheckedAt), inline: false },
+      ...(result.marketRollover
+        ? [
+            { name: "Previous Polymarket", value: result.marketRollover.previousPolymarketUrl ?? "not set", inline: false },
+            { name: "Active Polymarket", value: result.marketRollover.currentPolymarketUrl ?? "not set", inline: false },
+            { name: "Rollover handling", value: "Current source value was stored as the new baseline.", inline: false }
+          ]
+        : []),
       { name: "Links", value: formatLinks(result.integration), inline: false }
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
@@ -686,6 +693,22 @@ export function buildMarketEndReminderEmbed(integration: Integration, reminder: 
       { name: "Links", value: formatLinks(integration), inline: false }
     )
     .setFooter({ text: `Reminder sent at ${nowSingaporeDateTime()}` });
+}
+
+export function buildMarketRolloverEmbed(integration: Integration, rollover: MarketRollover): EmbedBuilder {
+  return baseEmbed(integration, "Market rollover")
+    .setColor(warningColor)
+    .addFields(
+      { name: "Previous Polymarket", value: rollover.previousPolymarketUrl ?? "not set", inline: false },
+      { name: "Active Polymarket", value: rollover.currentPolymarketUrl ?? "not set", inline: false },
+      {
+        name: "Source value",
+        value: "Stored as the new baseline for this market window; no value-change alert was sent for the rollover itself.",
+        inline: false
+      },
+      { name: "Resolution", value: integration.sourceUrl, inline: false }
+    )
+    .setFooter({ text: `Rollover detected at ${nowSingaporeDateTime()}` });
 }
 
 export function buildMarketEndMissingEmbed(integration: Integration): EmbedBuilder {

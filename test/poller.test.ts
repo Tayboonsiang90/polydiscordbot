@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BotDatabase } from "../src/database.js";
 import {
+  activateQueuedPolymarket,
   clearLatestErrorNoticeState,
   captureDailySnapshot,
   formatErrorNoticeDiscordMessage,
@@ -17,6 +18,7 @@ import {
   formatSchedulerNetworkError,
   hasValueChanged,
   PollScheduler,
+  shouldRecordValueChange,
   setLatestErrorNoticeState,
   setLatestErrorMessageId,
   selectNewEventPosts
@@ -94,6 +96,57 @@ describe("hasValueChanged", () => {
 
   it("alerts when value changes", () => {
     expect(hasValueChanged("612500", "612900")).toBe(true);
+  });
+});
+
+describe("market rollover", () => {
+  it("suppresses normal value-change alerts during market rollover", () => {
+    expect(
+      shouldRecordValueChange("Window: 2026-06-08 to 2026-06-14", "Window: 2026-06-15 to 2026-06-21", {
+        previousPolymarketUrl: "https://polymarket.com/event/how-many-ships-transit-the-strait-of-hormuz-week-of-june-8",
+        currentPolymarketUrl: "https://polymarket.com/event/how-many-ships-transit-the-strait-of-hormuz-week-of-june-15"
+      })
+    ).toBe(false);
+  });
+
+  it("reports a rollover when the active queued Polymarket URL changes", () => {
+    const database = createTestDatabase();
+    const previousUrl = "https://polymarket.com/event/how-many-ships-transit-the-strait-of-hormuz-week-of-june-8";
+    const currentUrl = "https://polymarket.com/event/how-many-ships-transit-the-strait-of-hormuz-week-of-june-15";
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "hormuzships",
+      adapterId: "portwatch-hormuz-ships",
+      displayName: "IMF Portwatch Hormuz Ships",
+      sourceUrl: "https://portwatch.imf.org/pages/cb5856222a5b4105adc6ee7e880a1730",
+      polymarketUrl: previousUrl,
+      settingsJson: JSON.stringify({
+        polymarketMarkets: [
+          {
+            url: previousUrl,
+            slug: "how-many-ships-transit-the-strait-of-hormuz-week-of-june-8",
+            startAt: "2026-06-08T04:00:00.000Z",
+            endAt: "2026-06-15T03:59:00.000Z",
+            addedAt: "2026-06-08T04:00:00.000Z"
+          },
+          {
+            url: currentUrl,
+            slug: "how-many-ships-transit-the-strait-of-hormuz-week-of-june-15",
+            startAt: "2026-06-15T04:00:00.000Z",
+            endAt: "2026-06-22T03:59:00.000Z",
+            addedAt: "2026-06-12T04:00:00.000Z"
+          }
+        ]
+      }),
+      pollIntervalMinutes: 1
+    });
+
+    const result = activateQueuedPolymarket(database, integration, new Date("2026-06-15T04:01:00.000Z"));
+
+    expect(result.rollover).toEqual({ previousPolymarketUrl: previousUrl, currentPolymarketUrl: currentUrl });
+    expect(result.integration.polymarketUrl).toBe(currentUrl);
+    expect(database.getIntegrationById(integration.id).polymarketUrl).toBe(currentUrl);
+    database.close();
   });
 });
 
