@@ -350,6 +350,45 @@ describe("fetchPolymarketClarificationUpdates", () => {
     expect(result.posts).toHaveLength(0);
   });
 
+  it("skips malformed RPC logs instead of crashing the clarification check", async () => {
+    const rpcUrl = "https://rpc.example";
+    const malformedLog = { ...buildUpdateLog("Clarification issued."), transactionHash: undefined };
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (url.toString() !== rpcUrl) {
+        throw new Error(`Unexpected fetch: ${url.toString()}`);
+      }
+
+      const body = JSON.parse(String(init?.body)) as { method: string };
+      if (body.method === "eth_blockNumber") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+      }
+      if (body.method === "eth_getLogs") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: [malformedLog] });
+      }
+
+      throw new Error(`Unexpected RPC method: ${body.method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketClarificationUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          lastScannedBlock: 980,
+          eventSeenPostIds: [`pending:${transactionHash}`]
+        })
+      } as Integration,
+      new Date("2026-05-20T00:00:00.000Z")
+    );
+
+    expect(result.posts).toHaveLength(0);
+    expect(result.checkFields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Malformed logs skipped", value: "1" })]));
+    expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
+      rpcUrl,
+      lastScannedBlock: 1000
+    });
+  });
+
   it("ignores malformed seen clarification ids from stored settings", () => {
     expect(
       hasSeenClarificationTx(
@@ -358,6 +397,7 @@ describe("fetchPolymarketClarificationUpdates", () => {
       )
     ).toBe(true);
     expect(hasSeenClarificationTx([undefined] as unknown as string[], transactionHash)).toBe(false);
+    expect(hasSeenClarificationTx([`pending:${transactionHash}`], undefined as unknown as string)).toBe(false);
   });
 
   it("splits eth_getLogs requests when an RPC rejects the block range", async () => {

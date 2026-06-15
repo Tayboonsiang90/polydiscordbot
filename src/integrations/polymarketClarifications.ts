@@ -163,7 +163,9 @@ export async function fetchPolymarketClarificationUpdates(
   const logsResult = fromBlock <= toBlock
     ? await fetchAncillaryDataUpdateLogs(rpcUrls, fromBlock, toBlock, activeRpcUrl)
     : { result: [], rpcUrl: activeRpcUrl };
-  const logs = logsResult.result;
+  const rawLogs = logsResult.result;
+  const logs = rawLogs.filter(isUsableClarificationLog);
+  const malformedLogCount = rawLogs.length - logs.length;
   activeRpcUrl = logsResult.rpcUrl;
   const backfillMode = formatEthGetLogsBackfillMode(scanPlan);
   const detailsByQuestionId = new Map<string, QuestionDetails | null>();
@@ -205,6 +207,7 @@ export async function fetchPolymarketClarificationUpdates(
       { name: "Clarifications in scanned range", value: String(logs.length), inline: true },
       { name: "Scanned blocks", value: fromBlock <= toBlock ? `${fromBlock} to ${toBlock}` : "already at latest block", inline: false },
       { name: "Confirmed head", value: String(confirmedLatestBlock), inline: true },
+      ...(malformedLogCount > 0 ? [{ name: "Malformed logs skipped", value: String(malformedLogCount), inline: true }] : []),
       ...(backfillMode ? [{ name: "Backfill mode", value: backfillMode, inline: false }] : []),
       { name: "Data source", value: `${activeRpcUrl} via eth_getLogs fallback`, inline: false },
       ...(rpcUrls.length > 1 ? [{ name: "RPC fallback pool", value: `${rpcUrls.length} endpoints configured`, inline: true }] : [])
@@ -338,6 +341,10 @@ export function decodePendingPolymarketClarificationTransaction(
 }
 
 export function hasSeenClarificationTx(eventSeenPostIds: string[] | undefined, transactionHash: string): boolean {
+  if (typeof transactionHash !== "string" || !transactionHash) {
+    return false;
+  }
+
   const normalizedHash = transactionHash.toLowerCase();
   return (eventSeenPostIds ?? []).some((eventId) => {
     if (typeof eventId !== "string") {
@@ -671,6 +678,31 @@ function wordToSafeNumber(word: string, label: string): number {
 function getTopic(log: PolygonLog, index: number): string | null {
   const topic = log.topics[index];
   return typeof topic === "string" && /^0x[0-9a-fA-F]{64}$/.test(topic) ? topic : null;
+}
+
+function isUsableClarificationLog(log: unknown): log is PolygonLog {
+  if (!log || typeof log !== "object") {
+    return false;
+  }
+
+  const candidate = log as Partial<PolygonLog>;
+  return (
+    Array.isArray(candidate.topics) &&
+    typeof candidate.data === "string" &&
+    /^0x[0-9a-fA-F]*$/.test(candidate.data) &&
+    isHexHash(candidate.transactionHash) &&
+    isHexQuantityString(candidate.blockNumber) &&
+    isHexQuantityString(candidate.logIndex) &&
+    (candidate.blockTimestamp === undefined || isHexQuantityString(candidate.blockTimestamp))
+  );
+}
+
+function isHexHash(value: unknown): value is string {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value);
+}
+
+function isHexQuantityString(value: unknown): value is string {
+  return typeof value === "string" && /^0x[0-9a-fA-F]+$/.test(value);
 }
 
 function parseAddressTopic(topic: string): string {
