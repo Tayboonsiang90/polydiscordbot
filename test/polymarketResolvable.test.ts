@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildEventPostEmbed } from "../src/embeds.js";
 import {
+  conditionalTokensAddress,
   fetchPolymarketResolvableUpdates,
   polymarketResolvableAdapter,
   resolvePolymarketUrlToResolvableWatches,
@@ -120,6 +121,15 @@ describe("Polymarket resolvable watchlist", () => {
       const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, string>> };
       expect(body.method).toBe("eth_call");
       const call = body.params[0];
+      if (call.to === conditionalTokensAddress) {
+        expect(call.data).toContain(conditionId.slice(2));
+        return jsonResponse({
+          jsonrpc: "2.0",
+          id: 1,
+          result: boolWord(false)
+        });
+      }
+
       expect(call.data).toContain(questionId.slice(2));
       return jsonResponse({
         jsonrpc: "2.0",
@@ -148,7 +158,7 @@ describe("Polymarket resolvable watchlist", () => {
       new Date("2026-06-15T01:00:00.000Z")
     );
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(result.posts).toHaveLength(1);
     expect(result.posts[0]).toMatchObject({
       id: `resolvable:${questionId}`,
@@ -156,6 +166,64 @@ describe("Polymarket resolvable watchlist", () => {
       alertTitle: "Polymarket market ready to resolve",
       polymarketUrl: marketUrl
     });
+    expect(JSON.parse(result.settingsJson ?? "{}").watches).toEqual([]);
+  });
+
+  it("alerts and removes a watched market when the CTF condition is already resolved", async () => {
+    const rpcUrl = "https://rpc.example";
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const target = url.toString();
+      if (target !== rpcUrl) {
+        throw new Error(`Unexpected fetch: ${target}`);
+      }
+
+      const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, string>> };
+      expect(body.method).toBe("eth_call");
+      const call = body.params[0];
+      expect(call.to).toBe(conditionalTokensAddress);
+      expect(call.data).toContain(conditionId.slice(2));
+      return jsonResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        result: boolWord(true)
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketResolvableUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          watches: [
+            {
+              question: "New Rihanna Album before GTA VI?",
+              url: marketUrl,
+              questionId,
+              conditionId,
+              addedAt: "2026-06-15T00:00:00.000Z",
+              lastStatus: "pending"
+            }
+          ]
+        })
+      } as Integration,
+      new Date("2026-06-15T01:00:00.000Z")
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0]).toMatchObject({
+      id: `resolvable:${questionId}`,
+      type: "Polymarket resolvable",
+      alertTitle: "Polymarket market already resolved",
+      polymarketUrl: marketUrl,
+      text: "Conditional Tokens payoutDenominator(conditionId) is greater than zero."
+    });
+    expect(result.posts[0].fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Status", value: "**RESOLVED ON CTF**" }),
+        expect.objectContaining({ name: "On-chain check", value: "`payoutDenominator(conditionId) > 0`" })
+      ])
+    );
     expect(JSON.parse(result.settingsJson ?? "{}").watches).toEqual([]);
   });
 

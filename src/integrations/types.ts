@@ -168,7 +168,7 @@ export type ResolvableWatchlistEntry = {
   conditionId?: string;
   addedAt: string;
   lastCheckedAt?: string;
-  lastStatus?: "pending" | "ready" | "error";
+  lastStatus?: "pending" | "ready" | "resolved" | "error";
   lastError?: string;
 };
 

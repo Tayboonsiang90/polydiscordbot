@@ -18,7 +18,9 @@ import type {
 const gammaEventsUrl = "https://gamma-api.polymarket.com/events";
 const gammaMarketsUrl = "https://gamma-api.polymarket.com/markets";
 const adapterDocsUrl = "https://polymarket-uma-ctf-adapter.mintlify.app/integration/resolving-markets";
+export const conditionalTokensAddress = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045";
 const readySelector = functionSelector("ready(bytes32)");
+const payoutDenominatorSelector = functionSelector("payoutDenominator(bytes32)");
 const rpcTimeoutMs = 5_000;
 
 type JsonRpcResponse<T> = {
@@ -60,10 +62,11 @@ type GammaEvent = {
 };
 
 type ReadyCheckResult = {
-  ready: boolean;
+  status: "pending" | "ready" | "resolved";
   adapterAddress?: string;
   rpcUrl?: string;
-  checkedAdapterCount: number;
+  checkedCallCount: number;
+  payoutDenominator?: string;
 };
 
 export const polymarketResolvableAdapter: WebsiteAdapter = {
@@ -80,7 +83,7 @@ export const polymarketResolvableAdapter: WebsiteAdapter = {
   getPollIntervalReason(integration: Integration): string {
     const watchCount = getPolymarketResolvableWatchesFromSettingsJson(integration.settingsJson).length;
     return watchCount
-      ? `Checking ${watchCount} configured market(s) with UMA adapter ready(questionID)`
+      ? `Checking ${watchCount} configured market(s) with Conditional Tokens payoutDenominator(conditionId) and UMA adapter ready(questionID)`
       : "Idle: no resolvable markets configured, so no Polygon RPC calls";
   },
   getErrorNoticeWindowMinutes(): number {
@@ -95,8 +98,8 @@ export const polymarketResolvableAdapter: WebsiteAdapter = {
     const watchCount = getPolymarketResolvableWatchesFromSettingsJson(result.settingsJson ?? integration.settingsJson).length;
     const readyCount = result.posts.length;
     const value = readyCount
-      ? `${readyCount} market(s) ready to resolve`
-      : `${watchCount} market(s) still watched for ready(questionID)`;
+      ? `${readyCount} market(s) ready or already resolved`
+      : `${watchCount} market(s) still watched for ready/resolved status`;
     return { value, rawValue: value, unit: "UMA adapter readiness", observedAt: result.observedAt };
   },
   async fetchEventUpdates(integration: Integration): Promise<EventMonitorResult> {
@@ -235,11 +238,11 @@ export async function fetchPolymarketResolvableUpdates(
 
   for (const watch of watches) {
     try {
-      const check = await checkResolvableReady(watch, rpcUrls, activeRpcUrl);
-      onChainCallCount += check.checkedAdapterCount;
+      const check = await checkResolvableStatus(watch, rpcUrls, activeRpcUrl);
+      onChainCallCount += check.checkedCallCount;
       activeRpcUrl = check.rpcUrl ?? activeRpcUrl;
 
-      if (check.ready) {
+      if (check.status === "ready" || check.status === "resolved") {
         posts.push(normalizePolymarketResolvablePost(watch, check, now));
       } else {
         remainingWatches.push({
@@ -274,7 +277,7 @@ export async function fetchPolymarketResolvableUpdates(
     checkTitle: "Resolvable watch check",
     checkFields: [
       { name: "Watched before check", value: String(watches.length), inline: true },
-      { name: "Ready now", value: String(posts.length), inline: true },
+      { name: "Ready/resolved now", value: String(posts.length), inline: true },
       { name: "Still watching", value: String(remainingWatches.length), inline: true },
       { name: "Check errors", value: String(errorCount), inline: true },
       { name: "Polygon RPC calls", value: String(onChainCallCount), inline: true },
@@ -312,19 +315,23 @@ function normalizePolymarketResolvablePost(
 ): EventMonitorPost {
   const adapterAddress = check.adapterAddress ?? polymarketUmaCtfAdapterAddresses[0];
   const adapterUrl = `https://polygonscan.com/address/${adapterAddress}#readContract`;
+  const isResolved = check.status === "resolved";
+  const sourceUrl = isResolved ? `https://polygonscan.com/address/${conditionalTokensAddress}#readContract` : adapterUrl;
 
   return {
     id: `resolvable:${normalizeHex(watch.questionId)}`,
     type: "Polymarket resolvable",
-    alertTitle: "Polymarket market ready to resolve",
-    sourceLabel: "UMA adapter",
-    buttonLabel: "Open adapter",
+    alertTitle: isResolved ? "Polymarket market already resolved" : "Polymarket market ready to resolve",
+    sourceLabel: isResolved ? "Conditional Tokens" : "UMA adapter",
+    buttonLabel: isResolved ? "Open CTF" : "Open adapter",
     mentionAlertRole: true,
     textFieldName: "Signal",
-    text: "UMA CTF Adapter ready(questionID) returned true.",
-    qualifyingText: `${watch.question}\nready(questionID) == true`,
+    text: isResolved
+      ? "Conditional Tokens payoutDenominator(conditionId) is greater than zero."
+      : "UMA CTF Adapter ready(questionID) returned true.",
+    qualifyingText: `${watch.question}\n${isResolved ? "payoutDenominator(conditionId) > 0" : "ready(questionID) == true"}`,
     postedAt: now,
-    url: adapterUrl,
+    url: sourceUrl,
     polymarketUrl: watch.url,
     prioritySummary: {
       question: watch.question,
@@ -335,14 +342,20 @@ function normalizePolymarketResolvablePost(
     hideLinksField: true,
     hideTextField: true,
     fields: [
-      { name: "Status", value: "**READY TO RESOLVE**", inline: false },
-      { name: "On-chain check", value: "`ready(questionID) == true`", inline: false },
+      { name: "Status", value: isResolved ? "**RESOLVED ON CTF**" : "**READY TO RESOLVE**", inline: false },
+      {
+        name: "On-chain check",
+        value: isResolved ? "`payoutDenominator(conditionId) > 0`" : "`ready(questionID) == true`",
+        inline: false
+      },
       { name: "Watched since", value: watch.addedAt, inline: true }
     ],
     hiddenFields: [
       { name: "Question ID", value: watch.questionId, inline: false },
       ...(watch.conditionId ? [{ name: "Condition ID", value: watch.conditionId, inline: false }] : []),
-      { name: "Ready adapter", value: adapterAddress, inline: false },
+      ...(check.payoutDenominator ? [{ name: "Payout denominator", value: check.payoutDenominator, inline: true }] : []),
+      { name: "Ready adapter", value: check.adapterAddress ?? "not ready; CTF settlement detected", inline: false },
+      { name: "Conditional Tokens", value: conditionalTokensAddress, inline: false },
       { name: "RPC endpoint", value: check.rpcUrl ?? "not recorded", inline: false }
     ],
     imageUrls: [],
@@ -352,33 +365,77 @@ function normalizePolymarketResolvablePost(
   };
 }
 
-async function checkResolvableReady(
+async function checkResolvableStatus(
   watch: ResolvableWatchlistEntry,
   rpcUrls: string[],
   preferredRpcUrl?: string
 ): Promise<ReadyCheckResult> {
-  let checkedAdapterCount = 0;
+  let checkedCallCount = 0;
   let lastRpcUrl = preferredRpcUrl;
   const errors: string[] = [];
 
+  if (watch.conditionId) {
+    try {
+      checkedCallCount += 1;
+      const denominator = await callPayoutDenominator(watch.conditionId, rpcUrls, lastRpcUrl);
+      lastRpcUrl = denominator.rpcUrl;
+      if (denominator.result > 0n) {
+        return {
+          status: "resolved",
+          rpcUrl: denominator.rpcUrl,
+          checkedCallCount,
+          payoutDenominator: denominator.result.toString()
+        };
+      }
+    } catch (error) {
+      errors.push(`${conditionalTokensAddress}: ${formatError(error)}`);
+    }
+  }
+
   for (const adapterAddress of polymarketUmaCtfAdapterAddresses) {
-    checkedAdapterCount += 1;
+    checkedCallCount += 1;
     try {
       const call = await callReady(adapterAddress, watch.questionId, rpcUrls, lastRpcUrl);
       lastRpcUrl = call.rpcUrl;
       if (call.result) {
-        return { ready: true, adapterAddress, rpcUrl: call.rpcUrl, checkedAdapterCount };
+        return { status: "ready", adapterAddress, rpcUrl: call.rpcUrl, checkedCallCount };
       }
     } catch (error) {
       errors.push(`${adapterAddress}: ${formatError(error)}`);
     }
   }
 
-  if (errors.length === polymarketUmaCtfAdapterAddresses.length) {
-    throw new Error(`ready(questionID) failed on all adapter addresses: ${errors.join("; ")}`);
+  const expectedCallCount = polymarketUmaCtfAdapterAddresses.length + (watch.conditionId ? 1 : 0);
+  if (errors.length === expectedCallCount) {
+    throw new Error(`resolvable checks failed on all contracts: ${errors.join("; ")}`);
   }
 
-  return { ready: false, rpcUrl: lastRpcUrl, checkedAdapterCount };
+  return { status: "pending", rpcUrl: lastRpcUrl, checkedCallCount };
+}
+
+async function callPayoutDenominator(
+  conditionId: string,
+  rpcUrls: string[],
+  preferredRpcUrl?: string
+): Promise<PolygonRpcResult<bigint>> {
+  const data = `${payoutDenominatorSelector}${stripHexPrefix(conditionId)}`;
+  const response = await polygonRpc<string>(
+    rpcUrls,
+    "eth_call",
+    [
+      {
+        to: conditionalTokensAddress,
+        data
+      },
+      "latest"
+    ],
+    preferredRpcUrl
+  );
+
+  return {
+    result: parseAbiUint(response.result),
+    rpcUrl: response.rpcUrl
+  };
 }
 
 async function callReady(
@@ -565,7 +622,7 @@ function normalizeWatchEntry(value: unknown): ResolvableWatchlistEntry | null {
     ...(conditionId ? { conditionId } : {}),
     addedAt: parseIsoOrNow(entry.addedAt),
     ...(typeof entry.lastCheckedAt === "string" ? { lastCheckedAt: entry.lastCheckedAt } : {}),
-    ...(entry.lastStatus === "ready" || entry.lastStatus === "error" || entry.lastStatus === "pending"
+    ...(entry.lastStatus === "ready" || entry.lastStatus === "resolved" || entry.lastStatus === "error" || entry.lastStatus === "pending"
       ? { lastStatus: entry.lastStatus }
       : {}),
     ...(typeof entry.lastError === "string" && entry.lastError ? { lastError: entry.lastError } : {})
@@ -651,12 +708,16 @@ async function polygonRpcOne<T>(rpcUrl: string, method: string, params: unknown[
 }
 
 function parseAbiBool(value: string): boolean {
+  return parseAbiUint(value) !== 0n;
+}
+
+function parseAbiUint(value: string): bigint {
   const normalized = stripHexPrefix(value);
   if (!/^[0-9a-fA-F]{64}$/.test(normalized)) {
-    throw new Error(`Invalid ABI bool result: ${value}`);
+    throw new Error(`Invalid ABI uint result: ${value}`);
   }
 
-  return BigInt(`0x${normalized}`) !== 0n;
+  return BigInt(`0x${normalized}`);
 }
 
 function functionSelector(signature: string): string {
