@@ -71,6 +71,7 @@ import { pythNaturalGasAdapter } from "./pythNaturalGas.js";
 import { pythWtiAdapter } from "./pythWti.js";
 import { pythXagUsdAdapter } from "./pythXagUsd.js";
 import { pythXauUsdAdapter } from "./pythXauUsd.js";
+import { rwaTotalValueAdapter } from "./rwaTotalValue.js";
 import { silverTrumpApprovalAdapter } from "./silverTrumpApproval.js";
 import { spiderManTrailerAdapter } from "./spiderManTrailer.js";
 import { spotifyTop50GlobalAdapter } from "./spotifyTop50Global.js";
@@ -167,6 +168,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [pythWtiAdapter.id, pythWtiAdapter],
   [pythXagUsdAdapter.id, pythXagUsdAdapter],
   [pythXauUsdAdapter.id, pythXauUsdAdapter],
+  [rwaTotalValueAdapter.id, rwaTotalValueAdapter],
   [silverTrumpApprovalAdapter.id, silverTrumpApprovalAdapter],
   [spiderManTrailerAdapter.id, spiderManTrailerAdapter],
   [spotifyTop50GlobalAdapter.id, spotifyTop50GlobalAdapter],

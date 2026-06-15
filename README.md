@@ -58,6 +58,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `parcl-nyc-home-value` | `/nychomevalue` | `#nychomevalue` | `NYC Home Value Alerts` | `🏙️` | Monitors Parcl NYC Sales Price Index data and calculates the June 30 median home-value settlement. |
 | `pboc-rate-change` | `/pboc` | `#pboc` | `PBoC Rate Alerts` | `🏦` | Monitors PBoC official announcements for extracted operation-rate changes in the June rate-change market. |
 | `powerball-jackpot` | `/powerball` | `#powerball` | `Powerball Jackpot Alerts` | `🎰` | Monitors Powerball's official estimated jackpot once daily for the $1B July 31 market trend. |
+| `rwa-total-value` | `/rwatotal` | `#rwatotal` | `RWA Total Value Alerts` | `🏦` | Monitors the RWA.xyz Total RWA Value chart hourly using distributed assets excluding stablecoins and cryptocurrency. |
 | `polymarket-mention-markets` | `/mentions` | `#mentions` | `Polymarket Mentions Alerts` | `💬` | Alerts when a new active Polymarket event appears under the Mentions tag. |
 | `polymarket-clarifications` | `/umaclarifications` | `#uma-clarifications` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
 | `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
@@ -361,6 +362,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - UMA proposal alerts keep question, outcome, market tags, proposer, and times visible; transaction, condition ID, question ID, oracle, requester, request timestamp, and block are behind `Show more`.
 - UMA clarification, proposal, and dispute question fields include a Betmoar market link when the Polymarket market slug is known.
 - Pyth Natural Gas, WTI, XAGUSD, and XAUUSD auto-discover matching monthly Polymarket markets, parse only unresolved strike prices from the active Polymarket URL, check only the configured top stable Pyth feed, store the latest observed price, and alert only when the live 1-minute candle range crosses a strike from the previously stored price.
+- RWA Total Value reads the RWA.xyz home chart tRPC data, decodes the compressed chart payload, sums the latest asset-class series date, and polls hourly for Total RWA Value changes.
 - AWS monitors the public AWS Health Dashboard history events JSON and treats status code `3` as the disrupted severity classification.
 - BLS Jobs Added monitors the Employment Situation Summary current/archive pages, keeps each monthly market active through the scheduled 8:30 AM ET release day, polls every minute on the day before/day of release, and auto-discovers active monthly `how-many-jobs-added-in-...` markets.
 - CDC fertility monitors the natality dashboard CSV for the 2026 Q1 general fertility rate row.
