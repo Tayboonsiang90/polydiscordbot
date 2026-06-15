@@ -62,6 +62,7 @@ import { polymarketClarificationsAdapter } from "./polymarketClarifications.js";
 import { polymarketDisputesAdapter } from "./polymarketDisputes.js";
 import { polymarketMentionMarketsAdapter } from "./polymarketNewMarkets.js";
 import { polymarketProposalsAdapter } from "./polymarketProposals.js";
+import { polymarketResolvableAdapter } from "./polymarketResolvable.js";
 import { portwatchBabElMandebAdapter } from "./portwatchBabElMandeb.js";
 import { portwatchHormuzShipsAdapter } from "./portwatchHormuzShips.js";
 import { powerballJackpotAdapter } from "./powerballJackpot.js";
@@ -156,6 +157,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [polymarketDisputesAdapter.id, polymarketDisputesAdapter],
   [polymarketMentionMarketsAdapter.id, polymarketMentionMarketsAdapter],
   [polymarketProposalsAdapter.id, polymarketProposalsAdapter],
+  [polymarketResolvableAdapter.id, polymarketResolvableAdapter],
   [portwatchBabElMandebAdapter.id, portwatchBabElMandebAdapter],
   [portwatchHormuzShipsAdapter.id, portwatchHormuzShipsAdapter],
   [powerballJackpotAdapter.id, powerballJackpotAdapter],

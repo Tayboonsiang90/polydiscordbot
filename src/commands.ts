@@ -19,6 +19,7 @@ import {
   buildMarketEndManualUpdatedEmbed,
   buildPeriodUpdatedEmbed,
   buildPolymarketUpdatedEmbed,
+  buildResolvableWatchlistEmbed,
   buildSnapshotStoredEmbed,
   buildStrikeSearchEmbed,
   buildStrikeTermsEmbed,
@@ -46,6 +47,7 @@ import type {
   ArbitrageSetupInput,
   ArbitrageWatchSide,
   Integration,
+  ResolvableWatchlistAction,
   TagFilterAction,
   TagFilterEntry,
   TagFilterUpdateResult,
@@ -211,6 +213,34 @@ export function buildAdapterCommands() {
               .setRequired(false)
               .setMinLength(1)
               .setMaxLength(120)
+          )
+      );
+    }
+
+    if (adapter.updateResolvableWatchlist) {
+      command.addSubcommand((subcommand) =>
+        subcommand
+          .setName("watchlist")
+          .setDescription("Manage Polymarket markets watched for ready-to-resolve")
+          .addStringOption((option) =>
+            option
+              .setName("action")
+              .setDescription("Watchlist action")
+              .setRequired(true)
+              .addChoices(
+                { name: "add", value: "add" },
+                { name: "remove", value: "remove" },
+                { name: "list", value: "list" },
+                { name: "clear", value: "clear" }
+              )
+          )
+          .addStringOption((option) =>
+            option
+              .setName("market")
+              .setDescription("Polymarket URL, market slug, or question ID for add/remove")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(2048)
           )
       );
     }
@@ -663,6 +693,32 @@ export async function handleAdapterCommand(
         ? database.setSettingsJson(integration.id, result.settingsJson)
         : integration;
     await interaction.editReply({ embeds: [buildTagBlocklistEmbed(updated, result)] });
+    return;
+  }
+
+  if (subcommand === "watchlist") {
+    if (!adapter.updateResolvableWatchlist) {
+      await interaction.reply({ content: "This integration does not support a resolvable watchlist.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const action = interaction.options.getString("action", true) as ResolvableWatchlistAction;
+    const marketQuery = interaction.options.getString("market")?.trim();
+    if ((action === "add" || action === "remove") && !marketQuery) {
+      await interaction.reply({
+        content: "`add` and `remove` need a Polymarket URL, market slug, or question ID.",
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    await interaction.deferReply();
+    const result = await adapter.updateResolvableWatchlist(integration, action, marketQuery);
+    const updated =
+      result.settingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, result.settingsJson)
+        : integration;
+    await interaction.editReply({ embeds: [buildResolvableWatchlistEmbed(updated, result)] });
     return;
   }
 

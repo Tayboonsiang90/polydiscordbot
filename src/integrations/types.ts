@@ -158,6 +158,29 @@ export type TagFilterUpdateResult = {
   settingsJson: string;
 };
 
+export type ResolvableWatchlistAction = "add" | "remove" | "list" | "clear";
+
+export type ResolvableWatchlistEntry = {
+  question: string;
+  url: string;
+  slug?: string;
+  questionId: string;
+  conditionId?: string;
+  addedAt: string;
+  lastCheckedAt?: string;
+  lastStatus?: "pending" | "ready" | "error";
+  lastError?: string;
+};
+
+export type ResolvableWatchlistUpdateResult = {
+  action: ResolvableWatchlistAction;
+  changed: boolean;
+  message: string;
+  matchedWatches?: ResolvableWatchlistEntry[];
+  watches: ResolvableWatchlistEntry[];
+  settingsJson: string;
+};
+
 export type TagBlocklistUpdateResult = {
   action: TagFilterAction;
   changed: boolean;
@@ -330,6 +353,11 @@ export type WebsiteAdapter = {
   searchStrikeTerm?(integration: Integration, term: string): Promise<StrikeSearchResult>;
   searchTags?(query: string): Promise<TagSearchResult>;
   updateTagFilters?(integration: Integration, action: TagFilterAction, tagQuery?: string): Promise<TagFilterUpdateResult>;
+  updateResolvableWatchlist?(
+    integration: Integration,
+    action: ResolvableWatchlistAction,
+    marketQuery?: string
+  ): Promise<ResolvableWatchlistUpdateResult>;
   updateTagBlocklist?(
     integration: Integration,
     subscriptionTagQuery: string | undefined,

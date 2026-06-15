@@ -66,6 +66,7 @@ const expectedCommandIds = [
   ["umaclarifications", "polymarket-clarifications"],
   ["umadispute", "polymarket-disputes"],
   ["umaproposals", "polymarket-proposals"],
+  ["resolvable", "polymarket-resolvable"],
   ["babmandeb", "portwatch-bab-el-mandeb"],
   ["hormuzships", "portwatch-hormuz-ships"],
   ["umacommits", "uma-vote-commits"],
@@ -150,6 +151,9 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();
     expect(getAdapterByCommandName("umaproposals").updateTagFilters).toBeDefined();
     expect(getAdapterByCommandName("umadispute").updateAddressLabels).toBeDefined();
+    expect(getAdapterByCommandName("resolvable").updateResolvableWatchlist).toBeDefined();
+    expect(getAdapterByCommandName("resolvable").fetchEventUpdates).toBeDefined();
+    expect(getAdapterByCommandName("resolvable").getPollIntervalMinutes?.({ settingsJson: null } as never)).toBe(1);
     expect(getAdapterByCommandName("eia").getPollIntervalMinutes?.({} as never, new Date("2026-05-12T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("jobsadded").getPollIntervalMinutes?.({ polymarketUrl: "https://polymarket.com/event/how-many-jobs-added-in-may-945" } as never, new Date("2026-06-04T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);

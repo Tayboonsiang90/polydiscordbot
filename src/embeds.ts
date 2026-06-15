@@ -10,6 +10,8 @@ import type {
   ArbitrageWatchResult,
   EventMonitorPost,
   Integration,
+  ResolvableWatchlistEntry,
+  ResolvableWatchlistUpdateResult,
   StrikeSearchResult,
   TagBlocklistUpdateResult,
   TagFilterEntry,
@@ -249,6 +251,20 @@ export function buildTagBlocklistEmbed(integration: Integration, result: TagBloc
       { name: "Result", value: result.message, inline: false },
       ...(result.blockedTag ? [{ name: "Blocked tag", value: formatTagFilterEntry(result.blockedTag), inline: false }] : []),
       { name: "Current exclusions", value: formatTagFilterEntries(result.blockedTags), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildResolvableWatchlistEmbed(integration: Integration, result: ResolvableWatchlistUpdateResult): EmbedBuilder {
+  return baseEmbed(integration, "Resolvable watchlist")
+    .addFields(
+      { name: "Action", value: result.action, inline: true },
+      { name: "Changed", value: result.changed ? "yes" : "no", inline: true },
+      { name: "Result", value: truncateEmbedValue(result.message), inline: false },
+      ...(result.matchedWatches?.length
+        ? [{ name: "Matched market(s)", value: formatResolvableWatchEntries(result.matchedWatches), inline: false }]
+        : []),
+      { name: "Current watchlist", value: formatResolvableWatchEntries(result.watches), inline: false }
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 }
@@ -960,6 +976,26 @@ function formatTagFilterEntry(tag: TagFilterEntry): string {
       ? ` | excludes ${maybeTagWithExclusions.excludedTags.map((blockedTag) => blockedTag.label ?? blockedTag.slug).join(", ")}`
       : "";
   return `${id}${tag.label} | ${tag.slug}${channelName}${excludedTags}`;
+}
+
+function formatResolvableWatchEntries(watches: ResolvableWatchlistEntry[]): string {
+  if (watches.length === 0) {
+    return "none configured";
+  }
+
+  return truncateEmbedValue(
+    watches
+      .slice(0, 10)
+      .map((watch, index) => {
+        const title = formatMarkdownLink(watch.question, watch.url);
+        const status = watch.lastStatus ? `Status: ${watch.lastStatus}` : "Status: pending";
+        const checked = watch.lastCheckedAt ? `Last checked: ${formatSingaporeDateTime(watch.lastCheckedAt)}` : "Last checked: not yet";
+        const error = watch.lastError ? `\nLast error: ${truncateEmbedValue(watch.lastError, 180)}` : "";
+        return `${index + 1}. ${title}\nQuestion ID: ${watch.questionId}\n${status}\n${checked}${error}`;
+      })
+      .join("\n\n"),
+    1000
+  );
 }
 
 function formatAddressLabelEntries(labels: Array<{ address: string; label: string }>): string {

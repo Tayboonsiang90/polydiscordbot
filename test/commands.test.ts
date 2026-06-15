@@ -89,6 +89,7 @@ describe("adapter commands", () => {
         [adapter.searchStrikeTerm, "search"],
         [adapter.searchTags, "tagsearch"],
         [adapter.updateTagFilters, "tags"],
+        [adapter.updateResolvableWatchlist, "watchlist"],
         [adapter.updateTagBlocklist, "tagblocks"],
         [adapter.updateAddressLabels, "addresses"],
         [adapter.updateThreshold, "threshold"],
@@ -137,6 +138,16 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "dry-run" })
       ])
     );
+  });
+
+  it("registers the resolvable watchlist command options", () => {
+    type CommandJson = { name: string; options?: Array<{ name: string; options?: Array<{ name: string; choices?: Array<{ value: string }> }> }> };
+    const command = buildAdapterCommands().find((candidate) => candidate.name === "resolvable")?.toJSON() as CommandJson | undefined;
+    const watchlist = command?.options?.find((option) => option.name === "watchlist");
+    const action = watchlist?.options?.find((option) => option.name === "action");
+
+    expect(action?.choices?.map((choice) => choice.value)).toEqual(["add", "remove", "list", "clear"]);
+    expect(watchlist?.options).toEqual(expect.arrayContaining([expect.objectContaining({ name: "market" })]));
   });
 
   it("formats the last stored value with retrieval time", () => {
