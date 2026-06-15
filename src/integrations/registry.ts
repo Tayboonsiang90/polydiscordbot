@@ -35,6 +35,7 @@ import { kmaSeoulPrecipAdapter } from "./kmaSeoulPrecip.js";
 import { londonPrecipAdapter } from "./londonPrecip.js";
 import { joeRoganPodcastAdapter } from "./joeRoganPodcast.js";
 import { lemonadeStandPodcastAdapter } from "./lemonadeStandPodcast.js";
+import { mrBeastGamingVideosAdapter } from "./mrBeastGamingVideos.js";
 import { mrBeastSubscribersAdapter } from "./mrBeastSubscribers.js";
 import { mrBeastViewsAdapter } from "./mrBeastViews.js";
 import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
@@ -132,6 +133,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [londonPrecipAdapter.id, londonPrecipAdapter],
   [joeRoganPodcastAdapter.id, joeRoganPodcastAdapter],
   [lemonadeStandPodcastAdapter.id, lemonadeStandPodcastAdapter],
+  [mrBeastGamingVideosAdapter.id, mrBeastGamingVideosAdapter],
   [mrBeastSubscribersAdapter.id, mrBeastSubscribersAdapter],
   [mrBeastViewsAdapter.id, mrBeastViewsAdapter],
   [nbsPressReleaseAdapter.id, nbsPressReleaseAdapter],

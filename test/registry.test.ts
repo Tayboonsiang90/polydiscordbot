@@ -40,6 +40,7 @@ const expectedCommandIds = [
   ["kpopreleases", "apple-kpop-song-releases"],
   ["koreaprecip", "kma-seoul-precip"],
   ["londonprecip", "met-office-london-precip"],
+  ["mrbeastgaming", "mrbeast-gaming-video"],
   ["mrbeastsubs", "mrbeast-subscribers"],
   ["mrbeastviews", "mrbeast-views"],
   ["nbs", "nbs-press-release"],
@@ -168,6 +169,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("arb").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("fluhosp").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("mrbeastgaming").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("mrbeastsubs").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("mrbeastviews").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("ornnh100").getPollIntervalMinutes?.({} as never)).toBe(60);
