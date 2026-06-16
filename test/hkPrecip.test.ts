@@ -97,6 +97,20 @@ describe("HKO Hong Kong precipitation adapter", () => {
     );
   });
 
+  it("parses abbreviated issued months from HKO Yesterday's Weather", () => {
+    expect(
+      extractHkoYesterdayRainfall(`
+        <span>Bulletin issued at 00:15 HKT 16/Jun/2026</span>
+        <pre>Rainfall                                   122.6 mm</pre>
+      `)
+    ).toEqual({
+      issuedDate: "2026-06-16",
+      rainfallText: "122.6",
+      rainfall: 122.6,
+      yesterdayDate: "2026-06-15"
+    });
+  });
+
   it("carries previous alpha rainfall until Daily Extract catches up", () => {
     const official = extractHkPrecipitationOfficialValue(
       {
