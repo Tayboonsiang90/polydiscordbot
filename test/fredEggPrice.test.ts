@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractFredEggPriceValue,
   extractFredNextReleaseDate,
+  fredEggPriceAdapter,
   getFredEggPricePollIntervalMinutes,
-  parseFredEggObservations
+  getFredEggPriceSettings,
+  parseFredEggObservations,
+  refreshFredEggPricePolymarketQueue
 } from "../src/integrations/fredEggPrice.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -11,7 +14,8 @@ const csv = [
   "observation_date,APU0000708111",
   "2026-02-01,5.897",
   "2026-03-01,6.227",
-  "2026-04-01,6.500"
+  "2026-04-01,6.500",
+  "2026-06-01,4.321"
 ].join("\n");
 
 const html = `
@@ -29,11 +33,17 @@ const integration = {
 } as Integration;
 
 describe("FRED egg price adapter", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("parses FRED CSV observations", () => {
     expect(parseFredEggObservations(`${csv}\n2026-05-01,.`)).toEqual([
       { date: "2026-02-01", value: "5.897" },
       { date: "2026-03-01", value: "6.227" },
-      { date: "2026-04-01", value: "6.500" }
+      { date: "2026-04-01", value: "6.500" },
+      { date: "2026-06-01", value: "4.321" }
     ]);
   });
 
@@ -42,7 +52,7 @@ describe("FRED egg price adapter", () => {
   });
 
   it("formats the April egg price", () => {
-    expect(extractFredEggPriceValue(csv, html)).toBe(
+    expect(extractFredEggPriceValue(csv, html, { year: 2026, month: 4 })).toBe(
       [
         "Series: Eggs, Grade A, Large (Cost per Dozen) in U.S. City Average",
         "Period: 2026-04",
@@ -53,9 +63,64 @@ describe("FRED egg price adapter", () => {
     );
   });
 
+  it("formats the configured monthly egg price period", () => {
+    expect(extractFredEggPriceValue(csv, html, { year: 2026, month: 6 })).toContain("Period: 2026-06\nValue: $4.321 per dozen");
+  });
+
+  it("reads configured year and month settings", () => {
+    expect(getFredEggPriceSettings({ settingsJson: JSON.stringify({ year: 2026, month: 6 }) } as Integration)).toEqual({
+      year: 2026,
+      month: 6
+    });
+  });
+
   it("uses one-minute polling on the day before and day of release in ET", () => {
     expect(getFredEggPricePollIntervalMinutes(integration, new Date("2026-05-11T16:00:00.000Z"))).toBe(1);
     expect(getFredEggPricePollIntervalMinutes(integration, new Date("2026-05-12T16:00:00.000Z"))).toBe(1);
     expect(getFredEggPricePollIntervalMinutes(integration, new Date("2026-05-13T16:00:00.000Z"))).toBe(60);
+  });
+
+  it("discovers and activates the current monthly egg Polymarket URL", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "price-of-dozen-eggs-in-june-20260615183505948",
+              title: "Price of Dozen Eggs in June",
+              active: true,
+              closed: false
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshFredEggPricePolymarketQueue(
+      {
+        settingsJson: null,
+        polymarketUrl: "https://polymarket.com/event/price-of-dozen-eggs-in-april-799"
+      } as Integration,
+      new Date("2026-06-16T12:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      year?: number;
+      month?: number;
+      polymarketMarkets?: Array<{ slug: string }>;
+    };
+
+    expect(result.activeUrl).toBe("https://polymarket.com/event/price-of-dozen-eggs-in-june-20260615183505948");
+    expect(settings.year).toBe(2026);
+    expect(settings.month).toBe(6);
+    expect(settings.polymarketMarkets).toEqual([
+      expect.objectContaining({ slug: "price-of-dozen-eggs-in-june-20260615183505948" })
+    ]);
+  });
+
+  it("exposes monthly period and discovery hooks", () => {
+    expect(fredEggPriceAdapter.supportsPeriod).toBe(true);
+    expect(fredEggPriceAdapter.refreshSettings).toBeDefined();
   });
 });

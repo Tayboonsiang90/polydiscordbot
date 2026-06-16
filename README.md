@@ -46,7 +46,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `eia-crude-spr` | `/eia` | `#eia-crude-spr` | `EIA Crude SPR Alerts` | `⛽` | Monitors EIA weekly U.S. Ending Stocks of Crude Oil in the Strategic Petroleum Reserve. |
 | `elon-x-strikes` | `/elonx` | `#elonx` | `Elon X Alerts` | `🚀` | Monitors @elonmusk posts through a free XCancel/Nitter-style public page reader and parsed weekly Polymarket strike terms. |
 | `fdic-failed-banks` | `/fdic` | `#fdic-failed-banks` | `FDIC Failed Bank Alerts` | `🏦` | Monitors the latest row in the FDIC Failed Bank List for new bank failures. |
-| `fred-egg-price` | `/eggs` | `#eggs` | `FRED Egg Price Alerts` | `🥚` | Monitors FRED April 2026 Eggs, Grade A, Large cost per dozen and release-date polling. |
+| `fred-egg-price` | `/eggs` | `#eggs` | `FRED Egg Price Alerts` | `🥚` | Monitors monthly FRED Eggs, Grade A, Large cost per dozen, auto-discovers monthly egg-price markets, and uses release-date polling. |
 | `fred-ground-beef` | `/beef` | `#beef` | `FRED Ground Beef Alerts` | `🥩` | Monitors FRED 2026 Ground beef, 100% beef cost per pound and release-date polling. |
 | `free-app-store` | `/freeappstore` | `#freeappstore` | `Free App Store Alerts` | `🆓` | Shows the US iPhone App Store Top Free Apps top 5, alerts only when the top 2 change, and auto-discovers daily #1/#2 Free App Store markets. |
 | `nbs-press-release` | `/nbs` | `#nbs-press` | `NBS Press Release Alerts` | `🇨🇳` | Monitors China NBS English press releases hourly and alerts when the latest item changes. |
@@ -344,7 +344,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Add new websites under `src/integrations/`.
 - Aligned Layer Sale is a temporary page-change monitor for `sale.alignedlayer.com`; it stores the HTML shell, app asset paths, and sale-status phrases so an app deployment or sale-state wording change triggers a normal value-change alert.
 - EIA monitors weekly SPR crude oil reserve stocks; it polls hourly except on Tuesday/Wednesday ET, when it polls every minute around the normal release window.
-- FRED eggs monitors April 2026 egg-price data; it polls hourly except on the day before and day of the parsed next release date, when it polls every minute.
+- FRED eggs monitors the active monthly egg-price market from its queued Polymarket URL; it polls hourly except on the day before and day of the parsed next release date, when it polls every minute.
 - FRED beef monitors the latest 2026 ground beef price; it polls hourly except on the day before and day of the parsed next release date, when it polls every minute.
 - FDIC monitors the latest failed-bank table row; changes to that row trigger the normal value-change alert.
 - Kaito mindshare monitors a configured Kaito Historical Data JSON/API endpoint for finalized Polymarket mindshare rows because the public Kaito page is Cloudflare-protected from direct bot scraping.

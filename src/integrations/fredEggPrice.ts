@@ -1,20 +1,57 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
+import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://fred.stlouisfed.org/series/APU0000708111";
 const csvUrl = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=APU0000708111";
-const targetPeriod = "2026-04";
+const defaultYear = 2026;
+const defaultMonth = 4;
 const fallbackNextReleaseDate = "May 12, 2026";
 const easternTimeZone = "America/New_York";
+const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
+  searchQuery: "price of dozen eggs",
+  slugPrefix: "price-of-dozen-eggs-in-",
+  titlePrefix: "Price of Dozen Eggs in",
+  lastDiscoveryAtKey: "lastFredEggPriceDiscoveryAt"
+};
 
 export type FredEggObservation = {
   date: string;
   value: string;
 };
 
-export function extractFredEggPriceValue(csv: string, html: string): string {
+export type FredEggPriceSettings = {
+  year: number;
+  month: number;
+};
+
+export function getFredEggPriceSettings(integration?: Integration): FredEggPriceSettings {
+  if (!integration?.settingsJson) {
+    return { year: defaultYear, month: defaultMonth };
+  }
+
+  try {
+    const settings = JSON.parse(integration.settingsJson) as Partial<FredEggPriceSettings>;
+    const year = Number(settings.year);
+    const month = Number(settings.month);
+    if (isValidFredEggPricePeriod(year, month)) {
+      return { year, month };
+    }
+  } catch {
+    return { year: defaultYear, month: defaultMonth };
+  }
+
+  return { year: defaultYear, month: defaultMonth };
+}
+
+export function extractFredEggPriceValue(
+  csv: string,
+  html: string,
+  settings: FredEggPriceSettings = { year: defaultYear, month: defaultMonth }
+): string {
   const observations = parseFredEggObservations(csv);
+  const targetPeriod = formatFredEggPricePeriod(settings);
   const targetObservation = observations.find((observation) => observation.date.startsWith(targetPeriod));
   const latestObservation = observations.at(-1);
   const nextReleaseDate = extractFredNextReleaseDate(html) ?? "unknown";
@@ -76,9 +113,15 @@ export const fredEggPriceAdapter: WebsiteAdapter = {
   defaultChannelName: "eggs",
   alertRoleName: "FRED Egg Price Alerts",
   alertRoleEmoji: "\uD83E\uDD5A",
+  defaultSettings: { year: defaultYear, month: defaultMonth },
+  supportsPeriod: true,
   getPollIntervalMinutes: getFredEggPricePollIntervalMinutes,
   getPollIntervalReason: getFredEggPricePollIntervalReason,
-  async fetchCurrentValue(): Promise<AdapterValue> {
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshFredEggPricePolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
+    const settings = getFredEggPriceSettings(integration);
     const [csvResponse, pageResponse] = await Promise.all([
       fetchWithTimeout(csvUrl, {
         headers: {
@@ -100,7 +143,7 @@ export const fredEggPriceAdapter: WebsiteAdapter = {
       throw new Error(`FRED page returned HTTP ${pageResponse.status}`);
     }
 
-    const value = extractFredEggPriceValue(await csvResponse.text(), await pageResponse.text());
+    const value = extractFredEggPriceValue(await csvResponse.text(), await pageResponse.text(), settings);
     return {
       value,
       rawValue: value,
@@ -109,6 +152,17 @@ export const fredEggPriceAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export async function refreshFredEggPricePolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  return refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig, now);
+}
+
+export function isValidFredEggPricePeriod(year: number, month: number): boolean {
+  return Number.isInteger(year) && Number.isInteger(month) && year >= 2020 && year <= 2100 && month >= 1 && month <= 12;
+}
 
 function isReleaseWatchDay(integration: Integration, now: Date): boolean {
   const nextReleaseDate = parseMonthDayYear(getNextReleaseDate(integration));
@@ -151,4 +205,8 @@ function getEasternDate(date: Date): string {
     month: "2-digit",
     day: "2-digit"
   }).format(date);
+}
+
+function formatFredEggPricePeriod(settings: FredEggPriceSettings): string {
+  return `${settings.year}-${String(settings.month).padStart(2, "0")}`;
 }
