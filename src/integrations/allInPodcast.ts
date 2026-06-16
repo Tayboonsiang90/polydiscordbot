@@ -56,23 +56,29 @@ export function extractLatestAllInYoutubeEpisodeValue(feedXml: string): string {
 
 export function extractLatestAllInYoutubeEpisode(feedXml: string): AllInEpisode {
   const $ = cheerio.load(feedXml, { xmlMode: true });
-  const entry = $("entry").first();
-  const title = normalizeText(entry.find("title").first().text());
-  const videoId = normalizeText(entry.find("yt\\:videoId").first().text());
-  const href = entry.find('link[rel="alternate"]').first().attr("href");
-  const publishedAt = normalizeText(entry.find("published").first().text());
+  const entries = $("entry").toArray();
+  for (const element of entries) {
+    const entry = $(element);
+    const title = normalizeText(entry.find("title").first().text());
+    const videoId = normalizeText(entry.find("yt\\:videoId").first().text());
+    const href = entry.find('link[rel="alternate"]').first().attr("href");
+    const url = href ?? (videoId ? `https://www.youtube.com/watch?v=${videoId}` : "");
+    const publishedAt = normalizeText(entry.find("published").first().text());
 
-  if (!title || (!href && !videoId) || !publishedAt) {
-    throw new Error("Could not find the latest All-In episode in the YouTube feed");
+    if (!title || !url || !publishedAt || isYoutubeShortUrl(url)) {
+      continue;
+    }
+
+    return {
+      title,
+      date: publishedAt,
+      publishedAt,
+      url,
+      source: "YouTube RSS"
+    };
   }
 
-  return {
-    title,
-    date: publishedAt,
-    publishedAt,
-    url: href ?? `https://www.youtube.com/watch?v=${videoId}`,
-    source: "YouTube RSS"
-  };
+  throw new Error("Could not find the latest non-Shorts All-In episode in the YouTube feed");
 }
 
 export function extractLatestAllInEpisode(html: string): AllInEpisode {
@@ -106,7 +112,8 @@ export const allInPodcastAdapter: WebsiteAdapter = {
   alertRoleName: "All-In Podcast Alerts",
   alertRoleEmoji: "\uD83C\uDFA7",
   getPollIntervalMinutes: () => 1,
-  getPollIntervalReason: () => "YouTube channel RSS polling every minute for new All-In uploads",
+  getPollIntervalReason: () => "YouTube channel RSS polling every minute for new non-Shorts All-In uploads",
+  shouldAlertOnChange: shouldAlertOnAllInChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshAllInPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
@@ -157,6 +164,20 @@ export const allInPodcastAdapter: WebsiteAdapter = {
 function formatAllInEpisodeValue(episode: AllInEpisode): string {
   const dateLine = episode.publishedAt ? `Published: ${episode.publishedAt}` : `Date: ${episode.date}`;
   return [`Title: ${episode.title}`, dateLine, `URL: ${episode.url}`, `Source: ${episode.source}`].join("\n");
+}
+
+export function shouldAlertOnAllInChange(previousValue: string | null, currentValue: string): boolean {
+  const previousUrl = extractAllInValueUrl(previousValue);
+  const currentUrl = extractAllInValueUrl(currentValue);
+  if (!previousUrl || !currentUrl) {
+    return true;
+  }
+
+  if (isYoutubeShortUrl(previousUrl) || isYoutubeShortUrl(currentUrl)) {
+    return false;
+  }
+
+  return normalizeYoutubeWatchUrl(previousUrl) !== normalizeYoutubeWatchUrl(currentUrl);
 }
 
 function formatFetchFailure(error: unknown): string {
@@ -330,10 +351,46 @@ function normalizeYoutubeUrl(url: string): string {
   return videoId ? `https://www.youtube.com/watch?v=${videoId}` : url;
 }
 
+function normalizeYoutubeWatchUrl(url: string): string {
+  const parsed = safeParseUrl(url);
+  if (!parsed) {
+    return url;
+  }
+
+  const videoId =
+    parsed.searchParams.get("v") ?? parsed.pathname.split("/v/").at(-1)?.split("/")[0] ?? parsed.pathname.split("/shorts/").at(-1)?.split("/")[0];
+  if (!videoId || videoId === parsed.pathname) {
+    return parsed.toString();
+  }
+
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function extractAllInValueUrl(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.match(/^URL:\s*(\S+)/m);
+  return match?.[1] ?? null;
+}
+
+function isYoutubeShortUrl(url: string): boolean {
+  return /(^|\/)shorts\//i.test(url);
+}
+
+function safeParseUrl(url: string): URL | null {
+  try {
+    return new URL(url);
+  } catch {
+    return null;
+  }
 }

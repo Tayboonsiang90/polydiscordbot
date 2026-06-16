@@ -5,7 +5,8 @@ import {
   extractLatestAllInEpisodeValue,
   extractLatestAllInYoutubeEpisode,
   extractLatestAllInYoutubeEpisodeValue,
-  refreshAllInPolymarketQueue
+  refreshAllInPolymarketQueue,
+  shouldAlertOnAllInChange
 } from "../src/integrations/allInPodcast.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -20,6 +21,26 @@ const sampleHtml = `
 
 const sampleYoutubeFeed = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>yt:video:gH4FTjDm9FQ</id>
+    <yt:videoId>gH4FTjDm9FQ</yt:videoId>
+    <title>Anthropic's Fable Backlash, Nationalizing AI, Inflation Heats Up &amp; California's Broken Elections</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=gH4FTjDm9FQ"/>
+    <published>2026-06-13T05:10:15+00:00</published>
+    <updated>2026-06-13T19:32:49+00:00</updated>
+  </entry>
+</feed>`;
+
+const sampleYoutubeFeedWithShortFirst = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>yt:video:jKZeMwiDJRg</id>
+    <yt:videoId>jKZeMwiDJRg</yt:videoId>
+    <title>David Friedberg: California’s Voting System Looks Fraudulent, But It’s Working Exactly as Designed</title>
+    <link rel="alternate" href="https://www.youtube.com/shorts/jKZeMwiDJRg"/>
+    <published>2026-06-14T14:00:04+00:00</published>
+    <updated>2026-06-14T14:00:04+00:00</updated>
+  </entry>
   <entry>
     <id>yt:video:gH4FTjDm9FQ</id>
     <yt:videoId>gH4FTjDm9FQ</yt:videoId>
@@ -47,6 +68,16 @@ describe("All-In Podcast adapter", () => {
 
   it("extracts the latest episode from the YouTube channel feed", () => {
     expect(extractLatestAllInYoutubeEpisode(sampleYoutubeFeed)).toEqual({
+      title: "Anthropic's Fable Backlash, Nationalizing AI, Inflation Heats Up & California's Broken Elections",
+      date: "2026-06-13T05:10:15+00:00",
+      publishedAt: "2026-06-13T05:10:15+00:00",
+      url: "https://www.youtube.com/watch?v=gH4FTjDm9FQ",
+      source: "YouTube RSS"
+    });
+  });
+
+  it("skips YouTube Shorts when extracting the latest episode", () => {
+    expect(extractLatestAllInYoutubeEpisode(sampleYoutubeFeedWithShortFirst)).toEqual({
       title: "Anthropic's Fable Backlash, Nationalizing AI, Inflation Heats Up & California's Broken Elections",
       date: "2026-06-13T05:10:15+00:00",
       publishedAt: "2026-06-13T05:10:15+00:00",
@@ -113,6 +144,27 @@ describe("All-In Podcast adapter", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.value).toContain("Source: allin.com");
+  });
+
+  it("does not alert when the same YouTube video changes source formatting", () => {
+    const youtubeValue = extractLatestAllInYoutubeEpisodeValue(sampleYoutubeFeed);
+    const allInValue = ["Title: Episode #276", "Date: 6/12/2026", "URL: https://www.youtube.com/watch?v=gH4FTjDm9FQ", "Source: allin.com"].join(
+      "\n"
+    );
+
+    expect(shouldAlertOnAllInChange(youtubeValue, allInValue)).toBe(false);
+  });
+
+  it("does not alert when cleaning up a previously stored YouTube Short", () => {
+    const shortValue = [
+      "Title: David Friedberg: California’s Voting System Looks Fraudulent, But It’s Working Exactly as Designed",
+      "Published: 2026-06-14T14:00:04+00:00",
+      "URL: https://www.youtube.com/shorts/jKZeMwiDJRg",
+      "Source: YouTube RSS"
+    ].join("\n");
+    const currentEpisodeValue = extractLatestAllInYoutubeEpisodeValue(sampleYoutubeFeed);
+
+    expect(shouldAlertOnAllInChange(shortValue, currentEpisodeValue)).toBe(false);
   });
 
   it("discovers and activates the current weekly All-In Polymarket URL", async () => {
