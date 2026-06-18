@@ -62,14 +62,16 @@ export type ErrorCleanupSummary = {
 
 export function buildStatusEmbed(integration: Integration, pollingInfo: StatusPollingInfo = {}): EmbedBuilder {
   const effectiveIntervalMinutes = pollingInfo.effectiveIntervalMinutes ?? integration.pollIntervalMinutes;
+  const archiveFields = formatArchiveFields(integration);
 
   return baseEmbed(integration, "Monitor status")
     .addFields(
       { name: "Value", value: formatValue(integration.lastValue), inline: true },
-      { name: "Status", value: integration.status, inline: true },
+      { name: "Status", value: archiveFields.length ? `${integration.status} (archived)` : integration.status, inline: true },
       { name: "Base interval", value: `${integration.pollIntervalMinutes} minute(s)`, inline: true },
       { name: "Current interval", value: `${effectiveIntervalMinutes} minute(s)`, inline: true },
       ...(pollingInfo.reason ? [{ name: "Polling mode", value: pollingInfo.reason, inline: false }] : []),
+      ...archiveFields,
       ...formatSettingsFields(integration),
       ...formatSnapshotFields(integration),
       { name: "Last checked", value: formatSingaporeDateTime(integration.lastCheckedAt), inline: false },
@@ -1226,6 +1228,20 @@ function formatSettingsFields(integration: Integration) {
   }
 
   return fields;
+}
+
+function formatArchiveFields(integration: Integration) {
+  const settings = parseSettingsJson(integration.settingsJson);
+  if (typeof settings.archivedAt !== "string") {
+    return [];
+  }
+
+  return [
+    { name: "Archived at", value: formatSingaporeDateTime(settings.archivedAt), inline: false },
+    ...(typeof settings.archiveReason === "string" && settings.archiveReason.trim()
+      ? [{ name: "Archive reason", value: truncateEmbedValue(settings.archiveReason.trim(), 500), inline: false }]
+      : [])
+  ];
 }
 
 function formatSnapshotFields(integration: Integration) {

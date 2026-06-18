@@ -67,7 +67,19 @@ describe("adapter commands", () => {
     const commandByName = new Map(
       buildAdapterCommands().map((command) => [command.name, command.toJSON() as CommandJson])
     );
-    const sharedSubcommands = ["status", "check", "last", "updates", "clear", "polymarket", "interval", "enddate", "pause", "resume"];
+    const sharedSubcommands = [
+      "status",
+      "check",
+      "last",
+      "updates",
+      "clear",
+      "polymarket",
+      "interval",
+      "enddate",
+      "pause",
+      "archive",
+      "resume"
+    ];
 
     for (const adapter of listAdapters()) {
       const command = commandByName.get(adapter.commandName);
@@ -138,6 +150,14 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "dry-run" })
       ])
     );
+  });
+
+  it("keeps adapter command option counts within Discord limits", () => {
+    type CommandJson = { name: string; options?: Array<{ name: string }> };
+    for (const command of buildAdapterCommands()) {
+      const json = command.toJSON() as CommandJson;
+      expect(json.options?.length ?? 0).toBeLessThanOrEqual(25);
+    }
   });
 
   it("registers the resolvable watchlist command options", () => {
@@ -696,6 +716,25 @@ describe("adapter commands", () => {
       ])
     );
     expect(embed.footer?.text).toContain("Returned at");
+  });
+
+  it("formats archived status metadata", () => {
+    const embed = buildStatusEmbed({
+      ...checkedIntegration,
+      status: "paused",
+      settingsJson: JSON.stringify({
+        archivedAt: "2026-05-06T01:02:03.000Z",
+        archiveReason: "market ended"
+      })
+    }).toJSON();
+
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Status", value: "paused (archived)" }),
+        expect.objectContaining({ name: "Archived at", value: "06/05/2026, 09:02:03 SGT" }),
+        expect.objectContaining({ name: "Archive reason", value: "market ended" })
+      ])
+    );
   });
 
   it("formats integration summary rows across multiple embeds", () => {

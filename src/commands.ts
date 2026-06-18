@@ -55,7 +55,7 @@ import type {
 } from "./integrations/types.js";
 import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from "./marketEnd.js";
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
-import { mergeSettingsJson } from "./settingsJson.js";
+import { mergeSettingsJson, parseSettingsJson, stringifySettingsJson } from "./settingsJson.js";
 import {
   checkEventIntegration,
   checkIntegration,
@@ -119,6 +119,19 @@ export function buildAdapterCommands() {
           )
       )
       .addSubcommand((subcommand) => subcommand.setName("pause").setDescription("Pause this monitor"))
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("archive")
+          .setDescription("Pause and archive this monitor without deleting its code or data")
+          .addStringOption((option) =>
+            option
+              .setName("reason")
+              .setDescription("Optional note for why this monitor is archived")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(200)
+          )
+      )
       .addSubcommand((subcommand) => subcommand.setName("resume").setDescription("Resume this monitor"));
 
     if (adapter.supportsPeriod) {
@@ -1014,13 +1027,28 @@ export async function handleAdapterCommand(
   }
 
   if (subcommand === "pause") {
-    const updated = database.setStatus(integration.id, "paused");
+    const updated = database.setSettingsJson(integration.id, clearArchiveSettings(integration.settingsJson));
+    const paused = database.setStatus(updated.id, "paused");
+    await interaction.reply({ embeds: [buildStatusReplyEmbed(paused)] });
+    return;
+  }
+
+  if (subcommand === "archive") {
+    const archived = database.setSettingsJson(
+      integration.id,
+      mergeSettingsJson(integration.settingsJson, {
+        archivedAt: new Date().toISOString(),
+        archiveReason: interaction.options.getString("reason")?.trim() || undefined
+      })
+    );
+    const updated = database.setStatus(archived.id, "paused");
     await interaction.reply({ embeds: [buildStatusReplyEmbed(updated)] });
     return;
   }
 
   if (subcommand === "resume") {
-    const updated = database.setStatus(integration.id, "active");
+    const unarchived = database.setSettingsJson(integration.id, clearArchiveSettings(integration.settingsJson));
+    const updated = database.setStatus(unarchived.id, "active");
     await interaction.reply({ embeds: [buildStatusReplyEmbed(updated)] });
     return;
   }
@@ -1066,6 +1094,13 @@ function readArbitrageSetupInput(interaction: ChatInputCommandInteraction): Arbi
     maxStakeUsd: amount,
     minNetEdgeBps: minEdgePercent === undefined ? undefined : minEdgePercent * 100
   };
+}
+
+function clearArchiveSettings(settingsJson: string | null): string {
+  const settings = { ...parseSettingsJson(settingsJson) };
+  delete settings.archivedAt;
+  delete settings.archiveReason;
+  return stringifySettingsJson(settings);
 }
 
 function readArbitrageWatchSide(value: string): ArbitrageWatchSide {

@@ -120,7 +120,7 @@ No archived integrations currently.
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
 - One adapter normally creates one monitor channel, one slash-command group, one alert role, and one reaction-role selector. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters.
-- Shared commands are generated in `src/commands.ts`: `status`, `check`, `test`, `last`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`.
+- Shared commands are generated in `src/commands.ts`: `status`, `check`, `last`, `updates`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `archive`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`.
 - Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
 - Event alerts can put noisy metadata in `hiddenFields`; Discord shows it only through the shared `Show more` button.
@@ -203,6 +203,7 @@ Every integration uses the same command shape inside its own channel. Replace `/
 - `/arb setup urls:https://predict.fun/market/ipos-before-2027 https://polymarket.com/event/ipos-before-2027 amount:25 min-edge:0.5`
 - `/arb watch urls:https://predict.fun/market/ipos-before-2027 https://polymarket.com/event/ipos-before-2027 outcome:Discord side:BOTH amount:25 min-edge:0.5`
 - `/bonbast pause`
+- `/bonbast archive reason:market ended`
 - `/bonbast resume`
 - `/bot summarize`
 - `/bot clearerrors keep-latest:true`
@@ -223,6 +224,8 @@ Monthly precipitation, ChatGPT Outage, and Claude Downtime adapters auto-discove
 Commands are intentionally channel-scoped. A command only executes in the channel owned by the matching adapter.
 Command replies and alerts display timestamps in Singapore local time.
 Status replies show both the configured base interval and the current effective interval. Dynamic polling integrations also show the current polling mode/reason.
+
+Use `/... archive` when a market is done but the adapter should remain available for future market restarts. Archive sets the integration to `paused`, stores `archivedAt` plus optional `archiveReason` in `settingsJson`, and leaves the channel, role, source code, Polymarket URL, last values, and update logs intact. `/... resume` clears archive metadata and resumes polling.
 Use each channel's `updates` command to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
 Use `/bot clearerrors` to scan all integration channels and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
@@ -329,7 +332,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Use `defaultSettings` and `supportsPeriod` for month/year-driven sources; keep settings in adapter-owned JSON rather than one-off tables.
 - Use the shared command set and embeds; do not create one-off Discord UI per integration.
 - Do not add integration-specific command handlers unless the shared command model cannot express the behavior.
-- Temporary integrations should still be normal adapters with full command/channel/role metadata; mark the temporary purpose in this README and remove or pause the adapter once the market no longer needs monitoring.
+- Temporary integrations should still be normal adapters with full command/channel/role metadata; mark the temporary purpose in this README and use `/... archive` once the market no longer needs monitoring.
 - Add focused tests for parser extraction, adapter registry metadata, command registration, and embed output.
 - Keep README Current Integrations metadata in sync with `listAdapters()`; `test/documentation.test.ts` checks adapter id, command, channel, alert role, and emoji.
 - Keep links in this exact embed field format:
