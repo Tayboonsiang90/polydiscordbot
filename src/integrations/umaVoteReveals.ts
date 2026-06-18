@@ -329,9 +329,9 @@ export function normalizeUmaVoteRevealPost(
       { name: "Revealed price", value: revealedPrice, inline: true },
       ...(roundAnswer?.answer ? [{ name: "Committee answer file", value: roundAnswer.answer, inline: true }] : []),
       { name: "Vote weight", value: voteWeight, inline: true },
-      { name: "Voter", value: event.voter, inline: false },
+      { name: "Voter", value: formatAddressWithEtherscan(event.voter), inline: false },
       ...(event.caller.toLowerCase() !== event.voter.toLowerCase()
-        ? [{ name: "Delegate caller", value: event.caller, inline: false }]
+        ? [{ name: "Delegate caller", value: formatAddressWithEtherscan(event.caller), inline: false }]
         : []),
       { name: "Round", value: String(event.roundId), inline: true },
       { name: "Threshold", value: `${formatUmaTokenAmount(thresholdWei)} UMA`, inline: true }
@@ -424,7 +424,7 @@ function normalizeUmaVoteRevealPostGroup(items: UmaVoteRevealPostItem[], thresho
     hideLinksField: true,
     hideTextField: true,
     summaryFields: [
-      { name: "Voter", value: event.voter, inline: false },
+      { name: "Voter", value: formatAddressWithEtherscan(event.voter), inline: false },
       { name: "Reveal count", value: String(sortedItems.length), inline: true },
       { name: voteWeights.length === 1 ? "Vote weight" : "Vote weights", value: truncateFieldValue(voteWeights.join("\n")), inline: true },
       { name: "Rounds", value: rounds.join(", "), inline: true },
@@ -885,4 +885,8 @@ function truncateFieldValue(value: string, maxLength = 1000): string {
 function truncateLine(value: string, maxLength = 180): string {
   const singleLine = value.replace(/\s+/g, " ").trim();
   return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 3)}...`;
+}
+
+function formatAddressWithEtherscan(address: string): string {
+  return `${address}\nEtherscan: https://etherscan.io/address/${address}`;
 }

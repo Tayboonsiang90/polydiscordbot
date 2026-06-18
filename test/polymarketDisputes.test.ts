@@ -219,11 +219,11 @@ describe("fetchPolymarketDisputeUpdates", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "Proposer",
-          value: `Known Proposer ([Polymarket: KnownProposer](https://polymarket.com/@KnownProposer))\n${proposer}`
+          value: expect.stringContaining(`Polygonscan: https://polygonscan.com/address/${proposer}`)
         }),
         expect.objectContaining({
           name: "Disputer",
-          value: `Known Disputer\n${disputer}\nPolymarket: no linked profile/trades found`
+          value: expect.stringContaining(`Polygonscan: https://polygonscan.com/address/${disputer}`)
         })
       ])
     );

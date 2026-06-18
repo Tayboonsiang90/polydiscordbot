@@ -315,9 +315,9 @@ export function normalizeUmaVoteCommitPost(
       ...(question ? [{ name: "Question", value: question, inline: false }] : []),
       { name: "Commit type", value: isRecommit ? `Recommit #${event.previousCommitCount + 1}` : "Initial commit", inline: true },
       { name: "Estimated stake", value: stake, inline: true },
-      { name: "Voter", value: event.voter, inline: false },
+      { name: "Voter", value: formatAddressWithEtherscan(event.voter), inline: false },
       ...(event.caller.toLowerCase() !== event.voter.toLowerCase()
-        ? [{ name: "Delegate caller", value: event.caller, inline: false }]
+        ? [{ name: "Delegate caller", value: formatAddressWithEtherscan(event.caller), inline: false }]
         : []),
       { name: "Round", value: String(event.roundId), inline: true },
       { name: "Threshold", value: `${formatUmaTokenAmount(thresholdWei)} UMA`, inline: true }
@@ -432,7 +432,7 @@ function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresho
     hideLinksField: true,
     hideTextField: true,
     summaryFields: [
-      { name: "Voter", value: event.voter, inline: false },
+      { name: "Voter", value: formatAddressWithEtherscan(event.voter), inline: false },
       { name: "Commit count", value: String(sortedItems.length), inline: true },
       { name: "Recommits", value: String(recommitCount), inline: true },
       { name: stakeValues.length === 1 ? "Estimated stake" : "Estimated stakes", value: truncateFieldValue(stakeValues.join("\n")), inline: true },
@@ -922,4 +922,8 @@ function truncateFieldValue(value: string, maxLength = 1000): string {
 function truncateLine(value: string, maxLength = 180): string {
   const singleLine = value.replace(/\s+/g, " ").trim();
   return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 3)}...`;
+}
+
+function formatAddressWithEtherscan(address: string): string {
+  return `${address}\nEtherscan: https://etherscan.io/address/${address}`;
 }

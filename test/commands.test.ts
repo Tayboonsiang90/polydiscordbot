@@ -554,7 +554,7 @@ describe("adapter commands", () => {
       postedAt: new Date("2026-05-20T00:00:00.000Z"),
       url: "https://polygonscan.com/tx/0xtx",
       polymarketUrl: "https://polymarket.com/market/test",
-      prioritySummary: { question: "Test market?", proposedOutcome: "YES (1)" },
+      prioritySummary: { question: "Test market?", proposedOutcome: "YES (1)", proposer: "0x1111111111111111111111111111111111111111" },
       hiddenFields: [{ name: "Condition ID", value: "0xcondition", inline: false }],
       imageUrls: [],
       imageText: "",
@@ -601,10 +601,15 @@ describe("adapter commands", () => {
 
     expect(components).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ label: "Refresh data", style: 2 }),
         expect.objectContaining({ label: "Label proposer", style: 2 }),
         expect.objectContaining({ label: "Label disputer", style: 2 })
       ])
     );
+    const refreshButton = components.find((component) => "custom_id" in component && component.label === "Refresh data") as
+      | { custom_id?: string }
+      | undefined;
+    expect(parseEventRefreshCustomId(String(refreshButton?.custom_id))).toEqual({ integrationId: checkedIntegration.id, eventId: post.id });
     const proposerCustomId = components.find((component) => "custom_id" in component && component.label === "Label proposer") as
       | { custom_id?: string }
       | undefined;

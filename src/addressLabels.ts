@@ -322,7 +322,7 @@ export function formatAddressWithLabel(
   const profileForAddress = profile?.address === normalized ? profile : undefined;
   const profileSuffix = profileForAddress?.hasTrades ? formatPolymarketProfileSuffix(profileForAddress) : "";
   const displayLabel = label ?? profileForAddress?.profileName ?? normalized;
-  const lines = [`${displayLabel}${profileSuffix}`];
+  const lines = [`${displayLabel}${profileSuffix}`, `Polygonscan: https://polygonscan.com/address/${normalized}`];
   if (displayLabel !== normalized) {
     lines.push(normalized);
   }

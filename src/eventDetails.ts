@@ -8,6 +8,7 @@ import {
   type ModalSubmitInteraction
 } from "discord.js";
 import { BotDatabase } from "./database.js";
+import { enrichEventPostAddressProfiles } from "./addressLabels.js";
 import { getAdapter } from "./integrations/registry.js";
 import { syncUmaAddressLabels } from "./umaAddressLabels.js";
 import {
@@ -21,7 +22,7 @@ import {
   parseEventDetailsCustomId,
   parseEventRefreshCustomId
 } from "./embeds.js";
-import { refreshPolymarketProposalPost } from "./integrations/polymarketProposals.js";
+import type { EventMonitorPost } from "./integrations/types.js";
 
 export async function handleEventDetailsButton(
   interaction: ButtonInteraction,
@@ -76,7 +77,7 @@ async function handleEventRefreshButton(
   }
 
   const integration = database.getIntegrationById(parsed.integrationId);
-  if (integration.adapterId !== "polymarket-proposals" || alert.post.type !== "Polymarket UMA proposal") {
+  if (!supportsUmaAddressRefresh(integration.adapterId, alert.post)) {
     await interaction.reply({
       content: "This alert does not support refresh.",
       flags: MessageFlags.Ephemeral
@@ -85,7 +86,9 @@ async function handleEventRefreshButton(
   }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const refreshedPost = await refreshPolymarketProposalPost(alert.post);
+  const refreshedPost = await enrichEventPostAddressProfiles(stripUmaAddressEnrichment(alert.post), {
+    bypassProfileCache: true
+  });
   database.updateEventAlertPost(integration.id, alert.eventId, refreshedPost);
   const payload = buildEventPostMessagePayload(integration, refreshedPost);
   await interaction.message.edit({
@@ -94,7 +97,34 @@ async function handleEventRefreshButton(
     components: payload.components,
     allowedMentions: { parse: [] }
   });
-  await interaction.editReply("Refreshed proposal data and updated this alert.");
+  await interaction.editReply("Refreshed UMA address data and updated this alert.");
+}
+
+function supportsUmaAddressRefresh(adapterId: string, post: EventMonitorPost): boolean {
+  if (adapterId !== "polymarket-proposals" && adapterId !== "polymarket-disputes") {
+    return false;
+  }
+
+  return Boolean(post.prioritySummary?.proposer || post.prioritySummary?.disputer);
+}
+
+function stripUmaAddressEnrichment(post: EventMonitorPost): EventMonitorPost {
+  if (!post.prioritySummary) {
+    return post;
+  }
+
+  const prioritySummary = { ...post.prioritySummary };
+  delete prioritySummary.proposerProfile;
+  delete prioritySummary.proposerAligned;
+  delete prioritySummary.proposerHedge;
+  delete prioritySummary.disputerProfile;
+  delete prioritySummary.disputerAligned;
+  delete prioritySummary.disputerHedge;
+
+  return {
+    ...post,
+    prioritySummary
+  };
 }
 
 export async function handleEventDetailsModalSubmit(

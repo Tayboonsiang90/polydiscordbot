@@ -190,7 +190,7 @@ describe("fetchPolymarketProposalUpdates", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "Proposer",
-          value: `Known Proposer ([Polymarket: KnownProposer](https://polymarket.com/@KnownProposer))\n${proposer}`
+          value: expect.stringContaining(`Polygonscan: https://polygonscan.com/address/${proposer}`)
         })
       ])
     );

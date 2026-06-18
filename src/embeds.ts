@@ -835,20 +835,28 @@ function buildEventSourceLinkRow(url: string, labelOverride?: string, extraButto
 }
 
 function buildEventDetailsButton(integration: Integration, post: EventMonitorPost): ButtonBuilder | null {
-  if (!post.hiddenFields?.length) {
+  const isRefreshable = isRefreshableUmaAddressPost(integration, post);
+  if (!post.hiddenFields?.length && !isRefreshable) {
     return null;
   }
 
-  const isRefreshableProposal = integration.adapterId === "polymarket-proposals" && post.type === "Polymarket UMA proposal";
-  const customId = `${isRefreshableProposal ? eventRefreshCustomIdPrefix : eventDetailsCustomIdPrefix}${integration.id}:${post.id}`;
+  const customId = `${isRefreshable ? eventRefreshCustomIdPrefix : eventDetailsCustomIdPrefix}${integration.id}:${post.id}`;
   if (customId.length > 100) {
     return null;
   }
 
   return new ButtonBuilder()
     .setCustomId(customId)
-    .setLabel(isRefreshableProposal ? "Refresh data" : "Show more")
+    .setLabel(isRefreshable ? "Refresh data" : "Show more")
     .setStyle(ButtonStyle.Secondary);
+}
+
+function isRefreshableUmaAddressPost(integration: Integration, post: EventMonitorPost): boolean {
+  if (integration.adapterId !== "polymarket-proposals" && integration.adapterId !== "polymarket-disputes") {
+    return false;
+  }
+
+  return Boolean(post.prioritySummary?.proposer || post.prioritySummary?.disputer);
 }
 
 function buildEventAddressLabelButtons(integration: Integration, post: EventMonitorPost): ButtonBuilder[] {
