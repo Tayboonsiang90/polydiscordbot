@@ -65,6 +65,12 @@ describe("UMA vote commit adapter", () => {
     expect(second?.previousCommitCount).toBe(1);
   });
 
+  it("skips malformed RPC commit logs instead of crashing", () => {
+    expect(decodeUmaVoteCommitLog({ ...sampleLog, transactionHash: undefined } as unknown as EthereumLog)).toBeNull();
+    expect(decodeUmaVoteCommitLog({ ...sampleLog, topics: undefined } as unknown as EthereumLog)).toBeNull();
+    expect(decodeUmaVoteCommitLog({ ...sampleLog, data: "0x1234" } as EthereumLog)).toBeNull();
+  });
+
   it("updates threshold settings without changing scan state", async () => {
     const integration = buildIntegration(JSON.stringify({ lastScannedBlock: 123 }));
     const result = await umaVoteCommitsAdapter.updateThreshold!(integration, "250k");

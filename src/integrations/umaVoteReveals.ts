@@ -255,44 +255,48 @@ export function formatUmaTokenAmount(value: bigint, maxDecimals = 4): string {
 }
 
 export function decodeUmaVoteRevealLog(log: EthereumLog): UmaVoteRevealEvent | null {
-  if (log.address.toLowerCase() !== votingV2AddressLower || log.topics[0]?.toLowerCase() !== voteRevealedTopic) {
+  if (!isMatchingVoteRevealLog(log)) {
     return null;
   }
 
-  const voterTopic = getTopic(log, 1);
-  const callerTopic = getTopic(log, 2);
-  const identifierTopic = getTopic(log, 3);
-  if (!voterTopic || !callerTopic || !identifierTopic) {
+  try {
+    const voterTopic = getTopic(log, 1);
+    const callerTopic = getTopic(log, 2);
+    const identifierTopic = getTopic(log, 3);
+    if (!voterTopic || !callerTopic || !identifierTopic) {
+      return null;
+    }
+
+    const hex = stripHexPrefix(log.data);
+    const roundId = wordToSafeNumber(readWord(hex, 0), "roundId");
+    const requestTime = wordToSafeNumber(readWord(hex, 1), "request time");
+    const ancillaryDataOffset = wordToSafeNumber(readWord(hex, 2), "ancillary data offset");
+    const price = wordToSignedBigInt(readWord(hex, 3));
+    const numTokens = BigInt(`0x${readWord(hex, 4)}`);
+    const ancillaryDataBytes = decodeAbiBytesAt(hex, ancillaryDataOffset * 2);
+    const blockNumber = parseHexQuantity(log.blockNumber);
+    const blockTimestamp = log.blockTimestamp ? parseHexQuantity(log.blockTimestamp) : undefined;
+    const logIndex = parseHexQuantity(log.logIndex);
+
+    return {
+      id: `${log.transactionHash.toLowerCase()}:${log.logIndex.toLowerCase()}`,
+      voter: parseAddressTopic(voterTopic),
+      caller: parseAddressTopic(callerTopic),
+      roundId,
+      identifier: identifierTopic,
+      requestTime,
+      price,
+      ancillaryDataHex: `0x${Buffer.from(ancillaryDataBytes).toString("hex")}`,
+      ancillaryDataText: Buffer.from(ancillaryDataBytes).toString("utf8"),
+      numTokens,
+      blockNumber,
+      blockTimestamp,
+      transactionHash: log.transactionHash.toLowerCase(),
+      logIndex
+    };
+  } catch {
     return null;
   }
-
-  const hex = stripHexPrefix(log.data);
-  const roundId = wordToSafeNumber(readWord(hex, 0), "roundId");
-  const requestTime = wordToSafeNumber(readWord(hex, 1), "request time");
-  const ancillaryDataOffset = wordToSafeNumber(readWord(hex, 2), "ancillary data offset");
-  const price = wordToSignedBigInt(readWord(hex, 3));
-  const numTokens = BigInt(`0x${readWord(hex, 4)}`);
-  const ancillaryDataBytes = decodeAbiBytesAt(hex, ancillaryDataOffset * 2);
-  const blockNumber = parseHexQuantity(log.blockNumber);
-  const blockTimestamp = log.blockTimestamp ? parseHexQuantity(log.blockTimestamp) : undefined;
-  const logIndex = parseHexQuantity(log.logIndex);
-
-  return {
-    id: `${log.transactionHash.toLowerCase()}:${log.logIndex.toLowerCase()}`,
-    voter: parseAddressTopic(voterTopic),
-    caller: parseAddressTopic(callerTopic),
-    roundId,
-    identifier: identifierTopic,
-    requestTime,
-    price,
-    ancillaryDataHex: `0x${Buffer.from(ancillaryDataBytes).toString("hex")}`,
-    ancillaryDataText: Buffer.from(ancillaryDataBytes).toString("utf8"),
-    numTokens,
-    blockNumber,
-    blockTimestamp,
-    transactionHash: log.transactionHash.toLowerCase(),
-    logIndex
-  };
 }
 
 export function normalizeUmaVoteRevealPost(
@@ -765,6 +769,22 @@ function wordToSignedBigInt(word: string): bigint {
 function getTopic(log: EthereumLog, index: number): string | null {
   const topic = log.topics[index];
   return typeof topic === "string" && /^0x[0-9a-fA-F]{64}$/.test(topic) ? topic : null;
+}
+
+function isMatchingVoteRevealLog(log: EthereumLog): boolean {
+  const candidate = log as Partial<EthereumLog>;
+  return (
+    typeof candidate.address === "string" &&
+    Array.isArray(candidate.topics) &&
+    typeof candidate.topics[0] === "string" &&
+    typeof candidate.data === "string" &&
+    typeof candidate.blockNumber === "string" &&
+    typeof candidate.transactionHash === "string" &&
+    typeof candidate.logIndex === "string" &&
+    (candidate.blockTimestamp === undefined || typeof candidate.blockTimestamp === "string") &&
+    candidate.address.toLowerCase() === votingV2AddressLower &&
+    candidate.topics[0].toLowerCase() === voteRevealedTopic
+  );
 }
 
 function parseAddressTopic(topic: string): string {

@@ -236,47 +236,51 @@ export function parseUmaVoteCommitSettings(settingsJson: string | null): UmaVote
 }
 
 export function decodeUmaVoteCommitLog(log: EthereumLog, seenCommitKeys = new Map<string, number>()): UmaVoteCommitEvent | null {
-  if (log.address.toLowerCase() !== votingV2AddressLower || log.topics[0]?.toLowerCase() !== voteCommittedTopic) {
+  if (!isMatchingVoteCommitLog(log)) {
     return null;
   }
 
-  const voterTopic = getTopic(log, 1);
-  const callerTopic = getTopic(log, 2);
-  const identifierTopic = getTopic(log, 3);
-  if (!voterTopic || !callerTopic || !identifierTopic) {
+  try {
+    const voterTopic = getTopic(log, 1);
+    const callerTopic = getTopic(log, 2);
+    const identifierTopic = getTopic(log, 3);
+    if (!voterTopic || !callerTopic || !identifierTopic) {
+      return null;
+    }
+
+    const hex = stripHexPrefix(log.data);
+    const roundId = wordToSafeNumber(readWord(hex, 0), "roundId");
+    const requestTime = wordToSafeNumber(readWord(hex, 1), "request time");
+    const ancillaryDataOffset = wordToSafeNumber(readWord(hex, 2), "ancillary data offset");
+    const ancillaryDataBytes = decodeAbiBytesAt(hex, ancillaryDataOffset * 2);
+    const blockNumber = parseHexQuantity(log.blockNumber);
+    const blockTimestamp = log.blockTimestamp ? parseHexQuantity(log.blockTimestamp) : undefined;
+    const logIndex = parseHexQuantity(log.logIndex);
+    const voter = parseAddressTopic(voterTopic);
+    const ancillaryDataHex = `0x${Buffer.from(ancillaryDataBytes).toString("hex")}`;
+    const commitKey = buildCommitKey({ voter, roundId, identifier: identifierTopic, requestTime, ancillaryDataHex });
+    const previousCommitCount = seenCommitKeys.get(commitKey) ?? 0;
+    seenCommitKeys.set(commitKey, previousCommitCount + 1);
+
+    return {
+      id: `${log.transactionHash.toLowerCase()}:${log.logIndex.toLowerCase()}`,
+      voter,
+      caller: parseAddressTopic(callerTopic),
+      roundId,
+      identifier: identifierTopic,
+      requestTime,
+      ancillaryDataHex,
+      ancillaryDataText: Buffer.from(ancillaryDataBytes).toString("utf8"),
+      blockNumber,
+      blockTimestamp,
+      transactionHash: log.transactionHash.toLowerCase(),
+      logIndex,
+      commitKey,
+      previousCommitCount
+    };
+  } catch {
     return null;
   }
-
-  const hex = stripHexPrefix(log.data);
-  const roundId = wordToSafeNumber(readWord(hex, 0), "roundId");
-  const requestTime = wordToSafeNumber(readWord(hex, 1), "request time");
-  const ancillaryDataOffset = wordToSafeNumber(readWord(hex, 2), "ancillary data offset");
-  const ancillaryDataBytes = decodeAbiBytesAt(hex, ancillaryDataOffset * 2);
-  const blockNumber = parseHexQuantity(log.blockNumber);
-  const blockTimestamp = log.blockTimestamp ? parseHexQuantity(log.blockTimestamp) : undefined;
-  const logIndex = parseHexQuantity(log.logIndex);
-  const voter = parseAddressTopic(voterTopic);
-  const ancillaryDataHex = `0x${Buffer.from(ancillaryDataBytes).toString("hex")}`;
-  const commitKey = buildCommitKey({ voter, roundId, identifier: identifierTopic, requestTime, ancillaryDataHex });
-  const previousCommitCount = seenCommitKeys.get(commitKey) ?? 0;
-  seenCommitKeys.set(commitKey, previousCommitCount + 1);
-
-  return {
-    id: `${log.transactionHash.toLowerCase()}:${log.logIndex.toLowerCase()}`,
-    voter,
-    caller: parseAddressTopic(callerTopic),
-    roundId,
-    identifier: identifierTopic,
-    requestTime,
-    ancillaryDataHex,
-    ancillaryDataText: Buffer.from(ancillaryDataBytes).toString("utf8"),
-    blockNumber,
-    blockTimestamp,
-    transactionHash: log.transactionHash.toLowerCase(),
-    logIndex,
-    commitKey,
-    previousCommitCount
-  };
 }
 
 export function normalizeUmaVoteCommitPost(
@@ -792,6 +796,22 @@ function wordToSafeNumber(word: string, label: string): number {
 function getTopic(log: EthereumLog, index: number): string | null {
   const topic = log.topics[index];
   return typeof topic === "string" && /^0x[0-9a-fA-F]{64}$/.test(topic) ? topic : null;
+}
+
+function isMatchingVoteCommitLog(log: EthereumLog): boolean {
+  const candidate = log as Partial<EthereumLog>;
+  return (
+    typeof candidate.address === "string" &&
+    Array.isArray(candidate.topics) &&
+    typeof candidate.topics[0] === "string" &&
+    typeof candidate.data === "string" &&
+    typeof candidate.blockNumber === "string" &&
+    typeof candidate.transactionHash === "string" &&
+    typeof candidate.logIndex === "string" &&
+    (candidate.blockTimestamp === undefined || typeof candidate.blockTimestamp === "string") &&
+    candidate.address.toLowerCase() === votingV2AddressLower &&
+    candidate.topics[0].toLowerCase() === voteCommittedTopic
+  );
 }
 
 function parseAddressTopic(topic: string): string {

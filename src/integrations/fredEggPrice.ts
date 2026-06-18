@@ -5,6 +5,9 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://fred.stlouisfed.org/series/APU0000708111";
 const csvUrl = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=APU0000708111";
+const requestHeaders = {
+  "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+};
 const defaultYear = 2026;
 const defaultMonth = 4;
 const fallbackNextReleaseDate = "May 12, 2026";
@@ -123,16 +126,8 @@ export const fredEggPriceAdapter: WebsiteAdapter = {
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getFredEggPriceSettings(integration);
     const [csvResponse, pageResponse] = await Promise.all([
-      fetchWithTimeout(csvUrl, {
-        headers: {
-          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-        }
-      }),
-      fetchWithTimeout(sourceUrl, {
-        headers: {
-          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-        }
-      })
+      fetchWithTimeout(csvUrl, { headers: requestHeaders }),
+      fetchWithTimeout(sourceUrl, { headers: requestHeaders })
     ]);
 
     if (!csvResponse.ok) {
@@ -143,7 +138,11 @@ export const fredEggPriceAdapter: WebsiteAdapter = {
       throw new Error(`FRED page returned HTTP ${pageResponse.status}`);
     }
 
-    const value = extractFredEggPriceValue(await csvResponse.text(), await pageResponse.text(), settings);
+    const [csvText, pageText] = await Promise.all([
+      readFredEggResponseText(csvResponse, csvUrl, "FRED CSV"),
+      readFredEggResponseText(pageResponse, sourceUrl, "FRED page")
+    ]);
+    const value = extractFredEggPriceValue(csvText, pageText, settings);
     return {
       value,
       rawValue: value,
@@ -209,4 +208,24 @@ function getEasternDate(date: Date): string {
 
 function formatFredEggPricePeriod(settings: FredEggPriceSettings): string {
   return `${settings.year}-${String(settings.month).padStart(2, "0")}`;
+}
+
+async function readFredEggResponseText(response: Response, url: string, label: string): Promise<string> {
+  try {
+    return await response.text();
+  } catch (error) {
+    if (!isConsumedResponseBodyError(error)) {
+      throw error;
+    }
+
+    const retryResponse = await fetchWithTimeout(url, { headers: requestHeaders });
+    if (!retryResponse.ok) {
+      throw new Error(`${label} retry returned HTTP ${retryResponse.status}`);
+    }
+    return retryResponse.text();
+  }
+}
+
+function isConsumedResponseBodyError(error: unknown): boolean {
+  return error instanceof TypeError && /body (?:is unusable|has already been read)/i.test(error.message);
 }

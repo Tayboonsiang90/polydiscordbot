@@ -119,6 +119,40 @@ describe("FRED egg price adapter", () => {
     ]);
   });
 
+  it("refetches once if a FRED response body was already consumed", async () => {
+    let csvFetches = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("fredgraph.csv")) {
+          csvFetches += 1;
+          return {
+            ok: true,
+            status: 200,
+            text: async () => {
+              if (csvFetches === 1) {
+                throw new TypeError("Body is unusable: Body has already been read");
+              }
+              return csv;
+            }
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () => html
+        };
+      })
+    );
+
+    const result = await fredEggPriceAdapter.fetchCurrentValue({ settingsJson: JSON.stringify({ year: 2026, month: 4 }) } as Integration);
+
+    expect(result.value).toContain("Value: $6.500 per dozen");
+    expect(csvFetches).toBe(2);
+  });
+
   it("exposes monthly period and discovery hooks", () => {
     expect(fredEggPriceAdapter.supportsPeriod).toBe(true);
     expect(fredEggPriceAdapter.refreshSettings).toBeDefined();

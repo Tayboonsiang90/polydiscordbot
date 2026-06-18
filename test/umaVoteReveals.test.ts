@@ -69,6 +69,12 @@ describe("UMA vote reveal adapter", () => {
     expect(event?.ancillaryDataText).toContain("childRequester:ee3afe347d5c74317041e2618c49534daf887c24");
   });
 
+  it("skips malformed RPC reveal logs instead of crashing", () => {
+    expect(decodeUmaVoteRevealLog({ ...sampleLog, transactionHash: undefined } as unknown as EthereumLog)).toBeNull();
+    expect(decodeUmaVoteRevealLog({ ...sampleLog, topics: undefined } as unknown as EthereumLog)).toBeNull();
+    expect(decodeUmaVoteRevealLog({ ...sampleLog, data: "0x1234" } as EthereumLog)).toBeNull();
+  });
+
   it("parses configurable UMA threshold shorthand", () => {
     expect(parseUmaRevealThresholdWei("250k").toString()).toBe("250000000000000000000000");
     expect(parseUmaRevealThresholdWei("1.5m").toString()).toBe("1500000000000000000000000");
