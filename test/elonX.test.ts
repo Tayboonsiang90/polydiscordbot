@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  elonXAdapter,
   extractElonXGammaStrikeTerms,
   findMatchedElonXStrikeTerms,
   parseElonXCancelTimeline,
@@ -114,6 +115,23 @@ describe("Elon X strike monitor", () => {
     expect(posts[0]).toMatchObject({ type: "Repost", qualifyingText: "" });
     expect(findMatchedElonXStrikeTerms(posts[1].qualifyingText, ["Bitcoin", "Tesla", "Texas"])).toEqual(["Tesla", "Texas"]);
     expect(findMatchedElonXStrikeTerms(posts[0].qualifyingText, ["Crypto"])).toEqual([]);
+  });
+
+  it("suppresses repost notifications because reposts do not count for strike detection", () => {
+    expect(
+      elonXAdapter.shouldAlertOnEventPost?.({
+        id: "102",
+        type: "Repost",
+        text: "Crypto in a repost",
+        qualifyingText: "",
+        postedAt: new Date("2026-06-16T08:10:00.000Z"),
+        url: "https://x.com/other/status/102",
+        imageUrls: [],
+        imageText: "",
+        matchedTerms: [],
+        strikeTerms: ["Crypto"]
+      })
+    ).toBe(false);
   });
 
   it("force-refreshes strike settings from the configured Polymarket URL", async () => {

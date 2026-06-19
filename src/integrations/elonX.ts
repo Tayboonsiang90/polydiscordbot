@@ -141,6 +141,9 @@ export const elonXAdapter: WebsiteAdapter = {
   ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
     const settings = await upsertElonXPolymarketMarket(integration, url);
     return { settingsJson: JSON.stringify(settings), activeUrl: settings.parsedFromUrl ?? integration.polymarketUrl };
+  },
+  shouldAlertOnEventPost(post: EventMonitorPost): boolean {
+    return post.type !== "Repost";
   }
 };
 
