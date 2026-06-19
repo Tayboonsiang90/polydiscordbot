@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import { BotDatabase } from "./database.js";
 import { enrichEventPostAddressProfiles } from "./addressLabels.js";
-import { getAdapter } from "./integrations/registry.js";
+import { getAdapter, hasAdapter } from "./integrations/registry.js";
 import { syncUmaAddressLabels } from "./umaAddressLabels.js";
 import {
   addressLabelModalNameInputId,
@@ -30,6 +30,15 @@ export async function handleEventDetailsButton(
 ): Promise<boolean> {
   const addressLabel = parseAddressLabelButtonCustomId(interaction.customId);
   if (addressLabel) {
+    const labelSupport = getAddressLabelSupport(database, addressLabel.integrationId);
+    if (!labelSupport.supported) {
+      await interaction.reply({
+        content: labelSupport.message,
+        flags: MessageFlags.Ephemeral
+      });
+      return true;
+    }
+
     await interaction.showModal(buildAddressLabelModal(addressLabel));
     return true;
   }
@@ -138,6 +147,14 @@ export async function handleEventDetailsModalSubmit(
 
   const nickname = interaction.fields.getTextInputValue(addressLabelModalNameInputId).trim();
   const integration = database.getIntegrationById(parsed.integrationId);
+  if (!hasAdapter(integration.adapterId)) {
+    await interaction.reply({
+      content: `This old alert points to an adapter that is no longer loaded: ${integration.adapterId}. Use a newer UMA alert button instead.`,
+      flags: MessageFlags.Ephemeral
+    });
+    return true;
+  }
+
   const adapter = getAdapter(integration.adapterId);
   if (!adapter.updateAddressLabels) {
     await interaction.reply({
@@ -164,6 +181,27 @@ export async function handleEventDetailsModalSubmit(
     flags: MessageFlags.Ephemeral
   });
   return true;
+}
+
+function getAddressLabelSupport(database: BotDatabase, integrationId: number): { supported: true } | { supported: false; message: string } {
+  let integration;
+  try {
+    integration = database.getIntegrationById(integrationId);
+  } catch {
+    return { supported: false, message: "This old alert points to an integration row that no longer exists. Use a newer UMA alert button instead." };
+  }
+
+  if (!hasAdapter(integration.adapterId)) {
+    return {
+      supported: false,
+      message: `This old alert points to an adapter that is no longer loaded: ${integration.adapterId}. Use a newer UMA alert button instead.`
+    };
+  }
+
+  const adapter = getAdapter(integration.adapterId);
+  return adapter.updateAddressLabels
+    ? { supported: true }
+    : { supported: false, message: "This alert does not support address labels." };
 }
 
 function buildAddressLabelModal(parsed: { integrationId: number; role: "proposer" | "disputer"; address: string }): ModalBuilder {
