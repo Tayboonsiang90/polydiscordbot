@@ -1,5 +1,6 @@
 ﻿import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction, type TextChannel } from "discord.js";
 import { buildArbitrageOutcomeSelectRow } from "./arbitrageControls.js";
+import { errorLogChannelName } from "./channels.js";
 import type { BotDatabase } from "./database.js";
 import { AttachmentBuilder, type Attachment } from "discord.js";
 import type { Guild } from "discord.js";
@@ -445,7 +446,7 @@ export function buildBotCommands() {
       .addSubcommand((subcommand) =>
         subcommand
           .setName("clearerrors")
-          .setDescription("Clean old bot Check failed messages from integration channels")
+          .setDescription("Clean old bot Check failed messages from error logs and monitor channels")
           .addBooleanOption((option) =>
             option
               .setName("keep-latest")
@@ -1275,10 +1276,13 @@ export async function clearOldCheckFailedMessages(guild: Guild, database: BotDat
   const botUserId = guild.client.user?.id;
   const channelIds = [
     ...new Set(
-      database
-        .listIntegrations()
-        .filter((integration) => integration.guildId === guild.id)
-        .map((integration) => integration.channelId)
+      [
+        ...database
+          .listIntegrations()
+          .filter((integration) => integration.guildId === guild.id)
+          .map((integration) => integration.channelId),
+        findTextChannelByName(guild, errorLogChannelName)?.id
+      ].filter((channelId): channelId is string => typeof channelId === "string")
     )
   ];
   const summary = {

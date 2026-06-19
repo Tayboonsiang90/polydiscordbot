@@ -1,4 +1,5 @@
 import { ChannelType, type Client, type Guild, type Message, type Role, type TextChannel } from "discord.js";
+import { errorLogChannelName } from "./channels.js";
 import type { BotConfig } from "./config.js";
 import type { BotDatabase } from "./database.js";
 import { buildGroupedRoleSelectorEmbed, buildSetupEmbed, type GroupedRoleSelectorEntry } from "./embeds.js";
@@ -61,6 +62,7 @@ export class IntegrationProvisioner {
       }
     }
 
+    await retryTransientDiscordNetworkError(() => findOrCreateErrorLogChannel(guild));
     await retryTransientDiscordNetworkError(() => this.provisionAlertRoleSelectors(guild));
   }
 
@@ -267,6 +269,19 @@ async function findOrCreateRoleChannel(guild: Guild, channelName: string, title:
     name: channelName,
     type: ChannelType.GuildText,
     topic: `React to receive ${title.toLowerCase()}`
+  });
+}
+
+async function findOrCreateErrorLogChannel(guild: Guild): Promise<TextChannel> {
+  const existing = findTextChannelByName(guild, errorLogChannelName);
+  if (existing) {
+    return existing;
+  }
+
+  return guild.channels.create({
+    name: errorLogChannelName,
+    type: ChannelType.GuildText,
+    topic: "Centralized bot check-failure logs for all integrations."
   });
 }
 

@@ -287,6 +287,46 @@ describe("check failed Discord message delivery", () => {
     database.close();
   });
 
+  it("sends new check-failed posts to the shared error log channel when available", async () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "eggs-channel",
+      adapterId: "fred-egg-price",
+      displayName: "FRED Egg Price",
+      sourceUrl: "https://fred.stlouisfed.org/series/APU0000708111",
+      polymarketUrl: "https://polymarket.com/event/price-of-dozen-eggs-in-april-799",
+      settingsJson: null,
+      pollIntervalMinutes: 60
+    });
+    const integrationSend = vi.fn().mockResolvedValue({ id: "integration-error-message" });
+    const errorLogSend = vi.fn().mockResolvedValue({ id: "error-log-message" });
+    const errorLogChannel = { id: "errorlogs-channel", name: "errorlogs", send: errorLogSend };
+    const integrationChannel = {
+      id: "eggs-channel",
+      name: "eggs",
+      send: integrationSend,
+      guild: {
+        channels: {
+          cache: new Map([["errorlogs-channel", errorLogChannel]])
+        }
+      }
+    };
+    const scheduler = new PollScheduler(
+      { channels: { fetch: vi.fn().mockResolvedValue(integrationChannel) } } as never,
+      database
+    ) as unknown as {
+      sendErrorIfDue(channelId: string, integration: Integration, error: unknown): Promise<void>;
+    };
+
+    await scheduler.sendErrorIfDue("eggs-channel", integration, new Error("The operation was aborted."));
+
+    expect(errorLogSend).toHaveBeenCalledTimes(1);
+    expect(integrationSend).not.toHaveBeenCalled();
+    expect(getLatestErrorMessageId(database.getIntegrationById(integration.id).settingsJson)).toBe("error-log-message");
+    database.close();
+  });
+
   it("deletes older check-failed posts after updating the tracked one", async () => {
     const database = createTestDatabase();
     const settingsJson = setLatestErrorNoticeState(setLatestErrorMessageId(null, "message-1"), {

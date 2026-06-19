@@ -119,7 +119,7 @@ No archived integrations currently.
 
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
-- One adapter normally creates one monitor channel, one slash-command group, one alert role, and one reaction-role selector. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters.
+- One adapter normally creates one monitor channel, one slash-command group, one alert role, and one reaction-role selector. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts.
 - Shared commands are generated in `src/commands.ts`: `status`, `check`, `last`, `updates`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `archive`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`.
 - Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
@@ -228,7 +228,7 @@ Status replies show both the configured base interval and the current effective 
 Use `/... archive` when a market is done but the adapter should remain available for future market restarts. Archive sets the integration to `paused`, stores `archivedAt` plus optional `archiveReason` in `settingsJson`, and leaves the channel, role, source code, Polymarket URL, last values, and update logs intact. `/... resume` clears archive metadata and resumes polling.
 Use each channel's `updates` command to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
-Use `/bot clearerrors` to scan all integration channels and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
+Check-failure errors are posted to `#errorlogs` when that channel exists. The bot keeps one editable `Check failed` post per integration, updates repeated failures there, and falls back to the integration channel only if `#errorlogs` is unavailable. Use `/bot clearerrors` to scan integration channels plus `#errorlogs` and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
 Arbitrage replies are alert-only. `/arb setup` asks for a shared outcome and YES/NO/BOTH side through dropdowns, then alerts only when the best route is positive after configured platform fees and the minimum edge. Alerts include the buy/sell platform, side, executable amount, fees, and expected profit. Predict and Opinion checks require their API keys in `.env`.
 Bonbast replies use Discord embeds with compact fields, colored status accents, and clickable links.
 Use `/bonbast polymarket` once per market so future alerts include a clickable Polymarket link.
@@ -405,6 +405,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - Shared settings helpers live in `src/settingsJson.ts`; use them when reading or merging cross-adapter `settingsJson` keys.
 - `commands.ts`, `embeds.ts`, and `poller.ts` are still the main growth hotspots; split only when changing them for real features, not as a standalone rewrite.
 - Poller error suppression/formatting lives in `src/errorNotices.ts`; keep retry/noise-control behavior there instead of adding local copies.
+- Integration check failures should route through the shared poller error path into `#errorlogs`; do not send adapter-local error messages to monitor channels.
 - Registry and command metadata tests are table-driven from `listAdapters()`; add special-case assertions only for adapter-specific capabilities.
 - Current one-timer-per-integration polling is fine for dozens of adapters; revisit only if the bot grows into hundreds of active monitors or needs exact cron scheduling.
 - Keep `lastValue` string comparisons for simple monitors, but use structured settings/event tables for dedupe-heavy or multi-item integrations.

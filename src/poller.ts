@@ -1,4 +1,5 @@
 import type { Client } from "discord.js";
+import { errorLogChannelName } from "./channels.js";
 import type { BotDatabase } from "./database.js";
 import {
   buildAlertEmbed,
@@ -562,7 +563,8 @@ export class PollScheduler {
     message: string,
     options: { allowCreate: boolean }
   ): Promise<void> {
-    const channel = await this.client.channels.fetch(channelId);
+    const fallbackChannel = await this.client.channels.fetch(channelId);
+    const channel = this.resolveErrorLogChannel(fallbackChannel) ?? fallbackChannel;
     if (!isSendableChannel(channel)) {
       return;
     }
@@ -595,6 +597,21 @@ export class PollScheduler {
     if (isFetchableMessageChannel(channel)) {
       await cleanupStaleErrorMessages(channel, currentIntegration, sentMessageId);
     }
+  }
+
+  private resolveErrorLogChannel(fallbackChannel: unknown): unknown {
+    if (isErrorLogChannel(fallbackChannel)) {
+      return fallbackChannel;
+    }
+
+    const guildChannelsCache = getGuildChannelsCache(fallbackChannel);
+    const guildErrorLogChannel = findNamedTextChannel(guildChannelsCache, errorLogChannelName);
+    if (guildErrorLogChannel) {
+      return guildErrorLogChannel;
+    }
+
+    const clientChannelsCache = getClientChannelsCache(this.client);
+    return findNamedTextChannel(clientChannelsCache, errorLogChannelName);
   }
 
   private async sendEventPost(channelId: string, integration: Integration, post: EventMonitorPost): Promise<void> {
@@ -765,6 +782,11 @@ type SendableChannel = {
   send(content: unknown): Promise<unknown>;
 };
 
+type NamedChannel = {
+  id: string;
+  name?: string | null;
+};
+
 type FetchableMessageChannel = SendableChannel & {
   messages: {
     fetch(input: string | { limit: number; before?: string }): Promise<unknown>;
@@ -775,6 +797,10 @@ function isSendableChannel(channel: unknown): channel is SendableChannel {
   return Boolean(channel && typeof channel === "object" && "send" in channel && typeof channel.send === "function");
 }
 
+function isNamedChannel(channel: unknown): channel is NamedChannel {
+  return Boolean(channel && typeof channel === "object" && "id" in channel && typeof channel.id === "string");
+}
+
 function isFetchableMessageChannel(channel: SendableChannel): channel is FetchableMessageChannel {
   const messages = "messages" in channel ? channel.messages : null;
   if (!messages || typeof messages !== "object") {
@@ -782,6 +808,45 @@ function isFetchableMessageChannel(channel: SendableChannel): channel is Fetchab
   }
 
   return "fetch" in messages && typeof messages.fetch === "function";
+}
+
+function isErrorLogChannel(channel: unknown): boolean {
+  return Boolean(isNamedChannel(channel) && channel.name === errorLogChannelName);
+}
+
+function getGuildChannelsCache(channel: unknown): unknown {
+  if (!channel || typeof channel !== "object" || !("guild" in channel)) {
+    return null;
+  }
+
+  const guild = channel.guild;
+  if (!guild || typeof guild !== "object" || !("channels" in guild)) {
+    return null;
+  }
+
+  const channels = guild.channels;
+  return channels && typeof channels === "object" && "cache" in channels ? channels.cache : null;
+}
+
+function getClientChannelsCache(client: Client): unknown {
+  const channels = "channels" in client ? client.channels : null;
+  return channels && typeof channels === "object" && "cache" in channels ? channels.cache : null;
+}
+
+function findNamedTextChannel(cache: unknown, channelName: string): unknown {
+  if (!cache || typeof cache !== "object") {
+    return null;
+  }
+
+  if ("find" in cache && typeof cache.find === "function") {
+    return cache.find((channel: unknown) => isNamedChannel(channel) && channel.name === channelName) ?? null;
+  }
+
+  if ("values" in cache && typeof cache.values === "function") {
+    return Array.from(cache.values() as Iterable<unknown>).find((channel) => isNamedChannel(channel) && channel.name === channelName) ?? null;
+  }
+
+  return null;
 }
 
 function getDiscordMessageId(message: unknown): string | null {
