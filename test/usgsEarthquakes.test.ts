@@ -113,6 +113,29 @@ describe("USGS earthquakes adapter", () => {
     expect(url.searchParams.has("limit")).toBe(false);
   });
 
+  it("tracks the 6.5+ weekly market date window", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ metadata: { count: 2 }, features: [feature] })
+      })
+    );
+    const { usgsSixPointFiveEarthquakesAdapter } = await import("../src/integrations/usgsEarthquakes.js");
+
+    const result = await usgsSixPointFiveEarthquakesAdapter.fetchCurrentValue!({
+      polymarketUrl: "https://polymarket.com/event/how-many-6pt5-or-above-earthquakes-june-15-june-21-20260612155039384"
+    } as Integration);
+    const requestedUrl = new URL(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]));
+
+    expect(requestedUrl.searchParams.get("minmagnitude")).toBe("6.5");
+    expect(requestedUrl.searchParams.get("starttime")).toBe("2026-06-15T04:00:00.000Z");
+    expect(requestedUrl.searchParams.get("endtime")).toBe("2026-06-22T03:59:00.000Z");
+    expect(result.value).toContain("Metric: USGS 6.5+ earthquake count");
+    expect(result.value).toContain("Window ET: 2026-06-15 00:00 to 2026-06-21 23:59");
+    expect(result.rawValue).toBe("2");
+  });
+
   it("tracks the fixed 7.0+ by-June-30 market rules window", async () => {
     vi.stubGlobal(
       "fetch",
@@ -215,5 +238,60 @@ describe("USGS earthquakes adapter", () => {
       "how-many-5pt5-or-above-earthquakes-june-8-june-14-20260605212535734"
     ]);
     expect(result.activeUrl).toBe("https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-june-1-june-7-20260603201822187");
+  });
+
+  it("discovers and queues weekly 6.5 earthquake markets separately", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "how-many-5pt5-or-above-earthquakes-june-22-june-28-20260619000000000",
+              title: "How many 5.5 or above earthquakes June 22 - June 28?",
+              active: true,
+              closed: false,
+              tags: [{ slug: "earthquakes" }]
+            },
+            {
+              slug: "how-many-6pt5-or-above-earthquakes-june-22-june-28-20260619000000001",
+              title: "How many 6.5 or above earthquakes June 22 - June 28?",
+              active: true,
+              closed: false,
+              tags: [{ slug: "earthquakes" }]
+            }
+          ]
+        })
+      })
+    );
+    const { usgsSixPointFiveEarthquakesAdapter } = await import("../src/integrations/usgsEarthquakes.js");
+
+    const settingsJson = await usgsSixPointFiveEarthquakesAdapter.refreshSettings!(
+      {
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: "https://polymarket.com/event/how-many-6pt5-or-above-earthquakes-june-15-june-21-20260612155039384",
+              slug: "how-many-6pt5-or-above-earthquakes-june-15-june-21-20260612155039384",
+              startAt: "2026-06-15T04:00:00.000Z",
+              endAt: "2026-06-22T03:59:00.000Z",
+              addedAt: "2026-06-15T04:00:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/how-many-6pt5-or-above-earthquakes-june-15-june-21-20260612155039384"
+      } as Integration
+    );
+    const settings = JSON.parse(settingsJson) as {
+      lastEarthquake65DiscoveryAt?: string;
+      polymarketMarkets?: Array<{ slug: string }>;
+    };
+
+    expect(settings.lastEarthquake65DiscoveryAt).toBeTruthy();
+    expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual([
+      "how-many-6pt5-or-above-earthquakes-june-15-june-21-20260612155039384",
+      "how-many-6pt5-or-above-earthquakes-june-22-june-28-20260619000000001"
+    ]);
   });
 });

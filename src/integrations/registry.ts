@@ -89,6 +89,7 @@ import { umaVoteRevealsAdapter } from "./umaVoteReveals.js";
 import { umaVotingCommitteeAdapter } from "./umaVotingCommittee.js";
 import {
   usgsEarthquakesAdapter,
+  usgsSixPointFiveEarthquakesAdapter,
   usgsSevenPlusEarthquakesAdapter,
   usgsSevenPlusEarthquakesYearAdapter
 } from "./usgsEarthquakes.js";
@@ -188,6 +189,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [umaVoteRevealsAdapter.id, umaVoteRevealsAdapter],
   [umaVotingCommitteeAdapter.id, umaVotingCommitteeAdapter],
   [usgsEarthquakesAdapter.id, usgsEarthquakesAdapter],
+  [usgsSixPointFiveEarthquakesAdapter.id, usgsSixPointFiveEarthquakesAdapter],
   [usgsSevenPlusEarthquakesAdapter.id, usgsSevenPlusEarthquakesAdapter],
   [usgsSevenPlusEarthquakesYearAdapter.id, usgsSevenPlusEarthquakesYearAdapter],
   [volmexBvivAdapter.id, volmexBvivAdapter],

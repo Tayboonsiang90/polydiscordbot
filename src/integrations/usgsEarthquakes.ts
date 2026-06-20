@@ -5,11 +5,13 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 const sourceUrl = "https://earthquake.usgs.gov/earthquakes/search/";
 const usgsApiUrl = "https://earthquake.usgs.gov/fdsnws/event/1/query";
 const defaultPolymarketUrl = "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-4-may-10";
+const sixPointFivePolymarketUrl = "https://polymarket.com/event/how-many-6pt5-or-above-earthquakes-june-15-june-21-20260612155039384";
 const sevenPlusPolymarketUrl = "https://polymarket.com/event/how-many-7pt0-or-above-earthquakes-by-june-30-higher-strikes";
 const sevenPlusYearPolymarketUrl = "https://polymarket.com/event/how-many-7pt0-or-above-earthquakes-in-2026";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const earthquakeMarketSearchQuery = "5.5 earthquakes";
 const minimumMagnitude = "5.5";
+const sixPointFiveMinimumMagnitude = "6.5";
 const sevenPlusMinimumMagnitude = "7.0";
 const sevenPlusMarketWindow = {
   startAt: "2025-12-04T17:00:00.000Z",
@@ -34,6 +36,7 @@ type UsgsEarthquakeFeatureCollection = {
 type EarthquakeDiscoverySettings = {
   polymarketMarkets?: PolymarketQueueMarket[];
   lastEarthquakeDiscoveryAt?: string;
+  lastEarthquake65DiscoveryAt?: string;
 };
 
 type GammaSearchResponse = {
@@ -52,6 +55,13 @@ type UsgsEarthquakeCountOptions = {
   metricLabel: string;
   minimumMagnitude: string;
   customWindow?: { startAt: string; endAt: string };
+};
+
+type EarthquakeDiscoveryConfig = {
+  searchQuery: string;
+  slugPrefix: string;
+  titlePrefix: string;
+  lastDiscoveryAtKey: keyof EarthquakeDiscoverySettings;
 };
 
 export type UsgsEarthquakeFeature = {
@@ -73,10 +83,29 @@ const fivePointFiveOptions: UsgsEarthquakeCountOptions = {
   minimumMagnitude
 };
 
+const sixPointFiveOptions: UsgsEarthquakeCountOptions = {
+  metricLabel: "USGS 6.5+ earthquake count",
+  minimumMagnitude: sixPointFiveMinimumMagnitude
+};
+
 const sevenPlusOptions: UsgsEarthquakeCountOptions = {
   metricLabel: "USGS 7.0+ earthquake count",
   minimumMagnitude: sevenPlusMinimumMagnitude,
   customWindow: sevenPlusMarketWindow
+};
+
+const fivePointFiveDiscoveryConfig: EarthquakeDiscoveryConfig = {
+  searchQuery: earthquakeMarketSearchQuery,
+  slugPrefix: "how-many-5pt5-or-above-earthquakes-",
+  titlePrefix: "how many 5.5 or above earthquakes",
+  lastDiscoveryAtKey: "lastEarthquakeDiscoveryAt"
+};
+
+const sixPointFiveDiscoveryConfig: EarthquakeDiscoveryConfig = {
+  searchQuery: "6.5 earthquakes",
+  slugPrefix: "how-many-6pt5-or-above-earthquakes-",
+  titlePrefix: "how many 6.5 or above earthquakes",
+  lastDiscoveryAtKey: "lastEarthquake65DiscoveryAt"
 };
 
 const sevenPlusYearOptions: UsgsEarthquakeCountOptions = {
@@ -155,6 +184,42 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
       value,
       rawValue: extractUsgsEarthquakeCount(value) ?? value,
       unit: "USGS 5.5+ earthquake count",
+      observedAt: new Date()
+    };
+  }
+};
+
+export const usgsSixPointFiveEarthquakesAdapter: WebsiteAdapter = {
+  id: "usgs-earthquakes-6-5",
+  commandName: "earthquake65",
+  displayName: "USGS 6.5+ Earthquakes",
+  sourceUrl,
+  defaultPolymarketUrl: sixPointFivePolymarketUrl,
+  defaultChannelName: "earthquake65",
+  alertRoleName: "USGS 6.5 Earthquake Alerts",
+  alertRoleEmoji: "\uD83C\uDF0F",
+  shouldAlertOnChange: shouldAlertOnUsgsEarthquakeCountChange,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshEarthquakePolymarketQueue(integration, new Date(), sixPointFiveDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
+    const polymarketUrl = integration?.polymarketUrl ?? sixPointFivePolymarketUrl;
+    const response = await fetchWithTimeout(buildUsgsApiUrl(polymarketUrl, sixPointFiveOptions), {
+      headers: {
+        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`USGS returned HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as UsgsEarthquakeFeatureCollection;
+    const value = extractUsgsEarthquakeCountValue(data, polymarketUrl, sixPointFiveOptions);
+    return {
+      value,
+      rawValue: extractUsgsEarthquakeCount(value) ?? value,
+      unit: "USGS 6.5+ earthquake count",
       observedAt: new Date()
     };
   }
@@ -244,22 +309,23 @@ function extractUsgsEarthquakeCount(value: string | null): string | null {
 
 export async function refreshEarthquakePolymarketQueue(
   integration: Integration,
-  now: Date = new Date()
+  now: Date = new Date(),
+  config: EarthquakeDiscoveryConfig = fivePointFiveDiscoveryConfig
 ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
   let resolved = resolveIntegrationPolymarketQueue(integration, now);
   let settings = parseEarthquakeDiscoverySettings(resolved.settingsJson);
-  if (!shouldDiscoverEarthquakeMarkets(settings, now)) {
+  if (!shouldDiscoverEarthquakeMarkets(settings, now, config.lastDiscoveryAtKey)) {
     return resolved;
   }
 
-  settings = { ...settings, lastEarthquakeDiscoveryAt: now.toISOString() };
+  settings = { ...settings, [config.lastDiscoveryAtKey]: now.toISOString() };
   resolved = {
     settingsJson: JSON.stringify(settings),
     activeUrl: resolved.activeUrl
   };
 
   try {
-    const candidates = await fetchEarthquakeMarketSearchCandidates(now);
+    const candidates = await fetchEarthquakeMarketSearchCandidates(now, config);
     const existingSlugs = new Set((settings.polymarketMarkets ?? []).map((market) => market.slug));
     for (const candidate of candidates) {
       if (existingSlugs.has(candidate.slug)) {
@@ -299,7 +365,7 @@ export function buildUsgsApiUrl(polymarketUrl: string, options = fivePointFiveOp
   return url.toString();
 }
 
-function shouldDiscoverEarthquakeMarkets(settings: EarthquakeDiscoverySettings, now: Date): boolean {
+function shouldDiscoverEarthquakeMarkets(settings: EarthquakeDiscoverySettings, now: Date, lastDiscoveryAtKey: keyof EarthquakeDiscoverySettings): boolean {
   const markets = normalizeEarthquakeQueueMarkets(settings.polymarketMarkets);
   if (hasQueuedFutureMarket(markets, now)) {
     return false;
@@ -307,7 +373,8 @@ function shouldDiscoverEarthquakeMarkets(settings: EarthquakeDiscoverySettings, 
 
   const activeMarket = getActiveMarket(markets, now);
   const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
-  if (!isDiscoveryIntervalDue(settings.lastEarthquakeDiscoveryAt, now, intervalMs)) {
+  const lastDiscoveryAt = settings[lastDiscoveryAtKey];
+  if (!isDiscoveryIntervalDue(typeof lastDiscoveryAt === "string" ? lastDiscoveryAt : undefined, now, intervalMs)) {
     return false;
   }
 
@@ -318,9 +385,9 @@ function shouldDiscoverEarthquakeMarkets(settings: EarthquakeDiscoverySettings, 
   return Date.parse(activeMarket.endAt ?? "") - now.getTime() <= marketDiscoveryLookaheadMs;
 }
 
-async function fetchEarthquakeMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+async function fetchEarthquakeMarketSearchCandidates(now: Date, config: EarthquakeDiscoveryConfig): Promise<Array<{ slug: string; url: string }>> {
   const searchUrl = new URL(gammaSearchUrl);
-  searchUrl.searchParams.set("q", earthquakeMarketSearchQuery);
+  searchUrl.searchParams.set("q", config.searchQuery);
   searchUrl.searchParams.set("events_status", "active");
   searchUrl.searchParams.set("limit_per_type", "10");
   searchUrl.searchParams.append("events_tag", "earthquakes");
@@ -334,18 +401,18 @@ async function fetchEarthquakeMarketSearchCandidates(now: Date): Promise<Array<{
 
   const payload = (await response.json()) as GammaSearchResponse;
   return (payload.events ?? [])
-    .map((event) => normalizeEarthquakeSearchEvent(event, now))
+    .map((event) => normalizeEarthquakeSearchEvent(event, now, config))
     .filter((candidate) => candidate !== null);
 }
 
-function normalizeEarthquakeSearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
+function normalizeEarthquakeSearchEvent(event: GammaSearchEvent, now: Date, config: EarthquakeDiscoveryConfig): { slug: string; url: string } | null {
   if (event.active === false || event.closed === true || !isNonEmptyString(event.slug) || !isNonEmptyString(event.title)) {
     return null;
   }
 
   if (
-    !event.slug.startsWith("how-many-5pt5-or-above-earthquakes-") ||
-    !event.title.toLowerCase().startsWith("how many 5.5 or above earthquakes")
+    !event.slug.startsWith(config.slugPrefix) ||
+    !event.title.toLowerCase().startsWith(config.titlePrefix)
   ) {
     return null;
   }
@@ -375,7 +442,9 @@ function parseEarthquakeDiscoverySettings(settingsJson: string | null): Earthqua
       ...settings,
       polymarketMarkets: normalizeEarthquakeQueueMarkets(settings.polymarketMarkets),
       lastEarthquakeDiscoveryAt:
-        typeof settings.lastEarthquakeDiscoveryAt === "string" ? settings.lastEarthquakeDiscoveryAt : undefined
+        typeof settings.lastEarthquakeDiscoveryAt === "string" ? settings.lastEarthquakeDiscoveryAt : undefined,
+      lastEarthquake65DiscoveryAt:
+        typeof settings.lastEarthquake65DiscoveryAt === "string" ? settings.lastEarthquake65DiscoveryAt : undefined
     };
   } catch {
     return {};

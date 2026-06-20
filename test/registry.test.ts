@@ -90,6 +90,7 @@ const expectedCommandIds = [
   ["tsa", "tsa-passengers"],
   ["umichsentiment", "umich-consumer-sentiment"],
   ["earthquake", "usgs-earthquakes"],
+  ["earthquake65", "usgs-earthquakes-6-5"],
   ["earthquake7", "usgs-earthquakes-7-plus"],
   ["earthquake2026", "usgs-earthquakes-7-plus-2026"],
   ["bviv", "volmex-bviv-low-strikes"],
