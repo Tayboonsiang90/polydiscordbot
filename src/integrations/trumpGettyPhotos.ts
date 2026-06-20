@@ -8,7 +8,7 @@ const sourceUrl = "https://www.gettyimages.com.mx/search/2/image?family=editoria
 const defaultPolymarketUrl = "https://polymarket.com/event/will-trump-be-photographed-every-day-this-week-61-67";
 const gettyPublicSearchUrl = "https://www.gettyimages.com/search/2/image";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
-const jinaReaderBaseUrl = "https://r.jina.ai/http://r.jina.ai/http://";
+const jinaReaderBaseUrl = "https://r.jina.ai/http://";
 const marketSearchQuery = "trump photographed every day this week";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;

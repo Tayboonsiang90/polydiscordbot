@@ -76,6 +76,7 @@ June 1, 2026
 
     globalThis.fetch = async (input) => {
       const url = String(input);
+      expect(url).not.toContain("r.jina.ai/http://r.jina.ai");
       if (url.includes("r.jina.ai") && url.includes("/search/2/image")) {
         return new Response(`
 [![Image 3: President Donald Trump waves on June 1,...](https://media.gettyimages.com/id/1/photo/one.jpg?s=612x612) President Donald Trump waves on June 1, in Washington, DC.](https://www.gettyimages.com/detail/news-photo/one-news-photo/1)
