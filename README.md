@@ -84,7 +84,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `trump-truth` | `/trumptruth` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Monitors the Trump's Truth archive feed for @realDonaldTrump posts and parsed weekly Polymarket strike terms. |
 | `tsa-passengers` | `/tsa` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
 | `umich-consumer-sentiment` | `/umichsentiment` | `#umichsentiment` | `UMich Sentiment Alerts` | `📊` | Monitors UMich Surveys of Consumers final June 2026 Index of Consumer Sentiment and polls fast around the scheduled release. |
-| `usgs-earthquakes` | `/earthquake` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Tracks the USGS count of 5.5+ earthquakes in the active weekly market window. |
+| `usgs-earthquakes` | `/earthquake` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Tracks the USGS count of 5.5+ earthquakes in the active weekly market window and alerts on count increases or revision-driven decreases. |
 | `volmex-bviv-low-strikes` | `/bviv` | `#bviv` | `BVIV Alerts` | `📉` | Monitors Volmex BVIV 1-minute low candles and alerts once when tracked low strikes are crossed. |
 | `volmex-eviv-high-strikes` | `/eviv` | `#eviv` | `EVIV Alerts` | `📈` | Monitors Volmex EVIV 1-minute high candles and alerts once when tracked high strikes are crossed. |
 | `white-house-aliens-nyc` | `/aliennyc` | `#aliennyc` | `Alien NYC Arrests Alerts` | `🛸` | Monitors the White House aliens table Total Arrests counter for New York, NY. |
@@ -375,7 +375,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - ISM Services PMI checks the Services report page plus the direct monthly report URL, stores `not published yet` before release, and polls every minute on the day before/day of the scheduled 10:00 AM ET release.
 - UMich Consumer Sentiment checks the Surveys of Consumers landing page and Table 1 CSV, ignores preliminary releases, and only marks June 2026 published when a June Final Results link exists.
 - NCEI tornadoes monitors monthly U.S. tornado counts from the NCEI Tornadoes Time Series JSON endpoint, treats preliminary counts as resolution-relevant, and only alerts when the target month first becomes published.
-- USGS earthquakes monitors the official USGS event API count for 5.5+ earthquakes in the active Polymarket date window and auto-discovers upcoming weekly 5.5+ earthquake markets into the shared queue.
+- USGS earthquakes monitors the official USGS event API count for 5.5+ earthquakes in the active Polymarket date window, alerts on any count change, and treats decreases as USGS revision alerts for events moved below the 5.5 cutoff.
 - HKO Hong Kong precipitation uses Daily Extract as the official total, then adds the text-only Yesterday's Weather rainfall only when that report is newer than the latest Daily Extract day.
 - NOAA NYC and Seattle monthly precipitation use RCC ACIS daily rows instead of only the monthly sum, so newly posted `0.00` or `T` days still change `lastValue` and alert.
 - Met Office London precipitation uses Heathrow stationdata as the official monthly row and Infoclimat Heathrow climatology as daily cumulative alpha before the Met Office row appears.

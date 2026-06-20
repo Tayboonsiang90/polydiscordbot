@@ -129,7 +129,7 @@ export function shouldAlertOnUsgsEarthquakeCountChange(previousValue: string | n
     return false;
   }
 
-  return Number(currentCount) > Number(previousCount);
+  return Number(currentCount) !== Number(previousCount);
 }
 
 export const shouldAlertOnUsgsEarthquakeChange = shouldAlertOnUsgsEarthquakeCountChange;

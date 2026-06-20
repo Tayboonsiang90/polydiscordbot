@@ -72,7 +72,7 @@ describe("USGS earthquakes adapter", () => {
     );
   });
 
-  it("alerts only when the qualifying earthquake count increases", () => {
+  it("alerts when the qualifying earthquake count changes in either direction", () => {
     const previous = [
       "Metric: USGS 5.5+ earthquake count",
       "Total earthquakes: 2",
@@ -88,7 +88,7 @@ describe("USGS earthquakes adapter", () => {
 
     expect(shouldAlertOnUsgsEarthquakeCountChange(previous, sameCountWithCorrectedTime)).toBe(false);
     expect(shouldAlertOnUsgsEarthquakeCountChange(previous, higherCount)).toBe(true);
-    expect(shouldAlertOnUsgsEarthquakeCountChange(previous, lowerCount)).toBe(false);
+    expect(shouldAlertOnUsgsEarthquakeCountChange(previous, lowerCount)).toBe(true);
     expect(shouldAlertOnUsgsEarthquakeCountChange("Event ID: legacy", higherCount)).toBe(false);
   });
 
