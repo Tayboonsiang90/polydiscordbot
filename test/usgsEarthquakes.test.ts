@@ -38,7 +38,8 @@ describe("USGS earthquakes adapter", () => {
       [
         "Metric: USGS 5.5+ earthquake count",
         "Window ET: 2026-06-08 00:00 to 2026-06-14 23:59",
-        "Window UTC: 2026-06-08T04:00:00.000Z to 2026-06-15T03:59:00.000Z",
+        "Market start UTC: 2026-06-08T04:00:00.000Z",
+        "Market end UTC: 2026-06-15T03:59:00.000Z",
         "Minimum magnitude: 5.5",
         "Total earthquakes: 1",
         "Events: us7000test: M6.2, 10 km S of Test City, 2026-06-09T12:34:56.000Z",
@@ -57,7 +58,8 @@ describe("USGS earthquakes adapter", () => {
       [
         "Metric: USGS 5.5+ earthquake count",
         "Window ET: 2026-05-25 00:00 to 2026-05-31 23:59",
-        "Window UTC: 2026-05-25T04:00:00.000Z to 2026-06-01T03:59:00.000Z",
+        "Market start UTC: 2026-05-25T04:00:00.000Z",
+        "Market end UTC: 2026-06-01T03:59:00.000Z",
         "Minimum magnitude: 5.5",
         "Total earthquakes: 0",
         "Events: none",
@@ -133,6 +135,8 @@ describe("USGS earthquakes adapter", () => {
     expect(requestedUrl.searchParams.get("endtime")).toBe("2026-06-22T03:59:00.000Z");
     expect(result.value).toContain("Metric: USGS 6.5+ earthquake count");
     expect(result.value).toContain("Window ET: 2026-06-15 00:00 to 2026-06-21 23:59");
+    expect(result.value).toContain("Market start UTC: 2026-06-15T04:00:00.000Z");
+    expect(result.value).toContain("Market end UTC: 2026-06-22T03:59:00.000Z");
     expect(result.rawValue).toBe("2");
   });
 
@@ -156,6 +160,8 @@ describe("USGS earthquakes adapter", () => {
     expect(requestedUrl.searchParams.get("endtime")).toBe("2026-07-01T03:59:00.000Z");
     expect(result.value).toContain("Metric: USGS 7.0+ earthquake count");
     expect(result.value).toContain("Window ET: 2025-12-04 12:00 to 2026-06-30 23:59");
+    expect(result.value).toContain("Market start UTC: 2025-12-04T17:00:00.000Z");
+    expect(result.value).toContain("Market end UTC: 2026-07-01T03:59:00.000Z");
     expect(result.value).toContain("Minimum magnitude: 7.0");
     expect(result.rawValue).toBe("6");
   });
@@ -180,6 +186,8 @@ describe("USGS earthquakes adapter", () => {
     expect(requestedUrl.searchParams.get("endtime")).toBe("2027-01-01T04:59:00.000Z");
     expect(result.value).toContain("Metric: USGS 7.0+ earthquake count in 2026");
     expect(result.value).toContain("Window ET: 2026-01-01 00:00 to 2026-12-31 23:59");
+    expect(result.value).toContain("Market start UTC: 2026-01-01T05:00:00.000Z");
+    expect(result.value).toContain("Market end UTC: 2027-01-01T04:59:00.000Z");
     expect(result.value).toContain("Minimum magnitude: 7.0");
     expect(result.rawValue).toBe("12");
   });

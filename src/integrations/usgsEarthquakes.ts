@@ -124,7 +124,7 @@ export function extractUsgsEarthquakeCountValue(
   return [
     `Metric: ${options.metricLabel}`,
     `Window ET: ${formatMarketWindow(polymarketUrl, options)}`,
-    `Window UTC: ${formatMarketWindowUtc(polymarketUrl, options)}`,
+    ...formatMarketWindowUtcLines(polymarketUrl, options),
     `Minimum magnitude: ${options.minimumMagnitude}`,
     `Total earthquakes: ${total}`,
     `Events: ${events.length ? events.join(" | ") : "none"}`,
@@ -514,13 +514,13 @@ function formatMarketWindow(polymarketUrl: string, options: UsgsEarthquakeCountO
   return `${formatEasternDateTime(new Date(window.startAt))} to ${formatEasternDateTime(new Date(window.endAt))}`;
 }
 
-function formatMarketWindowUtc(polymarketUrl: string, options: UsgsEarthquakeCountOptions): string {
+function formatMarketWindowUtcLines(polymarketUrl: string, options: UsgsEarthquakeCountOptions): string[] {
   const window = options.customWindow ?? parsePolymarketDateRangeWindow(polymarketUrl);
   if (!window) {
-    return "configured";
+    return ["Market start UTC: configured", "Market end UTC: configured"];
   }
 
-  return `${window.startAt} to ${window.endAt}`;
+  return [`Market start UTC: ${window.startAt}`, `Market end UTC: ${window.endAt}`];
 }
 
 function formatUsgsEarthquakeSummary(feature: UsgsEarthquakeFeature): string {
