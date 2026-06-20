@@ -181,7 +181,7 @@ export async function updatePolymarketResolvableWatchlist(
     );
   }
 
-  const added = await resolvePolymarketUrlToResolvableWatches(query, now);
+  const added = await resolveResolvableWatchQuery(query, now);
   const existingIds = new Set(watches.map((watch) => normalizeHex(watch.questionId)));
   const newWatches = added.filter((watch) => !existingIds.has(normalizeHex(watch.questionId)));
   const merged = [...watches, ...newWatches];
@@ -306,6 +306,23 @@ export async function resolvePolymarketUrlToResolvableWatches(
   }
 
   return dedupeWatches(watches);
+}
+
+export async function resolveResolvableWatchQuery(query: string, now = new Date()): Promise<ResolvableWatchlistEntry[]> {
+  const questionId = normalizeBytes32(query);
+  if (questionId) {
+    return [
+      {
+        question: `Question ID ${questionId}`,
+        url: "https://polymarket.com",
+        questionId,
+        addedAt: now.toISOString(),
+        lastStatus: "pending"
+      }
+    ];
+  }
+
+  return resolvePolymarketUrlToResolvableWatches(query, now);
 }
 
 function normalizePolymarketResolvablePost(

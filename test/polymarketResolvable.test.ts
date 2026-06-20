@@ -110,6 +110,25 @@ describe("Polymarket resolvable watchlist", () => {
     expect(remove.watches).toHaveLength(0);
   });
 
+  it("adds a raw question ID without requiring a Polymarket URL", async () => {
+    const rawQuestionId = "0xb7c62b781bc62e75ca01a8cc2dcbffd1b7f914efcf066e2613deddd1edaf7550";
+    const add = await updatePolymarketResolvableWatchlist({ settingsJson: null } as Integration, "add", rawQuestionId);
+
+    expect(add.changed).toBe(true);
+    expect(add.watches).toEqual([
+      expect.objectContaining({
+        question: `Question ID ${rawQuestionId}`,
+        url: "https://polymarket.com",
+        questionId: rawQuestionId,
+        lastStatus: "pending"
+      })
+    ]);
+
+    const remove = await updatePolymarketResolvableWatchlist({ settingsJson: add.settingsJson } as Integration, "remove", rawQuestionId);
+    expect(remove.changed).toBe(true);
+    expect(remove.watches).toHaveLength(0);
+  });
+
   it("alerts and removes a watched market when ready(questionID) returns true", async () => {
     const rpcUrl = "https://rpc.example";
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
