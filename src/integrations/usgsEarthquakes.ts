@@ -6,6 +6,7 @@ const sourceUrl = "https://earthquake.usgs.gov/earthquakes/search/";
 const usgsApiUrl = "https://earthquake.usgs.gov/fdsnws/event/1/query";
 const defaultPolymarketUrl = "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-4-may-10";
 const sevenPlusPolymarketUrl = "https://polymarket.com/event/how-many-7pt0-or-above-earthquakes-by-june-30-higher-strikes";
+const sevenPlusYearPolymarketUrl = "https://polymarket.com/event/how-many-7pt0-or-above-earthquakes-in-2026";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const earthquakeMarketSearchQuery = "5.5 earthquakes";
 const minimumMagnitude = "5.5";
@@ -13,6 +14,10 @@ const sevenPlusMinimumMagnitude = "7.0";
 const sevenPlusMarketWindow = {
   startAt: "2025-12-04T17:00:00.000Z",
   endAt: "2026-07-01T03:59:00.000Z"
+};
+const sevenPlusYearMarketWindow = {
+  startAt: "2026-01-01T05:00:00.000Z",
+  endAt: "2027-01-01T04:59:00.000Z"
 };
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
@@ -72,6 +77,12 @@ const sevenPlusOptions: UsgsEarthquakeCountOptions = {
   metricLabel: "USGS 7.0+ earthquake count",
   minimumMagnitude: sevenPlusMinimumMagnitude,
   customWindow: sevenPlusMarketWindow
+};
+
+const sevenPlusYearOptions: UsgsEarthquakeCountOptions = {
+  metricLabel: "USGS 7.0+ earthquake count in 2026",
+  minimumMagnitude: sevenPlusMinimumMagnitude,
+  customWindow: sevenPlusYearMarketWindow
 };
 
 export function extractUsgsEarthquakeCountValue(
@@ -177,6 +188,39 @@ export const usgsSevenPlusEarthquakesAdapter: WebsiteAdapter = {
       value,
       rawValue: extractUsgsEarthquakeCount(value) ?? value,
       unit: "USGS 7.0+ earthquake count",
+      observedAt: new Date()
+    };
+  }
+};
+
+export const usgsSevenPlusEarthquakesYearAdapter: WebsiteAdapter = {
+  id: "usgs-earthquakes-7-plus-2026",
+  commandName: "earthquake2026",
+  displayName: "USGS 7.0+ Earthquakes 2026",
+  sourceUrl,
+  defaultPolymarketUrl: sevenPlusYearPolymarketUrl,
+  defaultChannelName: "earthquake2026",
+  alertRoleName: "USGS 2026 Earthquake Alerts",
+  alertRoleEmoji: "\uD83D\uDCC5",
+  shouldAlertOnChange: shouldAlertOnUsgsEarthquakeCountChange,
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
+    const polymarketUrl = integration?.polymarketUrl ?? sevenPlusYearPolymarketUrl;
+    const response = await fetchWithTimeout(buildUsgsApiUrl(polymarketUrl, sevenPlusYearOptions), {
+      headers: {
+        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`USGS returned HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as UsgsEarthquakeFeatureCollection;
+    const value = extractUsgsEarthquakeCountValue(data, polymarketUrl, sevenPlusYearOptions);
+    return {
+      value,
+      rawValue: extractUsgsEarthquakeCount(value) ?? value,
+      unit: "USGS 7.0+ earthquake count in 2026",
       observedAt: new Date()
     };
   }

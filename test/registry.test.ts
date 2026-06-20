@@ -91,6 +91,7 @@ const expectedCommandIds = [
   ["umichsentiment", "umich-consumer-sentiment"],
   ["earthquake", "usgs-earthquakes"],
   ["earthquake7", "usgs-earthquakes-7-plus"],
+  ["earthquake2026", "usgs-earthquakes-7-plus-2026"],
   ["bviv", "volmex-bviv-low-strikes"],
   ["eviv", "volmex-eviv-high-strikes"],
   ["aliennyc", "white-house-aliens-nyc"],
