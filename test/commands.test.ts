@@ -9,6 +9,7 @@ import { listAdapters } from "../src/integrations/registry.js";
 import {
   buildCheckEmbed,
   buildClearErrorsEmbed,
+  buildErrorEmbed,
   buildEventPostDetailsEmbed,
   buildEventPostMessagePayload,
   buildGroupedRoleSelectorEmbed,
@@ -337,6 +338,13 @@ describe("adapter commands", () => {
     );
   });
 
+  it("omits the Polymarket field from check-failed embeds when no market is configured", () => {
+    const embed = buildErrorEmbed({ ...checkedIntegration, adapterId: "uma-voting-committee", polymarketUrl: null }, "GitHub API failed").toJSON();
+
+    expect(embed.fields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Error", value: "GitHub API failed" })]));
+    expect(embed.fields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Polymarket" })]));
+  });
+
   it("builds event alerts with a prominent strike and Truth Social link button", () => {
     const post: EventMonitorPost = {
       id: "123",
@@ -559,6 +567,34 @@ describe("adapter commands", () => {
     const customId = showMoreButton?.custom_id;
     expect(parseEventDetailsCustomId(String(customId))).toEqual({ integrationId: checkedIntegration.id, eventId: post.id });
     expect(detailsEmbed.fields).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Condition ID", value: "0xcondition" })]));
+  });
+
+  it("omits Polymarket not-set lines from event details when no market is configured", () => {
+    const post: EventMonitorPost = {
+      id: "uma-vote-review:22",
+      type: "UMA voting committee review",
+      alertTitle: "UMA voting review",
+      sourceLabel: "GitHub review",
+      buttonLabel: "Open review",
+      mentionAlertRole: true,
+      text: "Agree with this answer.",
+      qualifyingText: "Agree with this answer.",
+      postedAt: new Date("2026-06-20T06:00:00.000Z"),
+      url: "https://github.com/UMA-rocks/voting-committees/pull/47#pullrequestreview-22",
+      hiddenFields: [{ name: "Pull request", value: "#47 Answers for voting round 10312", inline: false }],
+      imageUrls: [],
+      imageText: "",
+      matchedTerms: [],
+      strikeTerms: []
+    };
+    const detailsEmbed = buildEventPostDetailsEmbed(
+      { ...checkedIntegration, adapterId: "uma-voting-committee", polymarketUrl: null },
+      post
+    ).toJSON();
+    const links = detailsEmbed.fields?.find((field) => field.name === "Links")?.value;
+
+    expect(links).toBe("Original: https://github.com/UMA-rocks/voting-committees/pull/47#pullrequestreview-22");
+    expect(links).not.toContain("Polymarket");
   });
 
   it("uses a Refresh data button for UMA proposal details", () => {

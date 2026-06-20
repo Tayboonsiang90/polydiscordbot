@@ -470,10 +470,7 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
       : [
           {
             name: "Links",
-            value: [
-              `Original: ${post.url}`,
-              `Polymarket: ${post.polymarketUrl ?? formatPolymarketValue(integration)}`
-            ].join("\n"),
+            value: formatEventLinks(integration, post),
             inline: false
           }
         ])
@@ -527,10 +524,7 @@ export function buildEventPostDetailsEmbed(integration: Integration, post: Event
     })),
     {
       name: "Links",
-      value: [
-        `Original: ${post.url}`,
-        `Polymarket: ${post.polymarketUrl ?? formatPolymarketValue(integration)}`
-      ].join("\n"),
+      value: formatEventLinks(integration, post),
       inline: false
     }
   ];
@@ -746,7 +740,7 @@ export function buildErrorEmbed(integration: Integration, message: string): Embe
     .setColor(errorColor)
     .addFields(
       { name: "Error", value: truncateEmbedValue(message), inline: false },
-      { name: "Polymarket", value: formatPolymarketValue(integration), inline: false }
+      ...formatOptionalPolymarketField(integration)
     )
     .setFooter({ text: `Failed at ${nowSingaporeDateTime()}` });
 }
@@ -1135,7 +1129,22 @@ function normalizeTagText(value: string): string {
 }
 
 function formatLinks(integration: Integration): string {
-  return [`Resolution: ${integration.sourceUrl}`, `Polymarket: ${formatPolymarketValue(integration)}`].join("\n");
+  return [
+    `Resolution: ${integration.sourceUrl}`,
+    ...(integration.polymarketUrl ? [`Polymarket: ${integration.polymarketUrl}`] : [])
+  ].join("\n");
+}
+
+function formatEventLinks(integration: Integration, post: EventMonitorPost): string {
+  const polymarketUrl = post.polymarketUrl ?? integration.polymarketUrl;
+  return [
+    `Original: ${post.url}`,
+    ...(polymarketUrl ? [`Polymarket: ${polymarketUrl}`] : [])
+  ].join("\n");
+}
+
+function formatOptionalPolymarketField(integration: Integration): Array<{ name: string; value: string; inline: false }> {
+  return integration.polymarketUrl ? [{ name: "Polymarket", value: integration.polymarketUrl, inline: false }] : [];
 }
 
 function formatPolymarketValue(integration: Integration): string {
