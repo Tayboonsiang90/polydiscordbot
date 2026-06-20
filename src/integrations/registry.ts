@@ -87,7 +87,7 @@ import type { WebsiteAdapter } from "./types.js";
 import { umaVoteCommitsAdapter } from "./umaVoteCommits.js";
 import { umaVoteRevealsAdapter } from "./umaVoteReveals.js";
 import { umaVotingCommitteeAdapter } from "./umaVotingCommittee.js";
-import { usgsEarthquakesAdapter } from "./usgsEarthquakes.js";
+import { usgsEarthquakesAdapter, usgsSevenPlusEarthquakesAdapter } from "./usgsEarthquakes.js";
 import { volmexBvivAdapter } from "./volmexBviv.js";
 import { volmexEvivAdapter } from "./volmexEviv.js";
 import { whiteHouseAliensNycAdapter } from "./whiteHouseAliensNyc.js";
@@ -184,6 +184,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [umaVoteRevealsAdapter.id, umaVoteRevealsAdapter],
   [umaVotingCommitteeAdapter.id, umaVotingCommitteeAdapter],
   [usgsEarthquakesAdapter.id, usgsEarthquakesAdapter],
+  [usgsSevenPlusEarthquakesAdapter.id, usgsSevenPlusEarthquakesAdapter],
   [volmexBvivAdapter.id, volmexBvivAdapter],
   [volmexEvivAdapter.id, volmexEvivAdapter],
   [whiteHouseAliensNycAdapter.id, whiteHouseAliensNycAdapter],

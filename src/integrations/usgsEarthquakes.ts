@@ -5,9 +5,15 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 const sourceUrl = "https://earthquake.usgs.gov/earthquakes/search/";
 const usgsApiUrl = "https://earthquake.usgs.gov/fdsnws/event/1/query";
 const defaultPolymarketUrl = "https://polymarket.com/event/how-many-5pt5-or-above-earthquakes-may-4-may-10";
+const sevenPlusPolymarketUrl = "https://polymarket.com/event/how-many-7pt0-or-above-earthquakes-by-june-30-higher-strikes";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const earthquakeMarketSearchQuery = "5.5 earthquakes";
 const minimumMagnitude = "5.5";
+const sevenPlusMinimumMagnitude = "7.0";
+const sevenPlusMarketWindow = {
+  startAt: "2025-12-04T17:00:00.000Z",
+  endAt: "2026-07-01T03:59:00.000Z"
+};
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
@@ -37,6 +43,12 @@ type GammaSearchEvent = {
   tags?: Array<{ slug?: unknown }>;
 };
 
+type UsgsEarthquakeCountOptions = {
+  metricLabel: string;
+  minimumMagnitude: string;
+  customWindow?: { startAt: string; endAt: string };
+};
+
 export type UsgsEarthquakeFeature = {
   id?: string;
   properties?: {
@@ -51,14 +63,29 @@ export type UsgsEarthquakeFeature = {
   } | null;
 };
 
-export function extractUsgsEarthquakeCountValue(data: UsgsEarthquakeFeatureCollection, polymarketUrl = defaultPolymarketUrl): string {
+const fivePointFiveOptions: UsgsEarthquakeCountOptions = {
+  metricLabel: "USGS 5.5+ earthquake count",
+  minimumMagnitude
+};
+
+const sevenPlusOptions: UsgsEarthquakeCountOptions = {
+  metricLabel: "USGS 7.0+ earthquake count",
+  minimumMagnitude: sevenPlusMinimumMagnitude,
+  customWindow: sevenPlusMarketWindow
+};
+
+export function extractUsgsEarthquakeCountValue(
+  data: UsgsEarthquakeFeatureCollection,
+  polymarketUrl = defaultPolymarketUrl,
+  options = fivePointFiveOptions
+): string {
   const total = typeof data.metadata?.count === "number" ? data.metadata.count : (data.features?.length ?? 0);
   const events = (data.features ?? []).map(formatUsgsEarthquakeSummary);
   return [
-    "Metric: USGS 5.5+ earthquake count",
-    `Window ET: ${formatMarketWindow(polymarketUrl)}`,
-    `Window UTC: ${formatMarketWindowUtc(polymarketUrl)}`,
-    `Minimum magnitude: ${minimumMagnitude}`,
+    `Metric: ${options.metricLabel}`,
+    `Window ET: ${formatMarketWindow(polymarketUrl, options)}`,
+    `Window UTC: ${formatMarketWindowUtc(polymarketUrl, options)}`,
+    `Minimum magnitude: ${options.minimumMagnitude}`,
     `Total earthquakes: ${total}`,
     `Events: ${events.length ? events.join(" | ") : "none"}`,
     `Resolution: ${sourceUrl}`
@@ -122,6 +149,39 @@ export const usgsEarthquakesAdapter: WebsiteAdapter = {
   }
 };
 
+export const usgsSevenPlusEarthquakesAdapter: WebsiteAdapter = {
+  id: "usgs-earthquakes-7-plus",
+  commandName: "earthquake7",
+  displayName: "USGS 7.0+ Earthquakes",
+  sourceUrl,
+  defaultPolymarketUrl: sevenPlusPolymarketUrl,
+  defaultChannelName: "earthquake7",
+  alertRoleName: "USGS 7.0 Earthquake Alerts",
+  alertRoleEmoji: "\uD83C\uDF0B",
+  shouldAlertOnChange: shouldAlertOnUsgsEarthquakeCountChange,
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
+    const polymarketUrl = integration?.polymarketUrl ?? sevenPlusPolymarketUrl;
+    const response = await fetchWithTimeout(buildUsgsApiUrl(polymarketUrl, sevenPlusOptions), {
+      headers: {
+        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`USGS returned HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as UsgsEarthquakeFeatureCollection;
+    const value = extractUsgsEarthquakeCountValue(data, polymarketUrl, sevenPlusOptions);
+    return {
+      value,
+      rawValue: extractUsgsEarthquakeCount(value) ?? value,
+      unit: "USGS 7.0+ earthquake count",
+      observedAt: new Date()
+    };
+  }
+};
+
 export function shouldAlertOnUsgsEarthquakeCountChange(previousValue: string | null, currentValue: string): boolean {
   const currentCount = extractUsgsEarthquakeCount(currentValue);
   const previousCount = extractUsgsEarthquakeCount(previousValue);
@@ -180,15 +240,15 @@ export async function refreshEarthquakePolymarketQueue(
   }
 }
 
-export function buildUsgsApiUrl(polymarketUrl: string): string {
-  const window = parsePolymarketDateRangeWindow(polymarketUrl);
+export function buildUsgsApiUrl(polymarketUrl: string, options = fivePointFiveOptions): string {
+  const window = options.customWindow ?? parsePolymarketDateRangeWindow(polymarketUrl);
   if (!window) {
     throw new Error(`Could not parse earthquake market date range from Polymarket URL: ${polymarketUrl}`);
   }
 
   const url = new URL(usgsApiUrl);
   url.searchParams.set("format", "geojson");
-  url.searchParams.set("minmagnitude", minimumMagnitude);
+  url.searchParams.set("minmagnitude", options.minimumMagnitude);
   url.searchParams.set("orderby", "time");
   url.searchParams.set("starttime", window.startAt);
   url.searchParams.set("endtime", window.endAt);
@@ -332,8 +392,8 @@ function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, 
   return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
 }
 
-function formatMarketWindow(polymarketUrl: string): string {
-  const window = parsePolymarketDateRangeWindow(polymarketUrl);
+function formatMarketWindow(polymarketUrl: string, options: UsgsEarthquakeCountOptions): string {
+  const window = options.customWindow ?? parsePolymarketDateRangeWindow(polymarketUrl);
   if (!window) {
     return "configured";
   }
@@ -341,8 +401,8 @@ function formatMarketWindow(polymarketUrl: string): string {
   return `${formatEasternDateTime(new Date(window.startAt))} to ${formatEasternDateTime(new Date(window.endAt))}`;
 }
 
-function formatMarketWindowUtc(polymarketUrl: string): string {
-  const window = parsePolymarketDateRangeWindow(polymarketUrl);
+function formatMarketWindowUtc(polymarketUrl: string, options: UsgsEarthquakeCountOptions): string {
+  const window = options.customWindow ?? parsePolymarketDateRangeWindow(polymarketUrl);
   if (!window) {
     return "configured";
   }

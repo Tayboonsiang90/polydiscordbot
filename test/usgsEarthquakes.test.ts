@@ -113,6 +113,30 @@ describe("USGS earthquakes adapter", () => {
     expect(url.searchParams.has("limit")).toBe(false);
   });
 
+  it("tracks the fixed 7.0+ by-June-30 market rules window", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ metadata: { count: 6 }, features: [feature] })
+      })
+    );
+    const { usgsSevenPlusEarthquakesAdapter } = await import("../src/integrations/usgsEarthquakes.js");
+
+    const result = await usgsSevenPlusEarthquakesAdapter.fetchCurrentValue!({
+      polymarketUrl: "https://polymarket.com/event/how-many-7pt0-or-above-earthquakes-by-june-30-higher-strikes"
+    } as Integration);
+    const requestedUrl = new URL(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]));
+
+    expect(requestedUrl.searchParams.get("minmagnitude")).toBe("7.0");
+    expect(requestedUrl.searchParams.get("starttime")).toBe("2025-12-04T17:00:00.000Z");
+    expect(requestedUrl.searchParams.get("endtime")).toBe("2026-07-01T03:59:00.000Z");
+    expect(result.value).toContain("Metric: USGS 7.0+ earthquake count");
+    expect(result.value).toContain("Window ET: 2025-12-04 12:00 to 2026-06-30 23:59");
+    expect(result.value).toContain("Minimum magnitude: 7.0");
+    expect(result.rawValue).toBe("6");
+  });
+
   it("discovers and queues the next weekly 5.5 earthquake market with a timestamped slug near expiry", async () => {
     vi.stubGlobal(
       "fetch",
