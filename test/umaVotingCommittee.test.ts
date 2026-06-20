@@ -162,6 +162,17 @@ describe("UMA voting committee adapter", () => {
       text: expect.stringContaining("P4")
     });
     expect(answerPost?.text).toContain("Will the highest temperature in Moscow be 4\u00b0C or below on May 29?");
+    expect(answerPost?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Author", value: "jessioc" }),
+        expect.objectContaining({ name: "Round", value: "10302" }),
+        expect.objectContaining({
+          name: "Previous answers",
+          value: "Will the highest temperature in Moscow be 4\u00b0C or below on May 29?: P0 -> P4"
+        })
+      ])
+    );
+    expect(answerPost?.hiddenFields).toBeUndefined();
     expect(commitNotePost?.text).toBe("I think P4 is the right answer.");
     expect(issueCommentPost?.text).toBe("Line-level discussion belongs here.");
     expect(reviewPost?.text).toBe("Agree with this answer.");

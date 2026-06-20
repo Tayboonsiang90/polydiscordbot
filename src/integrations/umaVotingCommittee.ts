@@ -248,7 +248,7 @@ export function normalizeUmaVotingCommit(commit: GitHubCommitDetail, pull: GitHu
       url: commitUrl,
       hideDefaultEventFields: true,
       hideLinksField: true,
-      hiddenFields: buildCommitHiddenFields(pull, commit, author, round, changes),
+      fields: buildCommitDetailFields(pull, commit, author, round, changes),
       imageUrls: [],
       imageText: "",
       matchedTerms: [],
@@ -276,7 +276,7 @@ export function normalizeUmaVotingCommit(commit: GitHubCommitDetail, pull: GitHu
         { name: "Author", value: author, inline: true },
         { name: "Round", value: round ?? "unknown", inline: true }
       ],
-      hiddenFields: buildCommitHiddenFields(pull, commit, author, round, changes),
+      hiddenFields: buildCommitDetailFields(pull, commit, author, round, changes),
       imageUrls: [],
       imageText: "",
       matchedTerms: [],
@@ -406,7 +406,7 @@ function extractAnswerChangesFromCommit(commit: GitHubCommitDetail): UmaVotingAn
   );
 }
 
-function buildCommitHiddenFields(
+function buildCommitDetailFields(
   pull: GitHubPull,
   commit: GitHubCommitDetail,
   author: string,
