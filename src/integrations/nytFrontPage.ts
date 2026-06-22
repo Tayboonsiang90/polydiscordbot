@@ -23,6 +23,7 @@ const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 const pageImageWidth = 1200;
+const pressReaderPublicationCid = "8302";
 const ocrCache = new Map<string, NytOcrResult>();
 
 export type NytFrontPageSettings = {
@@ -477,18 +478,23 @@ export function extractNytFrontPageIssue(html: string, pageUrl: string): NytFron
       articles[0]?.datePublished ??
       $("[typeof='PublicationIssue'] [property='datePublished']").first().text()
   );
+  const fallbackDate = date ?? parseIssueDateFromPressReaderUrl(pageUrl);
   const thumbnailUrl = issue?.thumbnailUrl ?? $("[typeof='PublicationIssue'] [property='thumbnailUrl'] img").first().attr("src");
   const headlines = articles.map((article) => normalizeText(article.headline ?? "")).filter(isNonEmptyString);
 
-  if (!date || !thumbnailUrl) {
+  if (!fallbackDate) {
     throw new Error("Could not find NYT front page issue metadata");
   }
 
+  const pageImageUrl = thumbnailUrl
+    ? normalizePageImageUrl(decodeHtmlEntities(thumbnailUrl), fallbackDate)
+    : buildNytFrontPageImageUrl(fallbackDate, pageImageWidth);
+
   return {
-    id: `nyt-front-page-${date}`,
-    date,
+    id: `nyt-front-page-${fallbackDate}`,
+    date: fallbackDate,
     pageUrl,
-    pageImageUrl: normalizePageImageUrl(decodeHtmlEntities(thumbnailUrl), date),
+    pageImageUrl,
     headlines
   };
 }
@@ -647,9 +653,36 @@ async function fetchLatestIssueDate(): Promise<string> {
   const heading = normalizeText($("h1").first().text());
   const date = parseIssueHeadingDate(heading);
   if (!date) {
+    const latestImageDate = await findLatestAvailableIssueDateByImage();
+    if (latestImageDate) {
+      return latestImageDate;
+    }
     throw new Error("Could not find latest NYT PressReader issue date");
   }
   return date;
+}
+
+async function findLatestAvailableIssueDateByImage(now = new Date()): Promise<string | null> {
+  const start = getEasternDateParts(now);
+  const cursor = new Date(Date.UTC(start.year, start.month - 1, start.day));
+  for (let offset = 0; offset < 14; offset += 1) {
+    const issueDate = formatUtcDate(cursor);
+    try {
+      const response = await fetchWithTimeout(
+        buildNytFrontPageImageUrl(issueDate, 100),
+        { method: "HEAD", headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" } },
+        10_000
+      );
+      if (response.ok && String(response.headers.get("content-type") ?? "").toLowerCase().includes("image")) {
+        return issueDate;
+      }
+    } catch {
+      // Try the previous issue date.
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+
+  return null;
 }
 
 async function recognizeImageText(imageUrl: string | undefined): Promise<NytOcrResult> {
@@ -971,8 +1004,22 @@ function normalizePageImageUrl(value: string, issueDate?: string): string {
   return url.toString();
 }
 
+function buildNytFrontPageImageUrl(issueDate: string, width: number): string {
+  const url = new URL("https://t.prcdn.co/img");
+  url.searchParams.set("cid", pressReaderPublicationCid);
+  url.searchParams.set("page", "1");
+  url.searchParams.set("date", issueDate.replaceAll("-", ""));
+  url.searchParams.set("width", String(width));
+  return url.toString();
+}
+
 function normalizeIssueDate(value: string | undefined): string | null {
   const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+function parseIssueDateFromPressReaderUrl(value: string): string | null {
+  const match = value.match(/\/(\d{4})(\d{2})(\d{2})\/page\/1(?:[/?#]|$)/);
   return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
 }
 

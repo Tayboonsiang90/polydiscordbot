@@ -144,6 +144,21 @@ describe("NYT front page adapter", () => {
     });
   });
 
+  it("falls back to the PressReader URL date and image endpoint when metadata is absent", () => {
+    expect(
+      extractNytFrontPageIssue(
+        "<!DOCTYPE html><html><head><title>The New York Times Replica Edition</title></head><body></body></html>",
+        "https://nytimes.pressreader.com/the-new-york-times/20260518/page/1"
+      )
+    ).toEqual({
+      id: "nyt-front-page-2026-05-18",
+      date: "2026-05-18",
+      pageUrl: "https://nytimes.pressreader.com/the-new-york-times/20260518/page/1",
+      pageImageUrl: "https://t.prcdn.co/img?cid=8302&page=1&date=20260518&width=1200",
+      headlines: []
+    });
+  });
+
   it("reads stored NYT strike settings", () => {
     expect(
       parseNytFrontPageSettings(
