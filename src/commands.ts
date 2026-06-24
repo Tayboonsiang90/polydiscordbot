@@ -538,6 +538,12 @@ export async function handleAdapterCommand(
     return;
   }
 
+  const subcommand = interaction.options.getSubcommand();
+  const checkCommandDeferred = subcommand === "check";
+  if (checkCommandDeferred) {
+    await interaction.deferReply();
+  }
+
   const adapter = getAdapterByCommandName(interaction.commandName);
   let integration = database.getIntegrationByChannel(interaction.guild.id, interaction.channel.id);
   let proposalChannelTag: TagFilterEntry | null = null;
@@ -551,19 +557,27 @@ export async function handleAdapterCommand(
   }
 
   if (!integration || integration.adapterId !== adapter.id) {
-    await interaction.reply({
-      content: `Use this command in the ${adapter.displayName} channel.`,
-      flags: MessageFlags.Ephemeral
-    });
+    if (checkCommandDeferred) {
+      await interaction.editReply(`Use this command in the ${adapter.displayName} channel.`);
+    } else {
+      await interaction.reply({
+        content: `Use this command in the ${adapter.displayName} channel.`,
+        flags: MessageFlags.Ephemeral
+      });
+    }
     return;
   }
 
-  const subcommand = interaction.options.getSubcommand();
   if (proposalChannelTag && subcommand !== "tagblocks" && subcommand !== "addresses") {
-    await interaction.reply({
-      content: `Use this command in #${adapter.defaultChannelName}. This tag channel only supports /${adapter.commandName} tagblocks and addresses.`,
-      flags: MessageFlags.Ephemeral
-    });
+    const message = `Use this command in #${adapter.defaultChannelName}. This tag channel only supports /${adapter.commandName} tagblocks and addresses.`;
+    if (checkCommandDeferred) {
+      await interaction.editReply(message);
+    } else {
+      await interaction.reply({
+        content: message,
+        flags: MessageFlags.Ephemeral
+      });
+    }
     return;
   }
 
@@ -1055,7 +1069,6 @@ export async function handleAdapterCommand(
   }
 
   if (subcommand === "check") {
-    await interaction.deferReply();
     await interaction.editReply(`Checking ${integration.displayName}...`);
     if (adapter.fetchEventUpdates) {
       const historicalCheck = adapter.manualCheckMode === "historical";

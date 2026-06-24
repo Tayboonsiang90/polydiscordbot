@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildAdapterCommands,
   buildBotCommands,
   formatPolymarketLine,
+  handleAdapterCommand,
   normalizePolymarketUrl
 } from "../src/commands.js";
 import { listAdapters } from "../src/integrations/registry.js";
@@ -52,6 +53,25 @@ const checkedIntegration: Integration = {
 };
 
 describe("adapter commands", () => {
+  it("defers check commands before integration lookup work", async () => {
+    const interaction = {
+      guild: { id: "guild" },
+      channel: { id: "channel" },
+      commandName: "bonbast",
+      options: { getSubcommand: () => "check" },
+      deferReply: vi.fn()
+    };
+    const database = {
+      getIntegrationByChannel: vi.fn(() => {
+        throw new Error("simulated slow database failure");
+      })
+    };
+
+    await expect(handleAdapterCommand(interaction as never, database as never)).rejects.toThrow("simulated slow database failure");
+    expect(interaction.deferReply).toHaveBeenCalledOnce();
+    expect(database.getIntegrationByChannel).toHaveBeenCalledOnce();
+  });
+
   it("registers bot summarize as a global bot command", () => {
     expect(buildBotCommands()[0].toJSON()).toMatchObject({
       name: "bot",
