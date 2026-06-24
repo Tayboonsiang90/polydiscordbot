@@ -24,6 +24,23 @@ const sampleYoutubeFeed = `<?xml version="1.0" encoding="UTF-8"?>
   </entry>
 </feed>`;
 
+const olderMmaFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <yt:videoId>Ag7GEsPQhFo</yt:videoId>
+    <title>JRE MMA Show #181 with Justin Gaethje &amp; Trevor Wittman</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=Ag7GEsPQhFo"/>
+    <published>2026-06-20T17:00:09+00:00</published>
+  </entry>
+</feed>`;
+
+const newerTaylorSheridanValue = [
+  "Title: Joe Rogan Experience #2517 - Taylor Sheridan",
+  "Published: 2026-06-23T17:00:28+00:00",
+  "URL: https://www.youtube.com/watch?v=uYO2fJ-M_M4",
+  "Source: YouTube RSS"
+].join("\n");
+
 describe("Joe Rogan Podcast adapter", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -66,6 +83,19 @@ describe("Joe Rogan Podcast adapter", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://www.youtube.com/feeds/videos.xml?channel_id=UCzQUP1qoWDoEbmsQxvdjxgQ");
     expect(result.value).toContain("Joe Rogan Experience #2514 - Cameron Hanes");
+  });
+
+  it("keeps the previous episode when YouTube RSS serves an older cached episode", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => olderMmaFeed
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await joeRoganPodcastAdapter.fetchCurrentValue({ lastValue: newerTaylorSheridanValue } as Integration);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.value).toBe(newerTaylorSheridanValue);
   });
 
   it("builds a full-week ET window from Joe Rogan weekly market slugs", () => {

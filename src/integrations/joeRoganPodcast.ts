@@ -89,7 +89,7 @@ export const joeRoganPodcastAdapter: WebsiteAdapter = {
   async upsertPolymarketMarket(integration: Integration, url: string): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
     return upsertJoeRoganPolymarketMarket(integration, url);
   },
-  async fetchCurrentValue(): Promise<AdapterValue> {
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const response = await fetchWithTimeout(joeRoganYoutubeFeedUrl, {
       headers: {
         "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
@@ -100,7 +100,7 @@ export const joeRoganPodcastAdapter: WebsiteAdapter = {
       throw new Error(`Joe Rogan YouTube feed returned HTTP ${response.status}`);
     }
 
-    const value = extractLatestJoeRoganEpisodeValue(await response.text());
+    const value = keepNewestJoeRoganEpisodeValue(extractLatestJoeRoganEpisodeValue(await response.text()), integration?.lastValue);
     return {
       value,
       rawValue: value,
@@ -193,6 +193,16 @@ export function buildJoeRoganQueueMarketFromUrl(url: string, now = new Date()): 
 
 function formatJoeRoganEpisodeValue(episode: JoeRoganEpisode): string {
   return [`Title: ${episode.title}`, `Published: ${episode.publishedAt}`, `URL: ${episode.url}`, "Source: YouTube RSS"].join("\n");
+}
+
+function keepNewestJoeRoganEpisodeValue(currentValue: string, previousValue: string | null | undefined): string {
+  const previousPublishedAt = extractJoeRoganValuePublishedAt(previousValue ?? null);
+  const currentPublishedAt = extractJoeRoganValuePublishedAt(currentValue);
+  if (!previousPublishedAt || !currentPublishedAt) {
+    return currentValue;
+  }
+
+  return currentPublishedAt.getTime() < previousPublishedAt.getTime() ? previousValue! : currentValue;
 }
 
 function shouldDiscoverJoeRoganMarkets(settings: JoeRoganDiscoverySettings, now: Date): boolean {
@@ -382,6 +392,20 @@ function normalizeText(value: string): string {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function extractJoeRoganValuePublishedAt(value: string | null): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.match(/^Published:\s*(.+)$/m);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const publishedAt = new Date(match[1]);
+  return Number.isNaN(publishedAt.getTime()) ? null : publishedAt;
 }
 
 function monthNumber(value: string | undefined): number | null {
