@@ -17,6 +17,7 @@ import { cdcFluHospitalizationAdapter } from "./cdcFluHospitalization.js";
 import { cdcMeaslesAdapter } from "./cdcMeasles.js";
 import { censusDurableGoodsAdapter } from "./censusDurableGoods.js";
 import { claudeCodeCommitsAdapter } from "./claudeCodeCommits.js";
+import { claudeCodeCommitsAverageAdapter } from "./claudeCodeCommitsAverage.js";
 import { claudeDowntimeAdapter } from "./claudeDowntime.js";
 import { cloudflareCriticalAdapter } from "./cloudflareCritical.js";
 import { crossPlatformArbitrageAdapter } from "./crossPlatformArbitrage.js";
@@ -119,6 +120,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [cdcFluHospitalizationAdapter.id, cdcFluHospitalizationAdapter],
   [cdcMeaslesAdapter.id, cdcMeaslesAdapter],
   [censusDurableGoodsAdapter.id, censusDurableGoodsAdapter],
+  [claudeCodeCommitsAverageAdapter.id, claudeCodeCommitsAverageAdapter],
   [claudeCodeCommitsAdapter.id, claudeCodeCommitsAdapter],
   [claudeDowntimeAdapter.id, claudeDowntimeAdapter],
   [cloudflareCriticalAdapter.id, cloudflareCriticalAdapter],

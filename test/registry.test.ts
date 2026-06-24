@@ -22,6 +22,7 @@ const expectedCommandIds = [
   ["fluhosp", "cdc-flu-hospitalization"],
   ["measles", "cdc-measles"],
   ["durablegoods", "census-durable-goods"],
+  ["claudeavg", "claude-code-commits-average"],
   ["claudecommits", "claude-code-commits"],
   ["claudedown", "claude-downtime"],
   ["cloudflare", "cloudflare-critical-incidents"],
@@ -152,6 +153,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("lemonade").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("lemonade").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
+    expect(getAdapterByCommandName("claudeavg").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();
     expect(getAdapterByCommandName("umaproposals").updateTagFilters).toBeDefined();
