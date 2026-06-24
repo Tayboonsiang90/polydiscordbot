@@ -89,6 +89,7 @@ const expectedCommandIds = [
   ["trumpschedule", "trump-schedule"],
   ["trumptruth", "trump-truth"],
   ["tsa", "tsa-passengers"],
+  ["treasurymts", "treasury-mts-deficit"],
   ["umichsentiment", "umich-consumer-sentiment"],
   ["earthquake", "usgs-earthquakes"],
   ["earthquake65", "usgs-earthquakes-6-5"],

@@ -83,6 +83,7 @@ import { trumpGettyPhotosAdapter } from "./trumpGettyPhotos.js";
 import { trumpScheduleAdapter } from "./trumpSchedule.js";
 import { trumpTruthAdapter } from "./trumpTruth.js";
 import { tsaPassengersAdapter } from "./tsaPassengers.js";
+import { treasuryMtsDeficitAdapter } from "./treasuryMtsDeficit.js";
 import { umichConsumerSentimentAdapter } from "./umichConsumerSentiment.js";
 import type { WebsiteAdapter } from "./types.js";
 import { umaVoteCommitsAdapter } from "./umaVoteCommits.js";
@@ -186,6 +187,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [trumpScheduleAdapter.id, trumpScheduleAdapter],
   [trumpTruthAdapter.id, trumpTruthAdapter],
   [tsaPassengersAdapter.id, tsaPassengersAdapter],
+  [treasuryMtsDeficitAdapter.id, treasuryMtsDeficitAdapter],
   [umichConsumerSentimentAdapter.id, umichConsumerSentimentAdapter],
   [umaVoteCommitsAdapter.id, umaVoteCommitsAdapter],
   [umaVoteRevealsAdapter.id, umaVoteRevealsAdapter],
