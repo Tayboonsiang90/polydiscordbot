@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractOpenAiChatGptComponentsFromStatusHtml,
   extractOpenAiIncidentComponentImpacts,
+  filterNewOpenAiDailyReportDay,
   formatOpenAiChatGptOutageValue,
   getOpenAiChatGptOutagePeriod,
   getOpenAiChatGptQualifyingOutages,
@@ -121,6 +122,22 @@ describe("OpenAI ChatGPT outage adapter", () => {
     expect(value).toContain("Days: 2026-06-02, 2026-06-03");
     expect(openAiChatGptOutagesShouldAlertOnChange(null, value)).toBe(true);
     expect(openAiChatGptOutagesShouldAlertOnChange(value, value)).toBe(false);
+  });
+
+  it("alerts once for the latest completed ET day even with no outage", () => {
+    const period = getOpenAiChatGptOutagePeriod({ settingsJson: JSON.stringify({ year: 2026, month: 6 }) } as Integration);
+    const first = filterNewOpenAiDailyReportDay(null, period, new Date("2026-06-05T14:00:00.000Z"));
+    const storedValue = formatOpenAiChatGptOutageValue([], period, [], first);
+    const second = filterNewOpenAiDailyReportDay(storedValue, period, new Date("2026-06-05T15:00:00.000Z"));
+    const quietValue = formatOpenAiChatGptOutageValue([], period, [], second);
+
+    expect(first.newDailyReportDay).toBe("2026-06-04");
+    expect(first.reportedDailyDates).toEqual(["2026-06-04"]);
+    expect(storedValue).toContain("2026-06-04 ET - no qualifying ChatGPT Partial/Full Outage currently detected");
+    expect(openAiChatGptOutagesShouldAlertOnChange(null, storedValue)).toBe(true);
+    expect(second.newDailyReportDay).toBeNull();
+    expect(second.reportedDailyDates).toEqual(["2026-06-04"]);
+    expect(openAiChatGptOutagesShouldAlertOnChange(storedValue, quietValue)).toBe(false);
   });
 
   it("includes non-ChatGPT partial/full outages as review-only items", () => {

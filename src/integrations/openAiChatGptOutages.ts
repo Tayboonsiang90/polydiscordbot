@@ -71,6 +71,11 @@ type OpenAiOutagePeriod = OpenAiChatGptOutageSettings & {
   endAt: Date;
 };
 
+type OpenAiDailyReportState = {
+  newDailyReportDay: string | null;
+  reportedDailyDates: string[];
+};
+
 export const openAiChatGptOutagesAdapter: WebsiteAdapter = {
   id: "openai-chatgpt-outages",
   commandName: "chatgptoutage",
@@ -116,7 +121,8 @@ export const openAiChatGptOutagesAdapter: WebsiteAdapter = {
     };
     const outages = getOpenAiChatGptQualifyingOutages(outageInput);
     const reviewOutages = getOpenAiReviewOutages(outageInput);
-    const value = formatOpenAiChatGptOutageValue(outages, period, reviewOutages);
+    const dailyReportState = filterNewOpenAiDailyReportDay(integration?.lastValue ?? null, period, observedAt);
+    const value = formatOpenAiChatGptOutageValue(outages, period, reviewOutages, dailyReportState);
 
     return {
       value,
@@ -250,10 +256,32 @@ export function getOpenAiReviewOutages(input: {
     .sort((left, right) => left.resolvedAt.localeCompare(right.resolvedAt));
 }
 
+export function filterNewOpenAiDailyReportDay(
+  previousValue: string | null,
+  period: OpenAiOutagePeriod,
+  now = new Date()
+): OpenAiDailyReportState {
+  const reportedDates = parseStoredReportedDailyDates(previousValue);
+  const latestReportableDay = getLatestCompletedEtDayInPeriod(period, now);
+  if (latestReportableDay && !reportedDates.has(latestReportableDay)) {
+    reportedDates.add(latestReportableDay);
+    return {
+      newDailyReportDay: latestReportableDay,
+      reportedDailyDates: [...reportedDates].sort()
+    };
+  }
+
+  return {
+    newDailyReportDay: null,
+    reportedDailyDates: [...reportedDates].sort()
+  };
+}
+
 export function formatOpenAiChatGptOutageValue(
   outages: OpenAiChatGptOutageIncident[],
   period: OpenAiOutagePeriod,
-  reviewOutages: OpenAiReviewOutageIncident[] = outages.map((outage) => ({ ...outage, isChatGptAffected: true }))
+  reviewOutages: OpenAiReviewOutageIncident[] = outages.map((outage) => ({ ...outage, isChatGptAffected: true })),
+  dailyReportState: OpenAiDailyReportState = { newDailyReportDay: null, reportedDailyDates: [] }
 ): string {
   const outageDates = getUniqueOutageDates(outages);
   return [
@@ -261,6 +289,12 @@ export function formatOpenAiChatGptOutageValue(
     `Period: ${period.label} ET`,
     `Qualifying days: ${outageDates.length}`,
     `Days: ${outageDates.length ? outageDates.join(", ") : "none"}`,
+    "New Daily Report:",
+    dailyReportState.newDailyReportDay
+      ? formatOpenAiDailyReportDay(dailyReportState.newDailyReportDay, outageDates)
+      : "none",
+    "Reported Daily Dates:",
+    dailyReportState.reportedDailyDates.length ? dailyReportState.reportedDailyDates.join(", ") : "none",
     "Qualifying resolved incidents:",
     outages.length ? outages.map(formatOutageIncident).join("\n") : "none",
     "Review-only Partial/Full Outage incidents:",
@@ -270,6 +304,11 @@ export function formatOpenAiChatGptOutageValue(
 }
 
 export function openAiChatGptOutagesShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+  const dailyReportSection = extractStoredSection(currentValue, "New Daily Report", "Reported Daily Dates");
+  if (dailyReportSection && dailyReportSection.trim() !== "none") {
+    return true;
+  }
+
   const previousDays = new Set(parseOutageDays(previousValue));
   return parseOutageDays(currentValue).some((day) => !previousDays.has(day));
 }
@@ -384,6 +423,24 @@ function getUniqueOutageDates(outages: OpenAiChatGptOutageIncident[]): string[] 
   return [...new Set(outages.flatMap((incident) => incident.outageDatesEt))].sort();
 }
 
+function getLatestCompletedEtDayInPeriod(period: OpenAiOutagePeriod, now: Date): string | null {
+  const currentEtDate = getEasternDate(now);
+  const candidate = addDate(currentEtDate, -1);
+  const firstPeriodDate = getEasternDate(period.startAt);
+  const lastPeriodDate = addDate(getEasternDate(period.endAt), -1);
+  if (candidate < firstPeriodDate) {
+    return null;
+  }
+
+  return candidate > lastPeriodDate ? lastPeriodDate : candidate;
+}
+
+function formatOpenAiDailyReportDay(day: string, outageDates: string[]): string {
+  return outageDates.includes(day)
+    ? `${day} ET - qualifying ChatGPT Partial/Full Outage day currently detected`
+    : `${day} ET - no qualifying ChatGPT Partial/Full Outage currently detected`;
+}
+
 function formatOutageIncident(incident: OpenAiChatGptOutageIncident): string {
   return [
     `${incident.outageDatesEt.join(", ")} — ${incident.name}`,
@@ -411,6 +468,28 @@ function parseOutageDays(value: string | null): string[] {
   }
 
   return [...match[1].matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((date) => date[0]);
+}
+
+function parseStoredReportedDailyDates(previousValue: string | null): Set<string> {
+  const section = extractStoredSection(previousValue, "Reported Daily Dates", "Qualifying resolved incidents");
+  const dates = [...(section ?? "").matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
+  return new Set(dates);
+}
+
+function extractStoredSection(value: string | null, heading: string, nextHeading: string): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const startToken = `${heading}:\n`;
+  const start = value.indexOf(startToken);
+  if (start === -1) {
+    return null;
+  }
+
+  const afterStart = start + startToken.length;
+  const next = value.indexOf(`\n${nextHeading}:`, afterStart);
+  return (next === -1 ? value.slice(afterStart) : value.slice(afterStart, next)).trim();
 }
 
 function formatComponentStatus(status: string): string {
