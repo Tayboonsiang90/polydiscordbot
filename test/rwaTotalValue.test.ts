@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeRwaCompressedPayload,
   extractLatestRwaTotalValuePoint,
+  extractRwaTotalValuePoints,
   formatRwaTotalValue,
   rwaTotalValueAdapter
 } from "../src/integrations/rwaTotalValue.js";
@@ -13,6 +14,8 @@ const sampleDecodedResponse = {
     {
       group: { id: 27, name: "US Treasury Debt" },
       points: [
+        ["2026-05-15", 900_000_000],
+        ["2026-06-07", 950_000_000],
         ["2026-06-13", 1_000_000_000],
         ["2026-06-14", 1_250_000_000]
       ]
@@ -20,6 +23,8 @@ const sampleDecodedResponse = {
     {
       group: { id: 37, name: "Commodities" },
       points: [
+        ["2026-05-15", 400_000_000],
+        ["2026-06-07", 550_000_000],
         ["2026-06-13", 500_000_000],
         ["2026-06-14", 600_000_000]
       ]
@@ -46,11 +51,15 @@ describe("RWA Total Value integration", () => {
   });
 
   it("formats the monitored value with source mode context", () => {
-    const value = formatRwaTotalValue(extractLatestRwaTotalValuePoint(sampleDecodedResponse));
+    const points = extractRwaTotalValuePoints(sampleDecodedResponse);
+    const value = formatRwaTotalValue(extractLatestRwaTotalValuePoint(sampleDecodedResponse), points);
 
     expect(value).toContain("Metric: RWA.xyz Total RWA Value");
     expect(value).toContain("Chart date: 2026-06-14");
     expect(value).toContain("Total RWA Value: $1.85B ($1,850,000,000.00)");
+    expect(value).toContain("Rate of change:");
+    expect(value).toContain("7d: +$350M (+23.33%), +$50M/day vs 2026-06-07");
+    expect(value).toContain("30d: +$550M (+42.31%), +$18.33M/day vs 2026-05-15");
     expect(value).toContain("Chart mode: Distributed assets, excluding stablecoins and cryptocurrency");
     expect(value).toContain("Top categories: US Treasury Debt $1.25B; Commodities $600M");
   });

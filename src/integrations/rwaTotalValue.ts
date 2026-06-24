@@ -30,6 +30,16 @@ export type RwaTotalValuePoint = {
   groups: RwaTotalValueGroup[];
 };
 
+export type RwaRateChange = {
+  label: string;
+  days: number;
+  baselineDate: string | null;
+  baselineValue: number | null;
+  absoluteChange: number | null;
+  percentChange: number | null;
+  perDayChange: number | null;
+};
+
 export type RwaTotalValueGroup = {
   name: string;
   value: number;
@@ -47,8 +57,9 @@ export const rwaTotalValueAdapter: WebsiteAdapter = {
   getPollIntervalMinutes: () => 60,
   getPollIntervalReason: () => "Fixed hourly check for RWA.xyz Total RWA Value chart updates",
   async fetchCurrentValue(): Promise<AdapterValue> {
-    const point = extractLatestRwaTotalValuePoint(await fetchRwaTimeseries());
-    const value = formatRwaTotalValue(point);
+    const points = extractRwaTotalValuePoints(await fetchRwaTimeseries());
+    const point = getLatestRwaTotalValuePoint(points);
+    const value = formatRwaTotalValue(point, points);
     return {
       value,
       rawValue: `${point.date}:${point.totalValue.toFixed(2)}`,
@@ -59,6 +70,10 @@ export const rwaTotalValueAdapter: WebsiteAdapter = {
 };
 
 export function extractLatestRwaTotalValuePoint(data: unknown): RwaTotalValuePoint {
+  return getLatestRwaTotalValuePoint(extractRwaTotalValuePoints(data));
+}
+
+export function extractRwaTotalValuePoints(data: unknown): RwaTotalValuePoint[] {
   const decoded = decodeRwaApiResponse(data);
   const series = extractSeries(decoded);
   const valueByDate = new Map<string, Map<string, number>>();
@@ -72,27 +87,31 @@ export function extractLatestRwaTotalValuePoint(data: unknown): RwaTotalValuePoi
     }
   }
 
-  const latestDate = [...valueByDate.keys()].sort().at(-1);
-  if (!latestDate) {
+  const points = [...valueByDate.entries()]
+    .sort(([leftDate], [rightDate]) => leftDate.localeCompare(rightDate))
+    .map(([date, groupEntries]) => {
+      const groups = [...groupEntries.entries()]
+        .map(([name, value]) => ({ name, value }))
+        .sort((left, right) => right.value - left.value);
+      const totalValue = groups.reduce((sum, group) => sum + group.value, 0);
+      return { date, totalValue, groups };
+    })
+    .filter((point) => Number.isFinite(point.totalValue) && point.totalValue > 0);
+
+  if (!points.length) {
     throw new Error("Could not find RWA.xyz Total RWA Value chart points");
   }
 
-  const groups = [...(valueByDate.get(latestDate)?.entries() ?? [])]
-    .map(([name, value]) => ({ name, value }))
-    .sort((left, right) => right.value - left.value);
-  const totalValue = groups.reduce((sum, group) => sum + group.value, 0);
-  if (!Number.isFinite(totalValue) || totalValue <= 0) {
-    throw new Error("RWA.xyz Total RWA Value chart returned an invalid latest total");
-  }
-
-  return { date: latestDate, totalValue, groups };
+  return points;
 }
 
-export function formatRwaTotalValue(point: RwaTotalValuePoint): string {
+export function formatRwaTotalValue(point: RwaTotalValuePoint, history: RwaTotalValuePoint[] = [point]): string {
   return [
     "Metric: RWA.xyz Total RWA Value",
     `Chart date: ${point.date}`,
     `Total RWA Value: ${formatCompactCurrency(point.totalValue)} (${formatCurrency(point.totalValue)})`,
+    "Rate of change:",
+    formatRateChanges(point, history),
     "Chart mode: Distributed assets, excluding stablecoins and cryptocurrency",
     `Top categories: ${formatTopGroups(point.groups)}`,
     `Resolution: ${sourceUrl}`
@@ -132,6 +151,81 @@ async function fetchRwaTimeseries(): Promise<unknown> {
 function decodeRwaApiResponse(data: unknown): unknown {
   const payload = extractCompressedPayload(data);
   return payload ? decodeRwaCompressedPayload(payload) : data;
+}
+
+function getLatestRwaTotalValuePoint(points: RwaTotalValuePoint[]): RwaTotalValuePoint {
+  const latest = points.at(-1);
+  if (!latest) {
+    throw new Error("Could not find RWA.xyz Total RWA Value chart points");
+  }
+  return latest;
+}
+
+function formatRateChanges(latest: RwaTotalValuePoint, history: RwaTotalValuePoint[]): string {
+  return [buildRateChange("7d", 7, latest, history), buildRateChange("30d", 30, latest, history)]
+    .map(formatRateChange)
+    .join("\n");
+}
+
+function buildRateChange(
+  label: string,
+  days: number,
+  latest: RwaTotalValuePoint,
+  history: RwaTotalValuePoint[]
+): RwaRateChange {
+  const baseline = findBaselinePoint(latest.date, days, history);
+  if (!baseline) {
+    return {
+      label,
+      days,
+      baselineDate: null,
+      baselineValue: null,
+      absoluteChange: null,
+      percentChange: null,
+      perDayChange: null
+    };
+  }
+
+  const absoluteChange = latest.totalValue - baseline.totalValue;
+  return {
+    label,
+    days,
+    baselineDate: baseline.date,
+    baselineValue: baseline.totalValue,
+    absoluteChange,
+    percentChange: baseline.totalValue === 0 ? null : (absoluteChange / baseline.totalValue) * 100,
+    perDayChange: absoluteChange / days
+  };
+}
+
+function findBaselinePoint(latestDate: string, daysBack: number, history: RwaTotalValuePoint[]): RwaTotalValuePoint | null {
+  const targetDate = addUtcDays(latestDate, -daysBack);
+  return history
+    .filter((point) => point.date <= targetDate)
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .at(0) ?? null;
+}
+
+function addUtcDays(date: string, days: number): string {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function formatRateChange(change: RwaRateChange): string {
+  if (
+    change.baselineDate === null ||
+    change.baselineValue === null ||
+    change.absoluteChange === null ||
+    change.perDayChange === null
+  ) {
+    return `${change.label}: not enough history`;
+  }
+
+  const percent = change.percentChange === null ? "n/a" : formatSignedPercent(change.percentChange);
+  return `${change.label}: ${formatSignedCompactCurrency(change.absoluteChange)} (${percent}), ${formatSignedCompactCurrency(
+    change.perDayChange
+  )}/day vs ${change.baselineDate}`;
 }
 
 function extractCompressedPayload(data: unknown): string | null {
@@ -208,12 +302,20 @@ function formatCompactCurrency(value: number): string {
   return formatCurrency(value);
 }
 
+function formatSignedCompactCurrency(value: number): string {
+  return `${value >= 0 ? "+" : "-"}${formatCompactCurrency(Math.abs(value))}`;
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 2
   }).format(value);
+}
+
+function formatSignedPercent(value: number): string {
+  return `${value >= 0 ? "+" : "-"}${formatDecimal(Math.abs(value), 2)}%`;
 }
 
 function formatDecimal(value: number, maximumFractionDigits: number): string {

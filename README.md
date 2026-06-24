@@ -59,7 +59,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `parcl-nyc-home-value` | `/nychomevalue` | `#nychomevalue` | `NYC Home Value Alerts` | `🏙️` | Monitors Parcl NYC Sales Price Index data and calculates the June 30 median home-value settlement. |
 | `pboc-rate-change` | `/pboc` | `#pboc` | `PBoC Rate Alerts` | `🏦` | Monitors PBoC official announcements for extracted operation-rate changes in the June rate-change market. |
 | `powerball-jackpot` | `/powerball` | `#powerball` | `Powerball Jackpot Alerts` | `🎰` | Monitors Powerball's official estimated jackpot once daily for the $1B July 31 market trend. |
-| `rwa-total-value` | `/rwatotal` | `#rwatotal` | `RWA Total Value Alerts` | `🏦` | Monitors the RWA.xyz Total RWA Value chart hourly using distributed assets excluding stablecoins and cryptocurrency. |
+| `rwa-total-value` | `/rwatotal` | `#rwatotal` | `RWA Total Value Alerts` | `🏦` | Monitors the RWA.xyz Total RWA Value chart hourly with 7d/30d rate-of-change analysis using distributed assets excluding stablecoins and cryptocurrency. |
 | `polymarket-mention-markets` | `/mentions` | `#mentions` | `Polymarket Mentions Alerts` | `💬` | Alerts when a new active Polymarket event appears under the Mentions tag. |
 | `polymarket-clarifications` | `/umaclarifications` | `#uma-clarifications` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
 | `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
