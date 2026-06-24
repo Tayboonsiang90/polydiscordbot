@@ -51,6 +51,13 @@ const sampleYoutubeFeedWithShortFirst = `<?xml version="1.0" encoding="UTF-8"?>
   </entry>
 </feed>`;
 
+const newerYoutubeValue = [
+  "Title: GameStop CEO Ryan Cohen’s $56B Plan to Take Over eBay",
+  "Published: 2026-06-23T21:13:14+00:00",
+  "URL: https://www.youtube.com/watch?v=4j9RPGLENNI",
+  "Source: YouTube RSS"
+].join("\n");
+
 describe("All-In Podcast adapter", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -144,6 +151,32 @@ describe("All-In Podcast adapter", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.value).toContain("Source: allin.com");
+  });
+
+  it("keeps the previous episode when allin.com fallback is stale", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("bad feed"))
+      .mockResolvedValueOnce({ ok: true, text: async () => sampleHtml });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await allInPodcastAdapter.fetchCurrentValue({ lastValue: newerYoutubeValue } as Integration);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.value).toBe(newerYoutubeValue);
+  });
+
+  it("keeps the previous episode when YouTube RSS serves an older cached feed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => sampleYoutubeFeed
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await allInPodcastAdapter.fetchCurrentValue({ lastValue: newerYoutubeValue } as Integration);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.value).toBe(newerYoutubeValue);
   });
 
   it("does not alert when the same YouTube video changes source formatting", () => {

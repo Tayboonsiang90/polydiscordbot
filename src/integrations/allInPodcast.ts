@@ -117,7 +117,7 @@ export const allInPodcastAdapter: WebsiteAdapter = {
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshAllInPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
-  async fetchCurrentValue(): Promise<AdapterValue> {
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     let youtubeFailure = "unknown error";
     try {
       const youtubeResponse = await fetchWithTimeout(allInYoutubeFeedUrl, {
@@ -127,7 +127,7 @@ export const allInPodcastAdapter: WebsiteAdapter = {
       });
 
       if (youtubeResponse.ok) {
-        const value = extractLatestAllInYoutubeEpisodeValue(await youtubeResponse.text());
+        const value = keepNewestAllInEpisodeValue(extractLatestAllInYoutubeEpisodeValue(await youtubeResponse.text()), integration?.lastValue);
         return {
           value,
           rawValue: value,
@@ -151,7 +151,7 @@ export const allInPodcastAdapter: WebsiteAdapter = {
       throw new Error(`All-In YouTube feed failed (${youtubeFailure}); allin.com returned HTTP ${fallbackResponse.status}`);
     }
 
-    const value = extractLatestAllInEpisodeValue(await fallbackResponse.text());
+    const value = keepNewestAllInEpisodeValue(extractLatestAllInEpisodeValue(await fallbackResponse.text()), integration?.lastValue);
     return {
       value,
       rawValue: value,
@@ -164,6 +164,16 @@ export const allInPodcastAdapter: WebsiteAdapter = {
 function formatAllInEpisodeValue(episode: AllInEpisode): string {
   const dateLine = episode.publishedAt ? `Published: ${episode.publishedAt}` : `Date: ${episode.date}`;
   return [`Title: ${episode.title}`, dateLine, `URL: ${episode.url}`, `Source: ${episode.source}`].join("\n");
+}
+
+function keepNewestAllInEpisodeValue(currentValue: string, previousValue: string | null | undefined): string {
+  const previousPublishedAt = extractAllInValuePublishedAt(previousValue ?? null);
+  const currentPublishedAt = extractAllInValuePublishedAt(currentValue);
+  if (!previousPublishedAt || !currentPublishedAt) {
+    return currentValue;
+  }
+
+  return currentPublishedAt.getTime() < previousPublishedAt.getTime() ? previousValue! : currentValue;
 }
 
 export function shouldAlertOnAllInChange(previousValue: string | null, currentValue: string): boolean {
@@ -381,6 +391,29 @@ function extractAllInValueUrl(value: string | null): string | null {
 
   const match = value.match(/^URL:\s*(\S+)/m);
   return match?.[1] ?? null;
+}
+
+function extractAllInValuePublishedAt(value: string | null): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const publishedMatch = value.match(/^Published:\s*(.+)$/m);
+  if (publishedMatch?.[1]) {
+    const publishedAt = new Date(publishedMatch[1]);
+    return Number.isNaN(publishedAt.getTime()) ? null : publishedAt;
+  }
+
+  const dateMatch = value.match(/^Date:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$/m);
+  if (!dateMatch) {
+    return null;
+  }
+
+  const month = Number(dateMatch[1]);
+  const day = Number(dateMatch[2]);
+  const year = Number(dateMatch[3]);
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function isYoutubeShortUrl(url: string): boolean {
