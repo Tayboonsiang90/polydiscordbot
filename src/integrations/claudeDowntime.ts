@@ -83,11 +83,14 @@ export const claudeDowntimeAdapter: WebsiteAdapter = {
     }
 
     const days = findClaudeDowntimeDays(extractClaudeUptimeDaysFromHtml(await response.text()), period);
+    const dailyReportState = filterNewClaudeDailyReportDay(integration?.lastValue ?? null, days.finalizedDays);
     const alertState = filterNewClaudeDowntimeDays(integration?.lastValue ?? null, polymarketUrl, days.downtimeDays);
     const value = formatClaudeDowntimeMonitorValue({
       period,
       allDays: days.allDays,
       finalizedDays: days.finalizedDays,
+      newDailyReportDay: dailyReportState.newDailyReportDay,
+      reportedDailyDates: dailyReportState.reportedDailyDates,
       downtimeDays: days.downtimeDays,
       newDowntimeDays: alertState.newDowntimeDays,
       alertedDowntimeDates: alertState.alertedDowntimeDates,
@@ -166,6 +169,26 @@ export function findClaudeDowntimeDays(
   return { allDays, finalizedDays, downtimeDays };
 }
 
+export function filterNewClaudeDailyReportDay(
+  previousValue: string | null,
+  finalizedDays: ClaudeUptimeDay[]
+): { newDailyReportDay: ClaudeUptimeDay | null; reportedDailyDates: string[] } {
+  const reportedDates = parseStoredReportedDailyDates(previousValue);
+  const latestFinalizedDay = finalizedDays.at(-1) ?? null;
+  if (latestFinalizedDay && !reportedDates.has(latestFinalizedDay.date)) {
+    reportedDates.add(latestFinalizedDay.date);
+    return {
+      newDailyReportDay: latestFinalizedDay,
+      reportedDailyDates: [...reportedDates].sort()
+    };
+  }
+
+  return {
+    newDailyReportDay: null,
+    reportedDailyDates: [...reportedDates].sort()
+  };
+}
+
 export function filterNewClaudeDowntimeDays(
   previousValue: string | null,
   polymarketUrl: string,
@@ -187,6 +210,8 @@ export function formatClaudeDowntimeMonitorValue(input: {
   period: ClaudeDowntimePeriod;
   allDays: ClaudeUptimeDay[];
   finalizedDays: ClaudeUptimeDay[];
+  newDailyReportDay: ClaudeUptimeDay | null;
+  reportedDailyDates: string[];
   downtimeDays: ClaudeUptimeDay[];
   newDowntimeDays: ClaudeUptimeDay[];
   alertedDowntimeDates: string[];
@@ -202,6 +227,10 @@ export function formatClaudeDowntimeMonitorValue(input: {
     `Finalized days: ${input.finalizedDays.length}`,
     `Downtime days: ${input.downtimeDays.length}`,
     `Latest finalized day: ${latestFinalized ? formatClaudeUptimeDay(latestFinalized) : "none"}`,
+    "New Daily Report:",
+    input.newDailyReportDay ? formatClaudeUptimeDay(input.newDailyReportDay) : "none",
+    "Reported Daily Dates:",
+    input.reportedDailyDates.length ? input.reportedDailyDates.join(", ") : "none",
     "New Downtime Days:",
     input.newDowntimeDays.length ? input.newDowntimeDays.map(formatClaudeUptimeDay).join("\n") : "none",
     "Alerted Downtime Days:",
@@ -214,6 +243,11 @@ export function formatClaudeDowntimeMonitorValue(input: {
 }
 
 export function claudeDowntimeShouldAlertOnChange(_previousValue: string | null, currentValue: string): boolean {
+  const dailyReportSection = extractStoredSection(currentValue, "New Daily Report", "Reported Daily Dates");
+  if (dailyReportSection && dailyReportSection.trim() !== "none") {
+    return true;
+  }
+
   const section = extractStoredSection(currentValue, "New Downtime Days", "Alerted Downtime Days");
   return Boolean(section && section.trim() !== "none");
 }
@@ -291,6 +325,12 @@ function parseStoredAlertedDowntimeDates(previousValue: string | null, polymarke
   }
 
   const section = extractStoredSection(previousValue, "Alerted Downtime Days", "Downtime Days");
+  const dates = [...(section ?? "").matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
+  return new Set(dates);
+}
+
+function parseStoredReportedDailyDates(previousValue: string | null): Set<string> {
+  const section = extractStoredSection(previousValue, "Reported Daily Dates", "New Downtime Days");
   const dates = [...(section ?? "").matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
   return new Set(dates);
 }

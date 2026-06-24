@@ -3,6 +3,7 @@ import {
   claudeDowntimeAdapter,
   claudeDowntimeShouldAlertOnChange,
   extractClaudeUptimeDaysFromHtml,
+  filterNewClaudeDailyReportDay,
   filterNewClaudeDowntimeDays,
   findClaudeDowntimeDays,
   formatClaudeDowntimeMonitorValue,
@@ -107,6 +108,8 @@ describe("Claude downtime adapter", () => {
       period: { year: 2026, month: 6, label: "2026-06" },
       allDays: [],
       finalizedDays: [],
+      newDailyReportDay: null,
+      reportedDailyDates: [],
       downtimeDays,
       newDowntimeDays: first.newDowntimeDays,
       alertedDowntimeDates: first.alertedDowntimeDates,
@@ -135,6 +138,8 @@ describe("Claude downtime adapter", () => {
       period: { year: 2026, month: 6, label: "2026-06" },
       allDays: [downtimeDay],
       finalizedDays: [downtimeDay],
+      newDailyReportDay: null,
+      reportedDailyDates: [],
       downtimeDays: [downtimeDay],
       newDowntimeDays: [downtimeDay],
       alertedDowntimeDates: ["2026-06-02"],
@@ -148,6 +153,47 @@ describe("Claude downtime adapter", () => {
 
     expect(claudeDowntimeShouldAlertOnChange(null, currentValue)).toBe(true);
     expect(claudeDowntimeShouldAlertOnChange(currentValue, quietValue)).toBe(false);
+  });
+
+  it("alerts once for the latest finalized daily report even when it is green", () => {
+    const days = findClaudeDowntimeDays(extractClaudeUptimeDaysFromHtml(sampleHtml), {
+      year: 2026,
+      month: 6,
+      label: "2026-06"
+    }).finalizedDays;
+    const first = filterNewClaudeDailyReportDay(null, days);
+    const storedValue = formatClaudeDowntimeMonitorValue({
+      period: { year: 2026, month: 6, label: "2026-06" },
+      allDays: [],
+      finalizedDays: days,
+      newDailyReportDay: first.newDailyReportDay,
+      reportedDailyDates: first.reportedDailyDates,
+      downtimeDays: [],
+      newDowntimeDays: [],
+      alertedDowntimeDates: [],
+      sourceUrl: claudeDowntimeAdapter.sourceUrl,
+      polymarketUrl
+    });
+    const second = filterNewClaudeDailyReportDay(storedValue, days);
+    const quietValue = formatClaudeDowntimeMonitorValue({
+      period: { year: 2026, month: 6, label: "2026-06" },
+      allDays: [],
+      finalizedDays: days,
+      newDailyReportDay: second.newDailyReportDay,
+      reportedDailyDates: second.reportedDailyDates,
+      downtimeDays: [],
+      newDowntimeDays: [],
+      alertedDowntimeDates: [],
+      sourceUrl: claudeDowntimeAdapter.sourceUrl,
+      polymarketUrl
+    });
+
+    expect(first.newDailyReportDay?.date).toBe("2026-06-02");
+    expect(first.reportedDailyDates).toEqual(["2026-06-02"]);
+    expect(claudeDowntimeShouldAlertOnChange(null, storedValue)).toBe(true);
+    expect(second.newDailyReportDay).toBeNull();
+    expect(second.reportedDailyDates).toEqual(["2026-06-02"]);
+    expect(claudeDowntimeShouldAlertOnChange(storedValue, quietValue)).toBe(false);
   });
 
   it("derives the period from settings before falling back to the Polymarket URL", () => {

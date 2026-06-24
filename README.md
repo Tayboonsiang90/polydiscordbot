@@ -39,7 +39,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `census-durable-goods` | `/durablegoods` | `#durablegoods` | `Durable Goods Alerts` | `🏭` | Monitors the Census Advance Durable Goods May 2026 MoM new orders report and only polls fast on release day. |
 | `openai-chatgpt-outages` | `/chatgptoutage` | `#chatgptoutage` | `ChatGPT Outage Alerts` | `🟠` | Monitors OpenAI Status for resolved ChatGPT partial/full outage days, shows all partial/full outages for manual review, and auto-discovers monthly outage markets. |
 | `claude-code-commits` | `/claudecommits` | `#claudecommits` | `Claude Commits Alerts` | `💻` | Monitors Claude Code Commits Tracker daily data and alerts once when unresolved high/low targets are hit. |
-| `claude-downtime` | `/claudedown` | `#claudedown` | `Claude Downtime Alerts` | `🔴` | Monitors Claude Status claude.ai uptime boxes and alerts once for finalized non-green days. |
+| `claude-downtime` | `/claudedown` | `#claudedown` | `Claude Downtime Alerts` | `🔴` | Monitors Claude Status claude.ai uptime boxes, sends one daily report for each newly finalized day, and alerts once for finalized non-green days. |
 | `cloudflare-critical-incidents` | `/cloudflare` | `#cloudflare-critical` | `Cloudflare Critical Alerts` | `🔴` | Monitors Cloudflare's official incidents API for Critical/red incidents. |
 | `discord-critical-incidents` | `/discord` | `#discord-critical` | `Discord Critical Alerts` | `🔴` | Monitors Discord's official incidents API for Critical/red incidents and auto-discovers monthly by-date markets. |
 | `ecdsa-fail` | `/ecdsafail` | `#ecdsafail` | `ECDSA Fail Alerts` | `🔐` | Monitors ECDSA.fail benchmark API for the percent ahead of Google's classified circuit. |
