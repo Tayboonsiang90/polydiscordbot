@@ -126,9 +126,9 @@ function buildAdapterCommand(
             .setMaxLength(2048)
         )
     )
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("interval")
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("interval")
         .setDescription("Change polling interval")
         .addIntegerOption((option) =>
           option
@@ -136,33 +136,33 @@ function buildAdapterCommand(
             .setDescription("Polling interval in minutes")
             .setRequired(true)
             .setMinValue(1)
-              .setMaxValue(1440)
-          )
-      )
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("turbo")
-          .setDescription("Temporarily poll this monitor faster")
-          .addIntegerOption((option) =>
-            option
-              .setName("seconds")
-              .setDescription("Poll every N seconds. Use 0 to turn turbo off.")
-              .setRequired(true)
-              .setMinValue(0)
-              .setMaxValue(maxTurboIntervalSeconds)
-          )
-          .addIntegerOption((option) =>
-            option
-              .setName("duration-minutes")
-              .setDescription("How long turbo should run, in minutes")
-              .setRequired(false)
-              .setMinValue(1)
-              .setMaxValue(maxTurboDurationMinutes)
-          )
-      )
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("enddate")
+            .setMaxValue(1440)
+        )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("turbo")
+        .setDescription("Temporarily poll this monitor faster")
+        .addIntegerOption((option) =>
+          option
+            .setName("seconds")
+            .setDescription("Poll every N seconds. Use 0 to turn turbo off.")
+            .setRequired(true)
+            .setMinValue(0)
+            .setMaxValue(maxTurboIntervalSeconds)
+        )
+        .addIntegerOption((option) =>
+          option
+            .setName("duration-minutes")
+            .setDescription("How long turbo should run, in minutes")
+            .setRequired(false)
+            .setMinValue(1)
+            .setMaxValue(maxTurboDurationMinutes)
+        )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("enddate")
         .setDescription("Manually set the Polymarket market end time in ET")
         .addStringOption((option) =>
           option
