@@ -36,7 +36,7 @@ describe("README integration documentation", () => {
     for (const adapter of listAdapters()) {
       expect(rowById.get(adapter.id)).toEqual({
         id: adapter.id,
-        commandName: shouldRegisterAdapterCommand(adapter) ? adapter.commandName : "polling only",
+        commandName: shouldRegisterAdapterCommand(adapter) ? adapter.commandName : "monitor",
         defaultChannelName: adapter.defaultChannelName,
         alertRoleName: adapter.alertRoleName,
         alertRoleEmoji: adapter.alertRoleEmoji

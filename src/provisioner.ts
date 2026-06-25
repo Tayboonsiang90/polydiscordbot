@@ -15,6 +15,7 @@ import type { Integration, WebsiteAdapter } from "./integrations/types.js";
 
 const defaultRoleChannelName = "market-alert-roles";
 const defaultRoleGroupTitle = "Market Alert Roles";
+const defaultMonitorCommandName = "monitor";
 const uncategorizedAlertRoleName = "Uncategorized Alerts";
 const uncategorizedCategoryName = "Uncategorized";
 const networkRetryDelaysMs = [1_000, 3_000, 10_000];
@@ -155,7 +156,7 @@ export class IntegrationProvisioner {
       pollIntervalMinutes: this.config.defaultPollIntervalMinutes
     });
 
-    await channel.send({ embeds: [buildSetupEmbed(integration, adapter.commandName)] });
+    await channel.send({ embeds: [buildSetupEmbed(integration, getDiscordCommandName(adapter))] });
     if (usesPerIntegrationAlertRole(adapter)) {
       await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
     }
@@ -226,7 +227,7 @@ export class IntegrationProvisioner {
           adapter,
           role,
           displayName: adapter.displayName,
-          commandName: adapter.commandName,
+          commandName: getDiscordCommandName(adapter),
           roleId: role.id,
           roleName: role.name,
           emoji: integration.roleEmoji ?? adapter.alertRoleEmoji,
@@ -252,7 +253,7 @@ export class IntegrationProvisioner {
         adapter,
         role,
         displayName: category.name,
-        commandName: adapter.commandName,
+        commandName: getDiscordCommandName(adapter),
         roleId: role.id,
         roleName: role.name,
         emoji: integration.roleEmoji && integration.alertRoleId === role.id ? integration.roleEmoji : getCategoryAlertRoleEmoji(category.name),
@@ -267,6 +268,10 @@ export class IntegrationProvisioner {
 
 function shouldRenameLegacyChannel(channelName: string, adapter: WebsiteAdapter): boolean {
   return Boolean(adapter.legacyChannelNames?.includes(channelName) && channelName !== adapter.defaultChannelName);
+}
+
+function getDiscordCommandName(adapter: WebsiteAdapter): string {
+  return usesPerIntegrationAlertRole(adapter) ? adapter.commandName : defaultMonitorCommandName;
 }
 
 function findTextChannelByName(guild: Guild, channelName: string): TextChannel | null {

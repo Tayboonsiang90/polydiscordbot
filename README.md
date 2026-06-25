@@ -16,106 +16,106 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 
 | Adapter ID | Command | Channel | Alert Role | Emoji | Description |
 | --- | --- | --- | --- | --- | --- |
-| `bonbast-usd-irr` | `/bonbast` | `#bonbast-usd-irr` | `Bonbast Alerts` | `💱` | Monitors Bonbast USD/IRR values and auto-discovers active hit-by and end-of-month USD/IRR Polymarket markets. |
-| `cross-platform-arbitrage` | `/arb` | `#arb` | `Arbitrage Alerts` | `🔁` | Monitors configured Polymarket, Predict, and Opinion market URLs for after-fee cross-platform arbitrage routes. |
-| `aaa-regular-gas` | `/aaa` | `#aaa-regular-gas` | `AAA Gas Alerts` | `⛽` | Monitors AAA national Current Avg. Regular gas price for Polymarket resolution checks. |
-| `all-in-podcast` | `/allin` | `#allinpod` | `All-In Podcast Alerts` | `🎧` | Monitors the All-In YouTube channel feed every minute for new non-Shorts uploads, suppresses same-video source-format flips, and auto-discovers active weekly All-In Polymarket markets. |
-| `joe-rogan-podcast` | `/joerogan` | `#joerogan` | `Joe Rogan Alerts` | `🎤` | Monitors the Joe Rogan YouTube RSS feed every minute for new JRE uploads and auto-discovers weekly first-episode Polymarket markets. |
-| `lemonade-stand-podcast` | `/lemonade` | `#lemonade` | `Lemonade Stand Alerts` | `🍋` | Monitors the Lemonade Stand YouTube RSS feed every minute for new uploads with `Lemonade Stand` in the title and auto-discovers weekly Polymarket markets. |
-| `aligned-layer-sale` | polling only | `#alignedsale` | `Aligned Sale Alerts` | `⏸️` | Temporary monitor for sale.alignedlayer.com page and app-bundle changes while the token sale is on hold; its slash command is not registered to stay within Discord's 100-command cap. |
-| `apple-artist-song-releases` | `/songreleases` | `#songreleases` | `Artist Song Release Alerts` | `🎶` | Monitors Apple Music/iTunes for new 2026 songs by unresolved artists parsed from the Polymarket market. |
-| `arena-ai-no-style-control` | `/arenaai` | `#arenaai` | `Arena AI Alerts` | `🤖` | Monitors the top 3 models on Arena AI's overall no-style-control leaderboard. |
-| `aws-disrupted-events` | `/aws` | `#aws-disrupted` | `AWS Disrupted Alerts` | `⚠` | Monitors AWS Health Dashboard history events for disrupted service interruption events in the June 30 market window. |
-| `based-revenue` | `/basedrevenue` | `#basedrevenue` | `Based Revenue Alerts` | `💵` | Monitors Dune query results for Based cumulative revenue updates. |
-| `bea-current-releases` | `/bea` | `#bea-releases` | `BEA Release Alerts` | `📰` | Monitors BEA Current Releases hourly and alerts when the latest article changes. |
-| `bi-jisdor-usd-idr` | `/jisdor` | `#jisdor` | `BI JISDOR Alerts` | `🇮🇩` | Monitors Bank Indonesia JISDOR USD/IDR reference rates for Polymarket resolution checks. |
-| `billboard-200-number-one-album` | `/billboard200` | `#billboard200` | `Billboard 200 Alerts` | `💿` | Monitors the dated Billboard 200 chart for the #1 album and auto-discovers weekly chart markets. |
-| `billboard-hot-100-number-one-song` | `/billboardhot100` | `#billboardhot100` | `Billboard Hot 100 Alerts` | `🎵` | Monitors the dated Billboard Hot 100 chart for the #1 song and auto-discovers weekly chart markets. |
-| `bls-cpi-releases` | `/blscpi` | `#blscpi-releases` | `BLS CPI Release Alerts` | `📈` | Monitors BLS CPI archived news releases hourly and alerts when the latest article changes. |
-| `bls-jobs-added` | `/jobsadded` | `#jobsadded` | `BLS Jobs Added Alerts` | `💼` | Monitors BLS Employment Situation total nonfarm payroll employment change and auto-discovers monthly jobs-added markets. |
-| `cdc-fertility-rate` | `/fertility` | `#fertility` | `CDC Fertility Alerts` | `👶` | Monitors CDC natality dashboard 2026 Q1 general fertility rate publication. |
-| `cdc-flu-hospitalization` | `/fluhosp` | `#fluhosp` | `CDC Flu Hosp Alerts` | `🏥` | Monitors CDC FluView/FluSurv-NET cumulative influenza hospitalization rates and auto-discovers weekly flu hospitalization markets. |
-| `cdc-measles` | `/measles` | `#measles` | `CDC Measles Alerts` | `🦠` | Monitors CDC's 2026 confirmed U.S. measles total cases counter. |
-| `census-durable-goods` | `/durablegoods` | `#durablegoods` | `Durable Goods Alerts` | `🏭` | Monitors the Census Advance Durable Goods May 2026 MoM new orders report and only polls fast on release day. |
-| `openai-chatgpt-outages` | `/chatgptoutage` | `#chatgptoutage` | `ChatGPT Outage Alerts` | `🟠` | Monitors OpenAI Status for resolved ChatGPT partial/full outage days, sends one daily report for each completed ET day, shows all partial/full outages for manual review, and auto-discovers monthly outage markets. |
-| `claude-code-commits` | `/claudecommits` | `#claudecommits` | `Claude Commits Alerts` | `💻` | Monitors Claude Code Commits Tracker daily data and alerts once when unresolved high/low targets are hit. |
-| `claude-code-commits-average` | `/claudeavg` | `#claudeavg` | `Claude Avg Alerts` | `📈` | Monitors Claude Code Commits Tracker 7D Avg Commits for the end-of-June bracket market and includes final-window worst-case analysis in every report. |
-| `claude-downtime` | `/claudedown` | `#claudedown` | `Claude Downtime Alerts` | `🔴` | Monitors Claude Status claude.ai uptime boxes, sends one daily report for each newly finalized day, and alerts once for finalized non-green days. |
-| `cloudflare-critical-incidents` | `/cloudflare` | `#cloudflare-critical` | `Cloudflare Critical Alerts` | `🔴` | Monitors Cloudflare's official incidents API for Critical/red incidents. |
-| `discord-critical-incidents` | `/discord` | `#discord-critical` | `Discord Critical Alerts` | `🔴` | Monitors Discord's official incidents API for Critical/red incidents and auto-discovers monthly by-date markets. |
-| `ecdsa-fail` | `/ecdsafail` | `#ecdsafail` | `ECDSA Fail Alerts` | `🔐` | Monitors ECDSA.fail benchmark API for the percent ahead of Google's classified circuit. |
-| `eia-crude-spr` | `/eia` | `#eia-crude-spr` | `EIA Crude SPR Alerts` | `⛽` | Monitors EIA weekly U.S. Ending Stocks of Crude Oil in the Strategic Petroleum Reserve. |
-| `elon-x-strikes` | `/elonx` | `#elonx` | `Elon X Alerts` | `🚀` | Monitors @elonmusk posts through a free XCancel/Nitter-style public page reader and parsed weekly Polymarket strike terms. |
-| `fdic-failed-banks` | `/fdic` | `#fdic-failed-banks` | `FDIC Failed Bank Alerts` | `🏦` | Monitors the latest row in the FDIC Failed Bank List for new bank failures. |
-| `fred-egg-price` | `/eggs` | `#eggs` | `FRED Egg Price Alerts` | `🥚` | Monitors monthly FRED Eggs, Grade A, Large cost per dozen, auto-discovers monthly egg-price markets, and uses release-date polling. |
-| `fred-ground-beef` | `/beef` | `#beef` | `FRED Ground Beef Alerts` | `🥩` | Monitors FRED 2026 Ground beef, 100% beef cost per pound and release-date polling. |
-| `free-app-store` | `/freeappstore` | `#freeappstore` | `Free App Store Alerts` | `🆓` | Shows the US iPhone App Store Top Free Apps top 5, alerts only when the top 2 change, and auto-discovers daily #1/#2 Free App Store markets. |
-| `nbs-press-release` | `/nbs` | `#nbs-press` | `NBS Press Release Alerts` | `🇨🇳` | Monitors China NBS English press releases hourly and alerts when the latest item changes. |
-| `ornn-b200-index` | `/ornnb200` | `#ornnb200` | `ORNN B200 Alerts` | `🖥️` | Monitors finalized ORNN B200 Index daily chart values for GPU rental-price resolution checks. |
-| `ornn-h100-index` | `/ornnh100` | `#ornnh100` | `ORNN H100 Alerts` | `🖥️` | Monitors finalized ORNN H100 Index daily chart values and auto-discovers active H100 GPU rental-price markets. |
-| `ornn-h200-index` | `/ornnh200` | `#ornnh200` | `ORNN H200 Alerts` | `🖥️` | Monitors finalized ORNN H200 Index daily chart values for GPU rental-price resolution checks. |
-| `paid-app-store` | `/paidappstore` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Shows the US iPhone App Store Top Paid Apps top 5, alerts only when the top 2 change, and auto-discovers daily Paid App Store markets. |
-| `parcl-dc-home-value` | `/dchomevalue` | `#dchomevalue` | `DC Home Value Alerts` | `🏠` | Monitors Parcl DC Metro Sales Price Index data and calculates the June 30 median home-value settlement. |
-| `parcl-nyc-home-value` | `/nychomevalue` | `#nychomevalue` | `NYC Home Value Alerts` | `🏙️` | Monitors Parcl NYC Sales Price Index data and calculates the June 30 median home-value settlement. |
-| `pboc-rate-change` | `/pboc` | `#pboc` | `PBoC Rate Alerts` | `🏦` | Monitors PBoC official announcements for extracted operation-rate changes in the June rate-change market. |
-| `powerball-jackpot` | `/powerball` | `#powerball` | `Powerball Jackpot Alerts` | `🎰` | Monitors Powerball's official estimated jackpot once daily for the $1B July 31 market trend. |
-| `rwa-total-value` | `/rwatotal` | `#rwatotal` | `RWA Total Value Alerts` | `🏦` | Monitors the RWA.xyz Total RWA Value chart hourly with 7d/30d rate-of-change analysis using distributed assets excluding stablecoins and cryptocurrency. |
-| `polymarket-mention-markets` | `/mentions` | `#mentions` | `Polymarket Mentions Alerts` | `💬` | Alerts when a new active Polymarket event appears under the Mentions tag. |
+| `bonbast-usd-irr` | `/monitor` | `#bonbast-usd-irr` | `Bonbast Alerts` | `💱` | Monitors Bonbast USD/IRR values and auto-discovers active hit-by and end-of-month USD/IRR Polymarket markets. |
+| `cross-platform-arbitrage` | `/monitor` | `#arb` | `Arbitrage Alerts` | `🔁` | Monitors configured Polymarket, Predict, and Opinion market URLs for after-fee cross-platform arbitrage routes. |
+| `aaa-regular-gas` | `/monitor` | `#aaa-regular-gas` | `AAA Gas Alerts` | `⛽` | Monitors AAA national Current Avg. Regular gas price for Polymarket resolution checks. |
+| `all-in-podcast` | `/monitor` | `#allinpod` | `All-In Podcast Alerts` | `🎧` | Monitors the All-In YouTube channel feed every minute for new non-Shorts uploads, suppresses same-video source-format flips, and auto-discovers active weekly All-In Polymarket markets. |
+| `joe-rogan-podcast` | `/monitor` | `#joerogan` | `Joe Rogan Alerts` | `🎤` | Monitors the Joe Rogan YouTube RSS feed every minute for new JRE uploads and auto-discovers weekly first-episode Polymarket markets. |
+| `lemonade-stand-podcast` | `/monitor` | `#lemonade` | `Lemonade Stand Alerts` | `🍋` | Monitors the Lemonade Stand YouTube RSS feed every minute for new uploads with `Lemonade Stand` in the title and auto-discovers weekly Polymarket markets. |
+| `aligned-layer-sale` | `/monitor` | `#alignedsale` | `Aligned Sale Alerts` | `⏸️` | Temporary monitor for sale.alignedlayer.com page and app-bundle changes while the token sale is on hold. |
+| `apple-artist-song-releases` | `/monitor` | `#songreleases` | `Artist Song Release Alerts` | `🎶` | Monitors Apple Music/iTunes for new 2026 songs by unresolved artists parsed from the Polymarket market. |
+| `arena-ai-no-style-control` | `/monitor` | `#arenaai` | `Arena AI Alerts` | `🤖` | Monitors the top 3 models on Arena AI's overall no-style-control leaderboard. |
+| `aws-disrupted-events` | `/monitor` | `#aws-disrupted` | `AWS Disrupted Alerts` | `⚠` | Monitors AWS Health Dashboard history events for disrupted service interruption events in the June 30 market window. |
+| `based-revenue` | `/monitor` | `#basedrevenue` | `Based Revenue Alerts` | `💵` | Monitors Dune query results for Based cumulative revenue updates. |
+| `bea-current-releases` | `/monitor` | `#bea-releases` | `BEA Release Alerts` | `📰` | Monitors BEA Current Releases hourly and alerts when the latest article changes. |
+| `bi-jisdor-usd-idr` | `/monitor` | `#jisdor` | `BI JISDOR Alerts` | `🇮🇩` | Monitors Bank Indonesia JISDOR USD/IDR reference rates for Polymarket resolution checks. |
+| `billboard-200-number-one-album` | `/monitor` | `#billboard200` | `Billboard 200 Alerts` | `💿` | Monitors the dated Billboard 200 chart for the #1 album and auto-discovers weekly chart markets. |
+| `billboard-hot-100-number-one-song` | `/monitor` | `#billboardhot100` | `Billboard Hot 100 Alerts` | `🎵` | Monitors the dated Billboard Hot 100 chart for the #1 song and auto-discovers weekly chart markets. |
+| `bls-cpi-releases` | `/monitor` | `#blscpi-releases` | `BLS CPI Release Alerts` | `📈` | Monitors BLS CPI archived news releases hourly and alerts when the latest article changes. |
+| `bls-jobs-added` | `/monitor` | `#jobsadded` | `BLS Jobs Added Alerts` | `💼` | Monitors BLS Employment Situation total nonfarm payroll employment change and auto-discovers monthly jobs-added markets. |
+| `cdc-fertility-rate` | `/monitor` | `#fertility` | `CDC Fertility Alerts` | `👶` | Monitors CDC natality dashboard 2026 Q1 general fertility rate publication. |
+| `cdc-flu-hospitalization` | `/monitor` | `#fluhosp` | `CDC Flu Hosp Alerts` | `🏥` | Monitors CDC FluView/FluSurv-NET cumulative influenza hospitalization rates and auto-discovers weekly flu hospitalization markets. |
+| `cdc-measles` | `/monitor` | `#measles` | `CDC Measles Alerts` | `🦠` | Monitors CDC's 2026 confirmed U.S. measles total cases counter. |
+| `census-durable-goods` | `/monitor` | `#durablegoods` | `Durable Goods Alerts` | `🏭` | Monitors the Census Advance Durable Goods May 2026 MoM new orders report and only polls fast on release day. |
+| `openai-chatgpt-outages` | `/monitor` | `#chatgptoutage` | `ChatGPT Outage Alerts` | `🟠` | Monitors OpenAI Status for resolved ChatGPT partial/full outage days, sends one daily report for each completed ET day, shows all partial/full outages for manual review, and auto-discovers monthly outage markets. |
+| `claude-code-commits` | `/monitor` | `#claudecommits` | `Claude Commits Alerts` | `💻` | Monitors Claude Code Commits Tracker daily data and alerts once when unresolved high/low targets are hit. |
+| `claude-code-commits-average` | `/monitor` | `#claudeavg` | `Claude Avg Alerts` | `📈` | Monitors Claude Code Commits Tracker 7D Avg Commits for the end-of-June bracket market and includes final-window worst-case analysis in every report. |
+| `claude-downtime` | `/monitor` | `#claudedown` | `Claude Downtime Alerts` | `🔴` | Monitors Claude Status claude.ai uptime boxes, sends one daily report for each newly finalized day, and alerts once for finalized non-green days. |
+| `cloudflare-critical-incidents` | `/monitor` | `#cloudflare-critical` | `Cloudflare Critical Alerts` | `🔴` | Monitors Cloudflare's official incidents API for Critical/red incidents. |
+| `discord-critical-incidents` | `/monitor` | `#discord-critical` | `Discord Critical Alerts` | `🔴` | Monitors Discord's official incidents API for Critical/red incidents and auto-discovers monthly by-date markets. |
+| `ecdsa-fail` | `/monitor` | `#ecdsafail` | `ECDSA Fail Alerts` | `🔐` | Monitors ECDSA.fail benchmark API for the percent ahead of Google's classified circuit. |
+| `eia-crude-spr` | `/monitor` | `#eia-crude-spr` | `EIA Crude SPR Alerts` | `⛽` | Monitors EIA weekly U.S. Ending Stocks of Crude Oil in the Strategic Petroleum Reserve. |
+| `elon-x-strikes` | `/monitor` | `#elonx` | `Elon X Alerts` | `🚀` | Monitors @elonmusk posts through a free XCancel/Nitter-style public page reader and parsed weekly Polymarket strike terms. |
+| `fdic-failed-banks` | `/monitor` | `#fdic-failed-banks` | `FDIC Failed Bank Alerts` | `🏦` | Monitors the latest row in the FDIC Failed Bank List for new bank failures. |
+| `fred-egg-price` | `/monitor` | `#eggs` | `FRED Egg Price Alerts` | `🥚` | Monitors monthly FRED Eggs, Grade A, Large cost per dozen, auto-discovers monthly egg-price markets, and uses release-date polling. |
+| `fred-ground-beef` | `/monitor` | `#beef` | `FRED Ground Beef Alerts` | `🥩` | Monitors FRED 2026 Ground beef, 100% beef cost per pound and release-date polling. |
+| `free-app-store` | `/monitor` | `#freeappstore` | `Free App Store Alerts` | `🆓` | Shows the US iPhone App Store Top Free Apps top 5, alerts only when the top 2 change, and auto-discovers daily #1/#2 Free App Store markets. |
+| `nbs-press-release` | `/monitor` | `#nbs-press` | `NBS Press Release Alerts` | `🇨🇳` | Monitors China NBS English press releases hourly and alerts when the latest item changes. |
+| `ornn-b200-index` | `/monitor` | `#ornnb200` | `ORNN B200 Alerts` | `🖥️` | Monitors finalized ORNN B200 Index daily chart values for GPU rental-price resolution checks. |
+| `ornn-h100-index` | `/monitor` | `#ornnh100` | `ORNN H100 Alerts` | `🖥️` | Monitors finalized ORNN H100 Index daily chart values and auto-discovers active H100 GPU rental-price markets. |
+| `ornn-h200-index` | `/monitor` | `#ornnh200` | `ORNN H200 Alerts` | `🖥️` | Monitors finalized ORNN H200 Index daily chart values for GPU rental-price resolution checks. |
+| `paid-app-store` | `/monitor` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Shows the US iPhone App Store Top Paid Apps top 5, alerts only when the top 2 change, and auto-discovers daily Paid App Store markets. |
+| `parcl-dc-home-value` | `/monitor` | `#dchomevalue` | `DC Home Value Alerts` | `🏠` | Monitors Parcl DC Metro Sales Price Index data and calculates the June 30 median home-value settlement. |
+| `parcl-nyc-home-value` | `/monitor` | `#nychomevalue` | `NYC Home Value Alerts` | `🏙️` | Monitors Parcl NYC Sales Price Index data and calculates the June 30 median home-value settlement. |
+| `pboc-rate-change` | `/monitor` | `#pboc` | `PBoC Rate Alerts` | `🏦` | Monitors PBoC official announcements for extracted operation-rate changes in the June rate-change market. |
+| `powerball-jackpot` | `/monitor` | `#powerball` | `Powerball Jackpot Alerts` | `🎰` | Monitors Powerball's official estimated jackpot once daily for the $1B July 31 market trend. |
+| `rwa-total-value` | `/monitor` | `#rwatotal` | `RWA Total Value Alerts` | `🏦` | Monitors the RWA.xyz Total RWA Value chart hourly with 7d/30d rate-of-change analysis using distributed assets excluding stablecoins and cryptocurrency. |
+| `polymarket-mention-markets` | `/monitor` | `#mentions` | `Polymarket Mentions Alerts` | `💬` | Alerts when a new active Polymarket event appears under the Mentions tag. |
 | `polymarket-clarifications` | `/umaclarifications` | `#uma-clarifications` | `UMA Clarification Alerts` | `📣` | Alerts on Polymarket UMA bulletin-board clarification updates on Polygon. |
 | `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
 | `polymarket-proposals` | `/umaproposals` | `#uma-proposals` | `UMA Proposal Alerts` | `📨` | Alerts when Polymarket UMA resolution proposals open on-chain for configured Polymarket tags. |
-| `polymarket-resolvable` | `/resolvable` | `#resolvable` | `Resolvable Alerts` | `✅` | Watches manually added Polymarket URLs or raw question IDs until the market is ready to resolve or already resolved on CTF, then alerts and removes the market. |
-| `portwatch-bab-el-mandeb` | `/babmandeb` | `#babmandeb` | `Bab el-Mandeb Alerts` | `🚢` | Monitors IMF PortWatch Bab el-Mandeb Arrivals of Ships data every minute with latest 14 daily values, moving averages, and optional MarineTraffic alpha context. |
-| `portwatch-hormuz-ships` | `/hormuzships` | `#hormuzships` | `Hormuz Ships Alerts` | `🚢` | Monitors IMF Portwatch Strait of Hormuz transit-call data every minute, reports total and average calls, optional MarineTraffic alpha context, and auto-discovers weekly ships markets. |
+| `polymarket-resolvable` | `/monitor` | `#resolvable` | `Resolvable Alerts` | `✅` | Watches manually added Polymarket URLs or raw question IDs until the market is ready to resolve or already resolved on CTF, then alerts and removes the market. |
+| `portwatch-bab-el-mandeb` | `/monitor` | `#babmandeb` | `Bab el-Mandeb Alerts` | `🚢` | Monitors IMF PortWatch Bab el-Mandeb Arrivals of Ships data every minute with latest 14 daily values, moving averages, and optional MarineTraffic alpha context. |
+| `portwatch-hormuz-ships` | `/monitor` | `#hormuzships` | `Hormuz Ships Alerts` | `🚢` | Monitors IMF Portwatch Strait of Hormuz transit-call data every minute, reports total and average calls, optional MarineTraffic alpha context, and auto-discovers weekly ships markets. |
 | `uma-vote-commits` | `/umacommits` | `#uma-commits` | `UMA Commit Alerts` | `🔒` | Alerts when Ethereum UMA Voting v2 commit or recommit events come from voters above the configured staked UMA threshold. |
 | `uma-vote-reveals` | `/umareveals` | `#uma-reveals` | `UMA Reveal Alerts` | `👁️` | Alerts when Ethereum UMA Voting v2 reveal events meet the configured staked UMA threshold. |
 | `uma-voting-committee` | `/umarocks` | `#umarocks` | `UMA.rocks Alerts` | `🗳️` | Monitors UMA.rocks voting committee GitHub answer changes and contributor comments for the active voting round. |
-| `pyth-natural-gas-strikes` | `/ngprice` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker, alerts only on strike crossings, and auto-discovers monthly NG price markets. |
-| `pyth-wti-strikes` | `/wti` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker, alerts only on strike crossings, and auto-discovers monthly WTI price markets. |
-| `pyth-xagusd-strikes` | `/xagusd` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed, alerts only on strike crossings, and auto-discovers monthly silver price markets. |
-| `pyth-xauusd-strikes` | `/xauusd` | `#xauusd` | `XAUUSD Price Alerts` | `🥇` | Monitors the Pyth XAUUSD feed, alerts only on strike crossings, and auto-discovers monthly gold price markets. |
-| `silver-trump-approval` | `/trumpapproval` | `#trumpapproval` | `Trump Approval Alerts` | `📊` | Monitors Silver Bulletin's Trump approval trend-line data and alerts when the June 5 value is finalized. |
-| `spider-man-trailer` | `/spiderman` | `#spiderman` | `Spider-Man Trailer Alerts` | `🕷️` | Monitors Spider-Man, Sony Pictures, Marvel, and Sony YouTube RSS feeds every minute for post-market Spider-Man: Brand New Day trailer/teaser uploads. |
-| `spotify-top-50-usa` | `/spotifyusa` | `#spotifyusa` | `Spotify USA Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - USA and auto-discovers monthly USA artist #1 markets. |
-| `spotify-top-50-global` | `/spotifyglobal` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global and auto-discovers monthly global artist #1 markets. |
-| `strategy-bitcoin-purchases` | `/strategybtc` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active weekly Polymarket date range and auto-discovers new weekly markets. |
-| `tesla-deliveries` | `/tesla` | `#tesla` | `Tesla Deliveries Alerts` | `🚗` | Monitors Tesla production and deliveries press releases for Q2 2026 delivery updates. |
-| `treasury-mts-deficit` | `/treasurymts` | `#treasurymts` | `Treasury MTS Alerts` | `🧾` | Monitors FiscalData Monthly Treasury Statement table 1 current-month deficit/surplus rows and alerts when a new report month or amount appears. |
-| `trump-getty-photos` | `/trumpgetty` | `#trumpgetty` | `Trump Getty Alerts` | `📸` | Monitors Getty tagged editorial Donald Trump photo coverage by day using the public Getty search page reader fallback. |
-| `trump-schedule` | `/trumpschedule` | `#trumpschedule` | `Trump Schedule Alerts` | `🗓️` | General Roll Call Factbase daily Trump schedule feed with compact change alerts and no default Polymarket URL. |
-| `trump-truth` | `/trumptruth` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Monitors the Trump's Truth archive feed for @realDonaldTrump posts and parsed weekly Polymarket strike terms. |
-| `tsa-passengers` | `/tsa` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
-| `umich-consumer-sentiment` | `/umichsentiment` | `#umichsentiment` | `UMich Sentiment Alerts` | `📊` | Monitors UMich Surveys of Consumers final June 2026 Index of Consumer Sentiment and polls fast around the scheduled release. |
-| `usgs-earthquakes` | `/earthquake` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Tracks the USGS count of 5.5+ earthquakes in the active weekly market window and alerts on count increases or revision-driven decreases. |
-| `usgs-earthquakes-6-5` | `/earthquake65` | `#earthquake65` | `USGS 6.5 Earthquake Alerts` | `🌏` | Tracks the USGS count of 6.5+ earthquakes in the active weekly market window and auto-discovers upcoming 6.5 weekly markets. |
-| `usgs-earthquakes-7-plus` | `/earthquake7` | `#earthquake7` | `USGS 7.0 Earthquake Alerts` | `🌋` | Tracks the Dec 4-Jun 30 7.0+ earthquake market and includes the overlapping full-year 2026 count in each alert. |
-| `usgs-earthquakes-7-plus-2026` | `/earthquake2026` | `#earthquake2026` | `USGS 2026 Earthquake Alerts` | `📅` | Tracks the full-year 2026 7.0+ earthquake market and includes the overlapping Dec 4-Jun 30 count in each alert. |
-| `volmex-bviv-low-strikes` | `/bviv` | `#bviv` | `BVIV Alerts` | `📉` | Monitors Volmex BVIV 1-minute low candles and alerts once when tracked low strikes are crossed. |
-| `volmex-eviv-high-strikes` | `/eviv` | `#eviv` | `EVIV Alerts` | `📈` | Monitors Volmex EVIV 1-minute high candles and alerts once when tracked high strikes are crossed. |
-| `white-house-aliens-nyc` | `/aliennyc` | `#aliennyc` | `Alien NYC Arrests Alerts` | `🛸` | Monitors the White House aliens table Total Arrests counter for New York, NY. |
-| `white-house-briefings` | `/whbriefings` | `#whbriefings` | `White House Briefing Alerts` | `🏛️` | Monitors White House Briefings & Statements and alerts on every newly listed message. |
-| `white-house-full-lid` | `/fulllid` | `#fulllid` | `White House Lid Alerts` | `🧢` | Monitors Roll Call and Forth for the first daily White House full lid and labels whether it was before 6:30 PM ET. |
-| `white-house-tweets` | `/whitehousetweets` | `#whitehousetweets` | `White House Tweet Alerts` | `🐦` | Counts @WhiteHouse X posts in overlapping weekly noon-to-noon ET markets and sends hourly summary alerts for newly captured posts. |
-| `hk-precip` | `/hkprecip` | `#hkprecip` | `HKO Hong Kong Precip Alerts` | `☔` | Monitors HKO Hong Kong monthly rainfall, using Yesterday's Weather as an alpha add-on before Daily Extract catches up. |
-| `ism-services-pmi` | `/ismpmi` | `#ismpmi` | `ISM PMI Alerts` | `📊` | Monitors the ISM Services PMI May 2026 report and polls faster around the scheduled release day. |
-| `isw-ukraine-map` | `/iswmap` | `#iswmap` | `ISW Map Alerts` | `🗺️` | Monitors the ISW ArcGIS StoryMaps Ukraine frontline geometry notice every minute and alerts when the daily started/finalized notice changes. |
-| `kaito-polymarket-mindshare` | `/kaitomindshare` | `#kaitomindshare` | `Kaito Mindshare Alerts` | `🧠` | Monitors finalized Kaito Info Markets Historical Data rows for Polymarket mindshare. |
-| `apple-kpop-song-releases` | `/kpopreleases` | `#kpopreleases` | `KPop Song Release Alerts` | `🎤` | Monitors Apple Music/iTunes for new 2026 songs by unresolved KPop groups parsed from the Polymarket market. |
-| `kma-seoul-precip` | `/koreaprecip` | `#koreaprecip` | `KMA Seoul Precip Alerts` | `☔` | Monitors KMA Seoul monthly precipitation for Polymarket resolution checks. |
-| `met-office-london-precip` | `/londonprecip` | `#londonprecip` | `Met Office London Precip Alerts` | `☔` | Monitors Met Office Heathrow station rain mm, with Infoclimat daily cumulative alpha before the Met Office monthly row appears. |
-| `mrbeast-gaming-video` | `/mrbeastgaming` | `#mrbeastgaming` | `MrBeast Gaming Alerts` | `🎮` | Monitors the MrBeast Gaming YouTube RSS feed every minute for new uploads tied to the next-gaming-video Polymarket market. |
-| `mrbeast-subscribers` | `/mrbeastsubs` | `#mrbeastsubs` | `MrBeast Subs Alerts` | `👥` | Polls MrBeast YouTube channel subscriber metadata every minute with rate and Polymarket target projections. |
-| `mrbeast-views` | `/mrbeastviews` | `#mrbeastviews` | `MrBeast Views Alerts` | `👀` | Polls MrBeast YouTube channel total-view metadata every minute with compact billion/million target summaries. |
-| `nasa-gistemp-temperature` | `/gistemp` | `#gistemp` | `NASA GISTEMP Alerts` | `🌡️` | Monitors NASA GISTEMP Global Land-Ocean Temperature Index monthly anomaly cells. |
-| `noaa-atlanta-rain` | `/atlantarain` | `#atlantarain` | `NOAA Atlanta Rain Alerts` | `☔` | Monitors NOAA Atlanta Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
-| `noaa-boston-rain` | `/bostonrain` | `#bostonrain` | `NOAA Boston Rain Alerts` | `☔` | Monitors NOAA Boston Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
-| `noaa-dallas-rain` | `/dallasrain` | `#dallasrain` | `NOAA Dallas Rain Alerts` | `☔` | Monitors NOAA Dallas Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
-| `noaa-denver-rain` | `/denverrain` | `#denverrain` | `NOAA Denver Rain Alerts` | `☔` | Monitors NOAA Denver Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
-| `noaa-nyc-precip` | `/nycprecip` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation with latest daily row details so new 0.00 or trace days still alert. |
-| `noaa-san-francisco-rain` | `/sfrain` | `#sfrain` | `NOAA SF Rain Alerts` | `☔` | Monitors NOAA San Francisco City daily precipitation for the June 9 rain market and alerts when the value finalizes. |
-| `noaa-seattle-precip` | `/seattleprecip` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation with latest daily row details so new 0.00 or trace days still alert. |
-| `ncei-tornadoes` | `/tornadoes` | `#tornadoes` | `NCEI Tornado Alerts` | `🌪️` | Monitors NCEI U.S. Tornadoes monthly time-series counts and auto-discovers monthly tornado markets. |
-| `nyt-front-page` | `/nytfront` | `#nytfront` | `NYT Front Page Alerts` | `📰` | Monitors New York edition NYT front-page headline strikes, highlights OCR matches in the page image, and auto-discovers weekly NYT Polymarket markets. |
+| `pyth-natural-gas-strikes` | `/monitor` | `#ngprice` | `NG Price Alerts` | `⛽` | Monitors the top Pyth Natural Gas ticker, alerts only on strike crossings, and auto-discovers monthly NG price markets. |
+| `pyth-wti-strikes` | `/monitor` | `#wti` | `WTI Price Alerts` | `🛢️` | Monitors the top Pyth WTI ticker, alerts only on strike crossings, and auto-discovers monthly WTI price markets. |
+| `pyth-xagusd-strikes` | `/monitor` | `#xagusd` | `XAGUSD Price Alerts` | `🥈` | Monitors the Pyth XAGUSD feed, alerts only on strike crossings, and auto-discovers monthly silver price markets. |
+| `pyth-xauusd-strikes` | `/monitor` | `#xauusd` | `XAUUSD Price Alerts` | `🥇` | Monitors the Pyth XAUUSD feed, alerts only on strike crossings, and auto-discovers monthly gold price markets. |
+| `silver-trump-approval` | `/monitor` | `#trumpapproval` | `Trump Approval Alerts` | `📊` | Monitors Silver Bulletin's Trump approval trend-line data and alerts when the June 5 value is finalized. |
+| `spider-man-trailer` | `/monitor` | `#spiderman` | `Spider-Man Trailer Alerts` | `🕷️` | Monitors Spider-Man, Sony Pictures, Marvel, and Sony YouTube RSS feeds every minute for post-market Spider-Man: Brand New Day trailer/teaser uploads. |
+| `spotify-top-50-usa` | `/monitor` | `#spotifyusa` | `Spotify USA Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - USA and auto-discovers monthly USA artist #1 markets. |
+| `spotify-top-50-global` | `/monitor` | `#spotifyglobal` | `Spotify Global Top 50 Alerts` | `🎵` | Monitors the #1 track and primary artist profile(s) on Spotify Top 50 - Global and auto-discovers monthly global artist #1 markets. |
+| `strategy-bitcoin-purchases` | `/monitor` | `#strategybtc` | `Strategy BTC Alerts` | `🪙` | Monitors Strategy's Bitcoin Purchases page for announcements in the active weekly Polymarket date range and auto-discovers new weekly markets. |
+| `tesla-deliveries` | `/monitor` | `#tesla` | `Tesla Deliveries Alerts` | `🚗` | Monitors Tesla production and deliveries press releases for Q2 2026 delivery updates. |
+| `treasury-mts-deficit` | `/monitor` | `#treasurymts` | `Treasury MTS Alerts` | `🧾` | Monitors FiscalData Monthly Treasury Statement table 1 current-month deficit/surplus rows and alerts when a new report month or amount appears. |
+| `trump-getty-photos` | `/monitor` | `#trumpgetty` | `Trump Getty Alerts` | `📸` | Monitors Getty tagged editorial Donald Trump photo coverage by day using the public Getty search page reader fallback. |
+| `trump-schedule` | `/monitor` | `#trumpschedule` | `Trump Schedule Alerts` | `🗓️` | General Roll Call Factbase daily Trump schedule feed with compact change alerts and no default Polymarket URL. |
+| `trump-truth` | `/monitor` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Monitors the Trump's Truth archive feed for @realDonaldTrump posts and parsed weekly Polymarket strike terms. |
+| `tsa-passengers` | `/monitor` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
+| `umich-consumer-sentiment` | `/monitor` | `#umichsentiment` | `UMich Sentiment Alerts` | `📊` | Monitors UMich Surveys of Consumers final June 2026 Index of Consumer Sentiment and polls fast around the scheduled release. |
+| `usgs-earthquakes` | `/monitor` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Tracks the USGS count of 5.5+ earthquakes in the active weekly market window and alerts on count increases or revision-driven decreases. |
+| `usgs-earthquakes-6-5` | `/monitor` | `#earthquake65` | `USGS 6.5 Earthquake Alerts` | `🌏` | Tracks the USGS count of 6.5+ earthquakes in the active weekly market window and auto-discovers upcoming 6.5 weekly markets. |
+| `usgs-earthquakes-7-plus` | `/monitor` | `#earthquake7` | `USGS 7.0 Earthquake Alerts` | `🌋` | Tracks the Dec 4-Jun 30 7.0+ earthquake market and includes the overlapping full-year 2026 count in each alert. |
+| `usgs-earthquakes-7-plus-2026` | `/monitor` | `#earthquake2026` | `USGS 2026 Earthquake Alerts` | `📅` | Tracks the full-year 2026 7.0+ earthquake market and includes the overlapping Dec 4-Jun 30 count in each alert. |
+| `volmex-bviv-low-strikes` | `/monitor` | `#bviv` | `BVIV Alerts` | `📉` | Monitors Volmex BVIV 1-minute low candles and alerts once when tracked low strikes are crossed. |
+| `volmex-eviv-high-strikes` | `/monitor` | `#eviv` | `EVIV Alerts` | `📈` | Monitors Volmex EVIV 1-minute high candles and alerts once when tracked high strikes are crossed. |
+| `white-house-aliens-nyc` | `/monitor` | `#aliennyc` | `Alien NYC Arrests Alerts` | `🛸` | Monitors the White House aliens table Total Arrests counter for New York, NY. |
+| `white-house-briefings` | `/monitor` | `#whbriefings` | `White House Briefing Alerts` | `🏛️` | Monitors White House Briefings & Statements and alerts on every newly listed message. |
+| `white-house-full-lid` | `/monitor` | `#fulllid` | `White House Lid Alerts` | `🧢` | Monitors Roll Call and Forth for the first daily White House full lid and labels whether it was before 6:30 PM ET. |
+| `white-house-tweets` | `/monitor` | `#whitehousetweets` | `White House Tweet Alerts` | `🐦` | Counts @WhiteHouse X posts in overlapping weekly noon-to-noon ET markets and sends hourly summary alerts for newly captured posts. |
+| `hk-precip` | `/monitor` | `#hkprecip` | `HKO Hong Kong Precip Alerts` | `☔` | Monitors HKO Hong Kong monthly rainfall, using Yesterday's Weather as an alpha add-on before Daily Extract catches up. |
+| `ism-services-pmi` | `/monitor` | `#ismpmi` | `ISM PMI Alerts` | `📊` | Monitors the ISM Services PMI May 2026 report and polls faster around the scheduled release day. |
+| `isw-ukraine-map` | `/monitor` | `#iswmap` | `ISW Map Alerts` | `🗺️` | Monitors the ISW ArcGIS StoryMaps Ukraine frontline geometry notice every minute and alerts when the daily started/finalized notice changes. |
+| `kaito-polymarket-mindshare` | `/monitor` | `#kaitomindshare` | `Kaito Mindshare Alerts` | `🧠` | Monitors finalized Kaito Info Markets Historical Data rows for Polymarket mindshare. |
+| `apple-kpop-song-releases` | `/monitor` | `#kpopreleases` | `KPop Song Release Alerts` | `🎤` | Monitors Apple Music/iTunes for new 2026 songs by unresolved KPop groups parsed from the Polymarket market. |
+| `kma-seoul-precip` | `/monitor` | `#koreaprecip` | `KMA Seoul Precip Alerts` | `☔` | Monitors KMA Seoul monthly precipitation for Polymarket resolution checks. |
+| `met-office-london-precip` | `/monitor` | `#londonprecip` | `Met Office London Precip Alerts` | `☔` | Monitors Met Office Heathrow station rain mm, with Infoclimat daily cumulative alpha before the Met Office monthly row appears. |
+| `mrbeast-gaming-video` | `/monitor` | `#mrbeastgaming` | `MrBeast Gaming Alerts` | `🎮` | Monitors the MrBeast Gaming YouTube RSS feed every minute for new uploads tied to the next-gaming-video Polymarket market. |
+| `mrbeast-subscribers` | `/monitor` | `#mrbeastsubs` | `MrBeast Subs Alerts` | `👥` | Polls MrBeast YouTube channel subscriber metadata every minute with rate and Polymarket target projections. |
+| `mrbeast-views` | `/monitor` | `#mrbeastviews` | `MrBeast Views Alerts` | `👀` | Polls MrBeast YouTube channel total-view metadata every minute with compact billion/million target summaries. |
+| `nasa-gistemp-temperature` | `/monitor` | `#gistemp` | `NASA GISTEMP Alerts` | `🌡️` | Monitors NASA GISTEMP Global Land-Ocean Temperature Index monthly anomaly cells. |
+| `noaa-atlanta-rain` | `/monitor` | `#atlantarain` | `NOAA Atlanta Rain Alerts` | `☔` | Monitors NOAA Atlanta Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
+| `noaa-boston-rain` | `/monitor` | `#bostonrain` | `NOAA Boston Rain Alerts` | `☔` | Monitors NOAA Boston Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
+| `noaa-dallas-rain` | `/monitor` | `#dallasrain` | `NOAA Dallas Rain Alerts` | `☔` | Monitors NOAA Dallas Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
+| `noaa-denver-rain` | `/monitor` | `#denverrain` | `NOAA Denver Rain Alerts` | `☔` | Monitors NOAA Denver Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
+| `noaa-nyc-precip` | `/monitor` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation with latest daily row details so new 0.00 or trace days still alert. |
+| `noaa-san-francisco-rain` | `/monitor` | `#sfrain` | `NOAA SF Rain Alerts` | `☔` | Monitors NOAA San Francisco City daily precipitation for the June 9 rain market and alerts when the value finalizes. |
+| `noaa-seattle-precip` | `/monitor` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation with latest daily row details so new 0.00 or trace days still alert. |
+| `ncei-tornadoes` | `/monitor` | `#tornadoes` | `NCEI Tornado Alerts` | `🌪️` | Monitors NCEI U.S. Tornadoes monthly time-series counts and auto-discovers monthly tornado markets. |
+| `nyt-front-page` | `/monitor` | `#nytfront` | `NYT Front Page Alerts` | `📰` | Monitors New York edition NYT front-page headline strikes, highlights OCR matches in the page image, and auto-discovers weekly NYT Polymarket markets. |
 
 ## Archived Integrations
 
@@ -125,10 +125,10 @@ No archived integrations currently.
 
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
-- One adapter normally creates one monitor channel and one slash-command group. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA integrations keep individual UMA alert roles and reaction selectors. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts.
-- Shared integration commands are generated in `src/commands.ts`: `status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `pause`, `archive`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`. Channel cleanup is bot-level through `/bot clear`.
-- Discord allows 100 guild slash commands per app. `src/registerCommands.ts` enforces this cap, and `src/commands.ts` can keep stale/temporary monitors polling while excluding their slash commands from registration.
-- Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
+- One adapter normally creates one monitor channel. Non-UMA integrations use the generic `/monitor` command inside that channel; UMA integrations keep individual UMA command groups, individual UMA alert roles, and reaction selectors. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts.
+- Shared integration commands are generated in `src/commands.ts`: `/monitor status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `pause`, `archive`, `resume`; channel-specific capability commands such as `period`, `snapshot`, `strikes`, `search`, `tagsearch`, `tags`, `watchlist`, `threshold`, `setup`, and `watch` are visible under `/monitor` but only execute in channels whose adapter supports them. Channel cleanup is bot-level through `/bot clear`.
+- Discord allows 100 guild slash commands per app. `src/registerCommands.ts` enforces this cap; normal monitors share `/monitor` so new integrations do not consume one command each.
+- Channel names should identify the monitor topic, while the command is `/monitor` for non-UMA channels.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
 - Event alerts can put noisy metadata in `hiddenFields`; Discord shows it only through the shared `Show more` button.
 - Polling and alert sends live in `src/poller.ts`; reaction-role add/remove logic lives in `src/reactionRoles.ts`.
@@ -191,61 +191,61 @@ The bot invite needs `Manage Channels`, `Send Messages`, `View Channels`, `Manag
 
 ## Commands
 
-The bot creates a channel for each registered adapter when it starts, then checks every minute for missing channels and alert-role drift.
+The bot creates a channel for each adapter when it starts, then checks every minute for missing channels and alert-role drift.
 
 Non-UMA alert subscriptions are category-based. `#market-alert-roles` shows one reaction entry per Discord category, and every integration channel in that category pings the same category role. Moving a channel between categories or renaming a category is detected by Discord channel updates and by the periodic provisioner sync. UMA integrations keep their separate UMA-specific subscription roles.
 
-Every integration uses the same command shape inside its own channel. Replace `/bonbast` below with that channel's command, for example `/trumptruth`, `/tsa`, or `/mrbeastviews`:
+Most integrations use the same generic command inside their own channel. Run `/monitor` in the channel you want to control, for example `#bonbast-usd-irr`, `#trumptruth`, `#tsa`, or `#mrbeastviews`:
 
-- `/bonbast status`
-- `/bonbast check`
-- `/bonbast last`
-- `/bonbast updates`
-- `/freeappstore snapshot`
-- `/paidappstore snapshot`
-- `/bonbast polymarket url:https://polymarket.com/event/example`
-- `/bonbast enddate datetime:2026-05-10 23:59`
-- `/bonbast interval minutes:1`
+- `/monitor status`
+- `/monitor check`
+- `/monitor last`
+- `/monitor updates`
+- `/monitor snapshot`
+- `/monitor polymarket url:https://polymarket.com/event/example`
+- `/monitor enddate datetime:2026-05-10 23:59`
+- `/monitor interval minutes:1`
 - `/umacommits threshold value:250k`
 - `/umareveals threshold value:250k`
-- `/resolvable watchlist action:add market:https://polymarket.com/market/example`
-- `/resolvable watchlist action:add market:0x...questionId`
-- `/resolvable watchlist action:list`
-- `/arb setup urls:https://predict.fun/market/ipos-before-2027 https://polymarket.com/event/ipos-before-2027 amount:25 min-edge:0.5`
-- `/arb watch urls:https://predict.fun/market/ipos-before-2027 https://polymarket.com/event/ipos-before-2027 outcome:Discord side:BOTH amount:25 min-edge:0.5`
-- `/bonbast pause`
-- `/bonbast archive reason:market ended`
-- `/bonbast resume`
+- `/monitor watchlist action:add market:https://polymarket.com/market/example`
+- `/monitor watchlist action:add market:0x...questionId`
+- `/monitor watchlist action:list`
+- `/monitor setup urls:https://predict.fun/market/ipos-before-2027 https://polymarket.com/event/ipos-before-2027 amount:25 min-edge:0.5`
+- `/monitor watch urls:https://predict.fun/market/ipos-before-2027 https://polymarket.com/event/ipos-before-2027 outcome:Discord side:BOTH amount:25 min-edge:0.5`
+- `/monitor pause`
+- `/monitor archive reason:market ended`
+- `/monitor resume`
 - `/bot summarize`
 - `/bot clear`
 - `/bot clearerrors keep-latest:true`
+- `/bot clearroles`
 
 Month/year integrations also support:
 
-- `/claudedown period year:2026 month:6`
-- `/chatgptoutage period year:2026 month:6`
-- `/hkprecip period year:2026 month:5`
-- `/koreaprecip period year:2026 month:5`
-- `/londonprecip period year:2026 month:5`
-- `/gistemp period year:2026 month:6`
-- `/nycprecip period year:2026 month:5`
-- `/seattleprecip period year:2026 month:5`
+- `/monitor period year:2026 month:6` inside `#claudedown`
+- `/monitor period year:2026 month:6` inside `#chatgptoutage`
+- `/monitor period year:2026 month:5` inside `#hkprecip`
+- `/monitor period year:2026 month:5` inside `#koreaprecip`
+- `/monitor period year:2026 month:5` inside `#londonprecip`
+- `/monitor period year:2026 month:6` inside `#gistemp`
+- `/monitor period year:2026 month:5` inside `#nycprecip`
+- `/monitor period year:2026 month:5` inside `#seattleprecip`
 
 Monthly precipitation, ChatGPT Outage, and Claude Downtime adapters auto-discover active next-month Polymarket URLs through Gamma public search and keep `year`/`month` settings synchronized with the active queued market.
 
-Commands are intentionally channel-scoped. A command only executes in the channel owned by the matching adapter.
+Commands are intentionally channel-scoped. `/monitor` detects the adapter from the current channel and rejects unsupported subcommands for that channel. UMA commands remain adapter-specific.
 Command replies and alerts display timestamps in Singapore local time.
 Status replies show both the configured base interval and the current effective interval. Dynamic polling integrations also show the current polling mode/reason.
 
-Use `/... archive` when a market is done but the adapter should remain available for future market restarts. Archive sets the integration to `paused`, stores `archivedAt` plus optional `archiveReason` in `settingsJson`, and leaves the channel, role, source code, Polymarket URL, last values, and update logs intact. `/... resume` clears archive metadata and resumes polling.
-Use each channel's `updates` command to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.
+Use `/monitor archive` when a market is done but the adapter should remain available for future market restarts. Archive sets the integration to `paused`, stores `archivedAt` plus optional `archiveReason` in `settingsJson`, and leaves the channel, role, source code, Polymarket URL, last values, and update logs intact. `/monitor resume` clears archive metadata and resumes polling.
+Use `/monitor updates` in each channel to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
 Check-failure errors are posted to `#errorlogs` when that channel exists. The bot keeps one editable `Check failed` post per integration, updates repeated failures there, and falls back to the integration channel only if `#errorlogs` is unavailable. Use `/bot clearerrors` to scan integration channels plus `#errorlogs` and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
-Arbitrage replies are alert-only. `/arb setup` asks for a shared outcome and YES/NO/BOTH side through dropdowns, then alerts only when the best route is positive after configured platform fees and the minimum edge. Alerts include the buy/sell platform, side, executable amount, fees, and expected profit. Predict and Opinion checks require their API keys in `.env`.
-MarineTraffic alpha for `/hormuzships` and `/babmandeb` is optional. The public MarineTraffic map blocks bot fetches; use official MarineTraffic/Kpler export URLs in `MARINETRAFFIC_HORMUZ_ALPHA_URL` and `MARINETRAFFIC_BAB_ALPHA_URL` if you have API/export access. If unset, PortWatch output is unchanged.
+Arbitrage replies are alert-only. `/monitor setup` in `#arb` asks for a shared outcome and YES/NO/BOTH side through dropdowns, then alerts only when the best route is positive after configured platform fees and the minimum edge. Alerts include the buy/sell platform, side, executable amount, fees, and expected profit. Predict and Opinion checks require their API keys in `.env`.
+MarineTraffic alpha for `#hormuzships` and `#babmandeb` is optional. The public MarineTraffic map blocks bot fetches; use official MarineTraffic/Kpler export URLs in `MARINETRAFFIC_HORMUZ_ALPHA_URL` and `MARINETRAFFIC_BAB_ALPHA_URL` if you have API/export access. If unset, PortWatch output is unchanged.
 Bonbast replies use Discord embeds with compact fields, colored status accents, and clickable links.
-Use `/bonbast polymarket` once per market so future alerts include a clickable Polymarket link.
-The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If a later queued market is already stored for the integration, rollover reminders for the current market are skipped. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.
+Use `/monitor polymarket` once per market so future alerts include a clickable Polymarket link.
+The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If a later queued market is already stored for the integration, rollover reminders for the current market are skipped. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use `/monitor enddate` in the channel to manually set the end time in ET, for example `/monitor enddate datetime:2026-05-10 23:59`.
 Use `/bot clear` to clear the current text channel. You and the bot both need `Manage Messages`.
 
 ## Raspberry Pi Health Alerts
@@ -322,10 +322,9 @@ UMA Proposal and Dispute Alerts also support address labels:
 The same `addresses` subcommand is available on `/umadispute`. Adding, removing, clearing, or importing labels syncs across the configured UMA proposal and dispute integrations so proposer and disputer fields can show names above the raw address. Bulk import accepts CSV or loose text where each nonblank row contains one nickname and one `0x` address; dry-run defaults to true so imports can be previewed before saving. Export returns the current shared address book as CSV. Alerts resolve each proposer/disputer through Polymarket Gamma `public-profile`, then check Data API trades on the resolved proxy wallet; addresses with at least one trade get a Polymarket profile link, while addresses with no linked profile/trades are marked as not linked. Proposal and dispute alerts also check the resolved proxy wallet for aligned and hedged positions on the same Polymarket condition, and always include a Polygonscan address link for proposer/disputer addresses.
 UMA proposal/dispute alerts also include `Refresh data`, `Label proposer`, and `Label disputer` buttons when those addresses are present. `Refresh data` retries profile/trade/position enrichment and edits the existing alert; label buttons open a private nickname form and save through the same synced address-label storage.
 
-App Store integrations have one extra command:
+App Store integrations have one extra command inside their channels:
 
-- `/freeappstore snapshot`
-- `/paidappstore snapshot`
+- `/monitor snapshot`
 
 The Free App Store and Paid App Store integrations run a separate daily snapshot check during the 12:00-12:05 PM ET window. That snapshot is posted as a distinct snapshot alert, stored in separate SQLite fields, and is not overwritten by regular interval checks. The next ET day noon snapshot replaces the previous stored snapshot. Repeated snapshot failures use the shared integration error-throttling window.
 
@@ -371,7 +370,7 @@ The Current Integrations table is the source of truth for each adapter's role na
 - UMA Clarification Alerts subscribes to pending `postUpdate(bytes32,bytes)` transactions and mined `AncillaryDataUpdated` events from Polymarket's UMA bulletin-board contract on Polygon over WebSocket, defaults to PublicNode's free Polygon Bor WebSocket, and uses Nodies, OnFinality, dRPC, PublicNode, Tenderly, and QuickNode public endpoints for 1-minute HTTP backfill. Pending mempool alerts are best-effort and can arrive before mining; the mined-log path remains the confirmation/backfill. It can be pointed at another provider with `POLYGON_WS_URL`, `POLYGON_RPC_URL`, or comma-separated `POLYGON_RPC_URLS`.
 - UMA Dispute Alerts subscribes to UMA OptimisticOracle `DisputePrice` events on Polygon, watches current and legacy oracle contracts, filters requester addresses to Polymarket UMA requester contracts including the bulletin board adapter, and uses 1-minute HTTP backfill plus CLOB `markets-by-question-id` enrichment.
 - UMA Proposal Alerts subscribes to UMA OptimisticOracle `ProposePrice` events on Polygon, watches current and legacy oracle contracts, filters requester addresses to Polymarket UMA requester contracts including the bulletin board adapter, enriches each proposal through CLOB `markets-by-question-id`, alerts only when the returned market tags match configured `/umaproposals tags` filters, and adds a Penny pick liquidity field only when the CLOB book returns live asks for the proposed-side token. CLOB orderbook failures are shown in the main alert as `PENNY PICK CHECK`; non-error check details stay in Show more.
-- Polymarket Resolvable Watch keeps an empty watchlist by default. `/resolvable watchlist action:add market:<polymarket-url>` stores Gamma `questionID` and `conditionId` values, while `market:<question-id>` stores a raw question ID and skips the CTF `conditionId` precheck. It polls Conditional Tokens `payoutDenominator(bytes32)` when a condition ID is known plus UMA CTF adapter `ready(bytes32)` through Polygon `eth_call` only while at least one market is configured, alerts when either the condition is already resolved or `ready` returns true, and removes that market from the watchlist.
+- Polymarket Resolvable Watch keeps an empty watchlist by default. `/monitor watchlist action:add market:<polymarket-url>` stores Gamma `questionID` and `conditionId` values, while `market:<question-id>` stores a raw question ID and skips the CTF `conditionId` precheck. It polls Conditional Tokens `payoutDenominator(bytes32)` when a condition ID is known plus UMA CTF adapter `ready(bytes32)` through Polygon `eth_call` only while at least one market is configured, alerts when either the condition is already resolved or `ready` returns true, and removes that market from the watchlist.
 - UMA Vote Commits polls Ethereum UMA Voting v2 `VoteCommitted` logs every minute, estimates each voter's current stake at the commit block with `getVoterStakePostUpdate(address)`, detects recommits from repeated voter/request commit keys, groups same-voter events per scan into voter-level summaries because commit answers are confidential, drops pending/backfilled alerts older than 10 minutes, and alerts only when the stake is at least `/umacommits threshold`.
 - UMA Vote Reveals polls Ethereum UMA Voting v2 `VoteRevealed` logs every minute, groups same-voter events per scan, drops pending/backfilled alerts older than 10 minutes, and alerts only when the revealed `numTokens` vote weight is at least `/umareveals threshold`; default free RPC endpoints can be overridden with `ETHEREUM_RPC_URL` or comma-separated `ETHEREUM_RPC_URLS`.
 - Grouped UMA vote alerts are voter-level summaries only and intentionally omit per-request lists and Show more details.

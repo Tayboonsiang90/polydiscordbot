@@ -223,7 +223,7 @@ export async function fetchPolymarketResolvableUpdates(
       checkFields: [
         { name: "Watched markets", value: "0", inline: true },
         { name: "Polygon RPC calls", value: "0", inline: true },
-        { name: "Status", value: "Idle. Add a market with `/resolvable watchlist action:add market:<polymarket-url>`.", inline: false }
+        { name: "Status", value: "Idle. Add a market with `/monitor watchlist action:add market:<polymarket-url>`.", inline: false }
       ],
       observedAt: now
     };

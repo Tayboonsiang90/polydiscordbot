@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildAdapterCommands,
   buildBotCommands,
+  buildMonitorCommands,
   formatPolymarketLine,
   handleAdapterCommand,
   listSlashCommandAdapters,
   normalizePolymarketUrl
 } from "../src/commands.js";
-import { listAdapters } from "../src/integrations/registry.js";
 import {
   buildCheckEmbed,
   buildClearErrorsEmbed,
@@ -58,7 +58,7 @@ describe("adapter commands", () => {
     const interaction = {
       guild: { id: "guild" },
       channel: { id: "channel" },
-      commandName: "bonbast",
+      commandName: "monitor",
       options: { getSubcommand: () => "check" },
       deferReply: vi.fn()
     };
@@ -85,11 +85,13 @@ describe("adapter commands", () => {
     });
   });
 
-  it("registers shared and adapter-specific subcommands from adapter capabilities", () => {
+  it("registers a generic monitor command plus UMA-specific command groups", () => {
     type CommandJson = { name: string; description?: string; options?: Array<{ name: string }> };
     const commandByName = new Map(
       buildAdapterCommands().map((command) => [command.name, command.toJSON() as CommandJson])
     );
+    const monitorCommand = buildMonitorCommands()[0].toJSON() as CommandJson;
+    const monitorOptions = monitorCommand.options ?? [];
     const sharedSubcommands = [
       "status",
       "check",
@@ -102,6 +104,32 @@ describe("adapter commands", () => {
       "archive",
       "resume"
     ];
+    const channelCapabilitySubcommands = [
+      "period",
+      "snapshot",
+      "strikes",
+      "search",
+      "tagsearch",
+      "tags",
+      "watchlist",
+      "tagblocks",
+      "addresses",
+      "threshold",
+      "setup",
+      "watch",
+      "config"
+    ];
+
+    expect(monitorCommand).toMatchObject({
+      name: "monitor",
+      description: "Manage the monitor in this channel"
+    });
+    for (const subcommandName of [...sharedSubcommands, ...channelCapabilitySubcommands]) {
+      expect(monitorOptions).toEqual(expect.arrayContaining([expect.objectContaining({ name: subcommandName })]));
+    }
+    expect(monitorOptions).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "clear" })]));
+    expect(monitorOptions).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "test" })]));
+    expect(monitorOptions).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "analysis" })]));
 
     for (const adapter of listSlashCommandAdapters()) {
       const command = commandByName.get(adapter.commandName);
@@ -144,18 +172,12 @@ describe("adapter commands", () => {
     }
 
     expect(commandByName.has("alignedsale")).toBe(false);
-    expect(commandByName.get("iswmap")).toMatchObject({
-      name: "iswmap",
-      description: "Manage ISW Ukraine Map"
-    });
-    expect(commandByName.get("mentions")).toMatchObject({
-      name: "mentions",
-      description: "Manage Polymarket Mention Markets"
-    });
+    expect(commandByName.has("iswmap")).toBe(false);
+    expect(commandByName.has("mentions")).toBe(false);
   });
 
   it("keeps registered slash commands within Discord's guild command cap", () => {
-    expect(buildAdapterCommands().length + buildBotCommands().length).toBeLessThanOrEqual(100);
+    expect(buildMonitorCommands().length + buildAdapterCommands().length + buildBotCommands().length).toBeLessThanOrEqual(100);
   });
 
   it("registers UMA address bulk import and export options", () => {
@@ -182,7 +204,7 @@ describe("adapter commands", () => {
 
   it("keeps adapter command option counts within Discord limits", () => {
     type CommandJson = { name: string; options?: Array<{ name: string }> };
-    for (const command of buildAdapterCommands()) {
+    for (const command of [...buildMonitorCommands(), ...buildAdapterCommands()]) {
       const json = command.toJSON() as CommandJson;
       expect(json.options?.length ?? 0).toBeLessThanOrEqual(25);
     }
@@ -190,7 +212,7 @@ describe("adapter commands", () => {
 
   it("registers the resolvable watchlist command options", () => {
     type CommandJson = { name: string; options?: Array<{ name: string; options?: Array<{ name: string; choices?: Array<{ value: string }> }> }> };
-    const command = buildAdapterCommands().find((candidate) => candidate.name === "resolvable")?.toJSON() as CommandJson | undefined;
+    const command = buildMonitorCommands()[0].toJSON() as CommandJson;
     const watchlist = command?.options?.find((option) => option.name === "watchlist");
     const action = watchlist?.options?.find((option) => option.name === "action");
 
@@ -315,14 +337,14 @@ describe("adapter commands", () => {
       [
         {
           displayName: "Bonbast USD/IRR",
-          commandName: "bonbast",
+          commandName: "monitor",
           roleId: "role-1",
           roleName: "Bonbast Alerts",
           emoji: "💱"
         },
         {
           displayName: "Strategy Bitcoin Purchases",
-          commandName: "strategybtc",
+          commandName: "monitor",
           roleId: "role-2",
           roleName: "Strategy BTC Alerts",
           emoji: "🪙"
@@ -336,10 +358,10 @@ describe("adapter commands", () => {
     expect(embed.description).toBe("React to receive alerts. Remove your reaction to opt out.");
     expect(embed.fields).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "💱 Bonbast USD/IRR", value: "Role: <@&role-1>\nCommand: `/bonbast`" }),
+        expect.objectContaining({ name: "💱 Bonbast USD/IRR", value: "Role: <@&role-1>\nCommand: `/monitor`" }),
         expect.objectContaining({
           name: "🪙 Strategy Bitcoin Purchases",
-          value: "Role: <@&role-2>\nCommand: `/strategybtc`"
+          value: "Role: <@&role-2>\nCommand: `/monitor`"
         })
       ])
     );

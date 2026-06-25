@@ -709,7 +709,7 @@ export function buildMarketEndReminderEmbed(integration: Integration, reminder: 
       { name: "Reminder", value: reminder.label, inline: false },
       { name: "Market ends", value: formatSharedEasternDateTime(reminder.endAt), inline: false },
       { name: "Action", value: "Update this integration's Polymarket URL if you are moving to the next market.", inline: false },
-      { name: "Command", value: "Use this channel's `/... polymarket url:<new-polymarket-url>` subcommand.", inline: false },
+      { name: "Command", value: "Use `/monitor polymarket url:<new-polymarket-url>` in this monitor channel.", inline: false },
       { name: "Links", value: formatLinks(integration), inline: false }
     )
     .setFooter({ text: `Reminder sent at ${nowEasternDateTime()}` });
@@ -736,8 +736,8 @@ export function buildMarketEndMissingEmbed(integration: Integration): EmbedBuild
     .setColor(warningColor)
     .addFields(
       { name: "Problem", value: "Polymarket Gamma API did not return an endDate for this market URL.", inline: false },
-      { name: "Action", value: "Check the Polymarket URL, or manually set the ET end time with this channel's `enddate` command.", inline: false },
-      { name: "Example", value: "`/... enddate datetime:2026-05-10 23:59`", inline: false },
+      { name: "Action", value: "Check the Polymarket URL, or manually set the ET end time with `/monitor enddate`.", inline: false },
+      { name: "Example", value: "`/monitor enddate datetime:2026-05-10 23:59`", inline: false },
       { name: "Links", value: formatLinks(integration), inline: false }
     )
     .setFooter({ text: `Warning sent at ${nowEasternDateTime()}` });

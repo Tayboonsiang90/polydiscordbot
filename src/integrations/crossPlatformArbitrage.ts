@@ -156,7 +156,7 @@ export const crossPlatformArbitrageAdapter: WebsiteAdapter = {
     const watch = integration ? parseArbitrageSettings(integration.settingsJson).watch : undefined;
     if (!watch) {
       return {
-        value: "No arbitrage watch configured. Run /arb setup or /arb watch in this channel.",
+        value: "No arbitrage watch configured. Run `/monitor setup` or `/monitor watch` in this channel.",
         rawValue: "not-configured",
         observedAt
       };
@@ -202,7 +202,7 @@ export async function prepareCrossPlatformArbitrageSetup(
     settingsJson,
     message:
       outcomes.length > maxSetupOutcomes
-        ? `Found ${outcomes.length} shared outcomes. Showing the first ${maxSetupOutcomes}; use /arb watch with an outcome name if yours is not listed.`
+        ? `Found ${outcomes.length} shared outcomes. Showing the first ${maxSetupOutcomes}; use /monitor watch with an outcome name if yours is not listed.`
         : `Found ${outcomes.length} shared outcome(s). Choose the outcome, then choose YES, NO, or BOTH.`,
     outcomes: pendingArbitrageSetup.outcomes
   };
@@ -240,7 +240,7 @@ export function selectCrossPlatformArbitrageOutcome(
   const pending = settings.pendingArbitrageSetup;
   const selected = pending?.outcomes[outcomeIndex];
   if (!pending || !selected) {
-    throw new Error("No pending arbitrage setup was found. Run /arb setup again.");
+    throw new Error("No pending arbitrage setup was found. Run /monitor setup again.");
   }
 
   const nextPending: PendingArbitrageSetup = {
@@ -266,12 +266,12 @@ export function selectCrossPlatformArbitrageSide(
   const settings = parseArbitrageSettings(integration.settingsJson);
   const pending = settings.pendingArbitrageSetup;
   if (!pending || pending.selectedOutcomeIndex === undefined) {
-    throw new Error("Choose an arbitrage outcome first, or run /arb setup again.");
+    throw new Error("Choose an arbitrage outcome first, or run /monitor setup again.");
   }
 
   const outcome = pending.outcomes[pending.selectedOutcomeIndex];
   if (!outcome) {
-    throw new Error("The selected arbitrage outcome is no longer available. Run /arb setup again.");
+    throw new Error("The selected arbitrage outcome is no longer available. Run /monitor setup again.");
   }
 
   return buildWatchResult(integration, {

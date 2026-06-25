@@ -69,73 +69,98 @@ const roleChannelName = "market-alert-roles";
 const checkFailedTitleSuffix = " - Check failed";
 const maxAddressImportBytes = 256_000;
 const addressImportDownloadTimeoutMs = 10_000;
-const unregisteredAdapterCommandNames = new Set(["alignedsale"]);
+const monitorCommandName = "monitor";
+const perAdapterCommandAdapterIds = new Set([
+  "polymarket-clarifications",
+  "polymarket-disputes",
+  "polymarket-proposals",
+  "uma-vote-commits",
+  "uma-vote-reveals",
+  "uma-voting-committee"
+]);
 
 export function buildAdapterCommands() {
-  return listSlashCommandAdapters().map((adapter) => {
-    const command = new SlashCommandBuilder()
-      .setName(adapter.commandName)
-      .setDescription(`Manage ${adapter.displayName}`)
-      .addSubcommand((subcommand) => subcommand.setName("status").setDescription("Show monitor status"))
-      .addSubcommand((subcommand) => subcommand.setName("check").setDescription("Fetch the current value now"))
-      .addSubcommand((subcommand) => subcommand.setName("last").setDescription("Show the last stored value"))
-      .addSubcommand((subcommand) => subcommand.setName("updates").setDescription("Show recent source update timing logs"))
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("polymarket")
-          .setDescription("Attach a Polymarket market URL to this monitor")
-          .addStringOption((option) =>
-            option
-              .setName("url")
-              .setDescription("Polymarket market URL")
-              .setRequired(true)
-              .setMinLength(1)
-              .setMaxLength(2048)
-          )
-      )
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("interval")
-          .setDescription("Change polling interval")
-          .addIntegerOption((option) =>
-            option
-              .setName("minutes")
-              .setDescription("Polling interval in minutes")
-              .setRequired(true)
-              .setMinValue(1)
-              .setMaxValue(1440)
-          )
-      )
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("enddate")
-          .setDescription("Manually set the Polymarket market end time in ET")
-          .addStringOption((option) =>
-            option
-              .setName("datetime")
-              .setDescription("ET time, e.g. 2026-05-10 23:59 or 2026-05-10 11:59 PM")
-              .setRequired(true)
-              .setMinLength(16)
-              .setMaxLength(32)
-          )
-      )
-      .addSubcommand((subcommand) => subcommand.setName("pause").setDescription("Pause this monitor"))
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("archive")
-          .setDescription("Pause and archive this monitor without deleting its code or data")
-          .addStringOption((option) =>
-            option
-              .setName("reason")
-              .setDescription("Optional note for why this monitor is archived")
-              .setRequired(false)
-              .setMinLength(1)
-              .setMaxLength(200)
-          )
-      )
-      .addSubcommand((subcommand) => subcommand.setName("resume").setDescription("Resume this monitor"));
+  return listSlashCommandAdapters().map((adapter) => buildAdapterCommand(adapter));
+}
 
-    if (adapter.supportsPeriod) {
+export function buildMonitorCommands() {
+  return [
+    buildAdapterCommand(getAdapter("bonbast-usd-irr"), {
+      commandName: monitorCommandName,
+      description: "Manage the monitor in this channel",
+      includeAllSubcommands: true
+    })
+  ];
+}
+
+function buildAdapterCommand(
+  adapter: WebsiteAdapter,
+  options: { commandName?: string; description?: string; includeAllSubcommands?: boolean } = {}
+) {
+  const includeAllSubcommands = options.includeAllSubcommands ?? false;
+  const command = new SlashCommandBuilder()
+    .setName(options.commandName ?? adapter.commandName)
+    .setDescription(options.description ?? `Manage ${adapter.displayName}`)
+    .addSubcommand((subcommand) => subcommand.setName("status").setDescription("Show monitor status"))
+    .addSubcommand((subcommand) => subcommand.setName("check").setDescription("Fetch the current value now"))
+    .addSubcommand((subcommand) => subcommand.setName("last").setDescription("Show the last stored value"))
+    .addSubcommand((subcommand) => subcommand.setName("updates").setDescription("Show recent source update timing logs"))
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("polymarket")
+        .setDescription("Attach a Polymarket market URL to this monitor")
+        .addStringOption((option) =>
+          option
+            .setName("url")
+            .setDescription("Polymarket market URL")
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(2048)
+        )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("interval")
+        .setDescription("Change polling interval")
+        .addIntegerOption((option) =>
+          option
+            .setName("minutes")
+            .setDescription("Polling interval in minutes")
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(1440)
+        )
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("enddate")
+        .setDescription("Manually set the Polymarket market end time in ET")
+        .addStringOption((option) =>
+          option
+            .setName("datetime")
+            .setDescription("ET time, e.g. 2026-05-10 23:59 or 2026-05-10 11:59 PM")
+            .setRequired(true)
+            .setMinLength(16)
+            .setMaxLength(32)
+        )
+    )
+    .addSubcommand((subcommand) => subcommand.setName("pause").setDescription("Pause this monitor"))
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("archive")
+        .setDescription("Pause and archive this monitor without deleting its code or data")
+        .addStringOption((option) =>
+          option
+            .setName("reason")
+            .setDescription("Optional note for why this monitor is archived")
+            .setRequired(false)
+            .setMinLength(1)
+            .setMaxLength(200)
+        )
+    )
+    .addSubcommand((subcommand) => subcommand.setName("resume").setDescription("Resume this monitor"));
+
+    if (includeAllSubcommands || adapter.supportsPeriod) {
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("period")
@@ -159,19 +184,19 @@ export function buildAdapterCommands() {
       );
     }
 
-    if (adapter.dailySnapshot) {
+    if (includeAllSubcommands || adapter.dailySnapshot) {
       command.addSubcommand((subcommand) =>
         subcommand.setName("snapshot").setDescription("Show the latest stored daily snapshot")
       );
     }
 
-    if (adapter.supportsStrikes) {
+    if (includeAllSubcommands || adapter.supportsStrikes) {
       command.addSubcommand((subcommand) =>
         subcommand.setName("strikes").setDescription("Fetch, store, and show current Polymarket strike terms")
       );
     }
 
-    if (adapter.searchStrikeTerm) {
+    if (includeAllSubcommands || adapter.searchStrikeTerm) {
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("search")
@@ -187,7 +212,7 @@ export function buildAdapterCommands() {
       );
     }
 
-    if (adapter.searchTags) {
+    if (includeAllSubcommands || adapter.searchTags) {
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("tagsearch")
@@ -203,7 +228,7 @@ export function buildAdapterCommands() {
       );
     }
 
-    if (adapter.updateTagFilters) {
+    if (includeAllSubcommands || adapter.updateTagFilters) {
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("tags")
@@ -231,7 +256,7 @@ export function buildAdapterCommands() {
       );
     }
 
-    if (adapter.updateResolvableWatchlist) {
+    if (includeAllSubcommands || adapter.updateResolvableWatchlist) {
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("watchlist")
@@ -259,7 +284,7 @@ export function buildAdapterCommands() {
       );
     }
 
-    if (adapter.updateTagBlocklist) {
+    if (includeAllSubcommands || adapter.updateTagBlocklist) {
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("tagblocks")
@@ -295,7 +320,7 @@ export function buildAdapterCommands() {
       );
     }
 
-    if (adapter.updateAddressLabels) {
+    if (includeAllSubcommands || adapter.updateAddressLabels) {
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("addresses")
@@ -339,7 +364,7 @@ export function buildAdapterCommands() {
       );
     }
 
-    if (adapter.updateThreshold) {
+    if (includeAllSubcommands || adapter.updateThreshold) {
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("threshold")
@@ -355,7 +380,7 @@ export function buildAdapterCommands() {
       );
     }
 
-    if (adapter.prepareArbitrageSetup || adapter.configureArbitrageWatch) {
+    if (includeAllSubcommands || adapter.prepareArbitrageSetup || adapter.configureArbitrageWatch) {
       command
         .addSubcommand((subcommand) =>
           subcommand
@@ -434,7 +459,6 @@ export function buildAdapterCommands() {
     }
 
     return command;
-  });
 }
 
 export function listSlashCommandAdapters(): WebsiteAdapter[] {
@@ -442,7 +466,11 @@ export function listSlashCommandAdapters(): WebsiteAdapter[] {
 }
 
 export function shouldRegisterAdapterCommand(adapter: WebsiteAdapter): boolean {
-  return !unregisteredAdapterCommandNames.has(adapter.commandName);
+  return perAdapterCommandAdapterIds.has(adapter.id);
+}
+
+export function getAdapterCommandNameForDiscord(adapter: WebsiteAdapter): string {
+  return shouldRegisterAdapterCommand(adapter) ? adapter.commandName : monitorCommandName;
 }
 
 export function buildBotCommands() {
@@ -468,7 +496,11 @@ export function buildBotCommands() {
 }
 
 export function isAdapterCommand(commandName: string): boolean {
-  return listAdapters().some((adapter) => adapter.commandName === commandName);
+  return isMonitorCommand(commandName) || listAdapters().some((adapter) => adapter.commandName === commandName);
+}
+
+export function isMonitorCommand(commandName: string): boolean {
+  return commandName === monitorCommandName;
 }
 
 export function isBotCommand(commandName: string): boolean {
@@ -578,11 +610,12 @@ export async function handleAdapterCommand(
     await interaction.deferReply();
   }
 
-  const adapter = getAdapterByCommandName(interaction.commandName);
   let integration = database.getIntegrationByChannel(interaction.guild.id, interaction.channel.id);
   let proposalChannelTag: TagFilterEntry | null = null;
+  const monitorCommand = isMonitorCommand(interaction.commandName);
+  const adapter = monitorCommand ? (integration ? getAdapter(integration.adapterId) : null) : getAdapterByCommandName(interaction.commandName);
 
-  if (!integration && adapter.id === "polymarket-proposals") {
+  if (!monitorCommand && adapter && !integration && adapter.id === "polymarket-proposals") {
     const baseIntegration = database.getIntegrationByAdapter(interaction.guild.id, adapter.id);
     proposalChannelTag = baseIntegration ? getPolymarketProposalTagFilterByChannelId(baseIntegration, interaction.channel.id) : null;
     if (baseIntegration && proposalChannelTag) {
@@ -590,12 +623,13 @@ export async function handleAdapterCommand(
     }
   }
 
-  if (!integration || integration.adapterId !== adapter.id) {
+  if (!integration || !adapter || (!monitorCommand && integration.adapterId !== adapter.id)) {
+    const message = monitorCommand ? "Use `/monitor` in a monitor channel." : `Use this command in the ${adapter?.displayName ?? "matching monitor"} channel.`;
     if (checkCommandDeferred) {
-      await interaction.editReply(`Use this command in the ${adapter.displayName} channel.`);
+      await interaction.editReply(message);
     } else {
       await interaction.reply({
-        content: `Use this command in the ${adapter.displayName} channel.`,
+        content: message,
         flags: MessageFlags.Ephemeral
       });
     }
@@ -934,7 +968,7 @@ export async function handleAdapterCommand(
       embeds: [
         buildArbitrageWatchEmbed(integration, {
           settingsJson: integration.settingsJson ?? "{}",
-          message: watch ? "Current arbitrage watch." : "No arbitrage watch configured. Run /arb setup or /arb watch.",
+          message: watch ? "Current arbitrage watch." : "No arbitrage watch configured. Run `/monitor setup` or `/monitor watch` in this channel.",
           watch
         })
       ]
@@ -1105,7 +1139,7 @@ export async function handleAdapterCommand(
 }
 
 export function describeAdapterCommand(adapter: WebsiteAdapter): string {
-  return `/${adapter.commandName}`;
+  return `/${getAdapterCommandNameForDiscord(adapter)}`;
 }
 
 export function formatPolymarketLine(integration: Integration): string {
@@ -1408,7 +1442,7 @@ async function buildIntegrationSummaryRows(database: BotDatabase, integrations: 
     const adapter = getAdapter(integration.adapterId);
     const marketEnd = await getStoredOrFetchPolymarketEndDate(database, integration);
     return {
-      commandName: adapter.commandName,
+      commandName: getAdapterCommandNameForDiscord(adapter),
       displayName: integration.displayName,
       status: integration.status,
       sourceUrl: integration.sourceUrl,
