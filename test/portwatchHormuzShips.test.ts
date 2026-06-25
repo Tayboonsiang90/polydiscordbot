@@ -74,6 +74,26 @@ describe("IMF Portwatch Hormuz ships adapter", () => {
     );
   });
 
+  it("appends MarineTraffic alpha context when configured", () => {
+    expect(
+      formatPortwatchHormuzValue(rows, "2026-06-01", "2026-06-07", undefined, {
+        areaLabel: "Strait of Hormuz",
+        sourceUrl: "https://services.marinetraffic.com/api/exportvessels-custom-area/example",
+        vesselCount: 42,
+        latestTimestamp: "2026-06-25T01:02:00.000Z",
+        typeSummary: "Tanker 20; Cargo 22",
+        sampleVessels: "ALPHA; BRAVO"
+      })
+    ).toContain(
+      [
+        "MarineTraffic alpha:",
+        "Area: Strait of Hormuz",
+        "Live AIS vessels: 42",
+        "Latest AIS timestamp: 2026-06-25T01:02:00.000Z"
+      ].join("\n")
+    );
+  });
+
   it("parses week-of Polymarket URLs into the correct seven-day value window", () => {
     expect(
       extractPortwatchHormuzValue(

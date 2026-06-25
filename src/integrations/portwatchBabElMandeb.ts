@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from "../http.js";
+import { fetchOptionalMarineTrafficAlpha, formatMarineTrafficAlphaSnapshot, type MarineTrafficAlphaSnapshot } from "./marineTrafficAlpha.js";
 import type { AdapterValue, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://portwatch.imf.org/pages/6b1814d64903461b98144a6cc25eb79c";
@@ -32,8 +33,8 @@ export const portwatchBabElMandebAdapter: WebsiteAdapter = {
   getPollIntervalReason: () => "polls Portwatch every minute for new Bab el-Mandeb arrivals-of-ships data",
   getErrorNoticeWindowMinutes: () => 30,
   async fetchCurrentValue(): Promise<AdapterValue> {
-    const rows = await fetchPortwatchBabElMandebRows();
-    const value = formatPortwatchBabElMandebValue(rows);
+    const [rows, marineTrafficAlpha] = await Promise.all([fetchPortwatchBabElMandebRows(), fetchOptionalMarineTrafficAlpha("bab")]);
+    const value = formatPortwatchBabElMandebValue(rows, marineTrafficAlpha);
     return {
       value,
       rawValue: value,
@@ -94,7 +95,10 @@ export function normalizePortwatchBabElMandebRows(payload: PortwatchFeatureRespo
     .sort((left, right) => left.date.localeCompare(right.date));
 }
 
-export function formatPortwatchBabElMandebValue(rows: PortwatchBabElMandebRow[]): string {
+export function formatPortwatchBabElMandebValue(
+  rows: PortwatchBabElMandebRow[],
+  marineTrafficAlpha: MarineTrafficAlphaSnapshot | null = null
+): string {
   const latestRows = rows.slice(-14);
   const latestRow = latestRows.at(-1) ?? rows.at(-1);
   const average14 = average(latestRows.map((row) => row.n_total));
@@ -114,6 +118,7 @@ export function formatPortwatchBabElMandebValue(rows: PortwatchBabElMandebRow[])
     `14-day average: ${formatDecimal(average14)}`,
     `14-day low: ${minimum ? `${minimum.n_total} on ${minimum.date}` : "none"}`,
     `Last 14 daily arrivals: ${dailyValues || "none"}`,
+    ...formatMarineTrafficAlphaSnapshot(marineTrafficAlpha),
     `Resolution: ${sourceUrl}`,
     `API: ${buildPortwatchBabElMandebApiUrl()}`
   ].join("\n");

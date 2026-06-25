@@ -65,8 +65,8 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `polymarket-disputes` | `/umadispute` | `#uma-disputes` | `UMA Dispute Alerts` | `⚖️` | Alerts when Polymarket UMA resolution proposals are disputed on-chain. |
 | `polymarket-proposals` | `/umaproposals` | `#uma-proposals` | `UMA Proposal Alerts` | `📨` | Alerts when Polymarket UMA resolution proposals open on-chain for configured Polymarket tags. |
 | `polymarket-resolvable` | `/resolvable` | `#resolvable` | `Resolvable Alerts` | `✅` | Watches manually added Polymarket URLs or raw question IDs until the market is ready to resolve or already resolved on CTF, then alerts and removes the market. |
-| `portwatch-bab-el-mandeb` | `/babmandeb` | `#babmandeb` | `Bab el-Mandeb Alerts` | `🚢` | Monitors IMF PortWatch Bab el-Mandeb Arrivals of Ships data every minute with latest 14 daily values and moving averages. |
-| `portwatch-hormuz-ships` | `/hormuzships` | `#hormuzships` | `Hormuz Ships Alerts` | `🚢` | Monitors IMF Portwatch Strait of Hormuz transit-call data every minute, reports total and average calls, and auto-discovers weekly ships markets. |
+| `portwatch-bab-el-mandeb` | `/babmandeb` | `#babmandeb` | `Bab el-Mandeb Alerts` | `🚢` | Monitors IMF PortWatch Bab el-Mandeb Arrivals of Ships data every minute with latest 14 daily values, moving averages, and optional MarineTraffic alpha context. |
+| `portwatch-hormuz-ships` | `/hormuzships` | `#hormuzships` | `Hormuz Ships Alerts` | `🚢` | Monitors IMF Portwatch Strait of Hormuz transit-call data every minute, reports total and average calls, optional MarineTraffic alpha context, and auto-discovers weekly ships markets. |
 | `uma-vote-commits` | `/umacommits` | `#uma-commits` | `UMA Commit Alerts` | `🔒` | Alerts when Ethereum UMA Voting v2 commit or recommit events come from voters above the configured staked UMA threshold. |
 | `uma-vote-reveals` | `/umareveals` | `#uma-reveals` | `UMA Reveal Alerts` | `👁️` | Alerts when Ethereum UMA Voting v2 reveal events meet the configured staked UMA threshold. |
 | `uma-voting-committee` | `/umarocks` | `#umarocks` | `UMA.rocks Alerts` | `🗳️` | Monitors UMA.rocks voting committee GitHub answer changes and contributor comments for the active voting round. |
@@ -173,6 +173,8 @@ No archived integrations currently.
    ETHEREUM_RPC_URLS=...
    WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://nitter.net/WhiteHouse/rss,https://xcancel.com/WhiteHouse/rss
    ELON_X_NITTER_BASE_URLS=https://xcancel.com
+   MARINETRAFFIC_HORMUZ_ALPHA_URL=...
+   MARINETRAFFIC_BAB_ALPHA_URL=...
    ```
 
    `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback.
@@ -236,6 +238,7 @@ Use each channel's `updates` command to review recent detected update times and 
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
 Check-failure errors are posted to `#errorlogs` when that channel exists. The bot keeps one editable `Check failed` post per integration, updates repeated failures there, and falls back to the integration channel only if `#errorlogs` is unavailable. Use `/bot clearerrors` to scan integration channels plus `#errorlogs` and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
 Arbitrage replies are alert-only. `/arb setup` asks for a shared outcome and YES/NO/BOTH side through dropdowns, then alerts only when the best route is positive after configured platform fees and the minimum edge. Alerts include the buy/sell platform, side, executable amount, fees, and expected profit. Predict and Opinion checks require their API keys in `.env`.
+MarineTraffic alpha for `/hormuzships` and `/babmandeb` is optional. The public MarineTraffic map blocks bot fetches; use official MarineTraffic/Kpler export URLs in `MARINETRAFFIC_HORMUZ_ALPHA_URL` and `MARINETRAFFIC_BAB_ALPHA_URL` if you have API/export access. If unset, PortWatch output is unchanged.
 Bonbast replies use Discord embeds with compact fields, colored status accents, and clickable links.
 Use `/bonbast polymarket` once per market so future alerts include a clickable Polymarket link.
 The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If a later queued market is already stored for the integration, rollover reminders for the current market are skipped. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.

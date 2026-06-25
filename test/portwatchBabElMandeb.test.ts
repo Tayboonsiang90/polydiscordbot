@@ -62,4 +62,24 @@ describe("IMF Portwatch Bab el-Mandeb adapter", () => {
       ].join("\n")
     );
   });
+
+  it("appends MarineTraffic alpha context when configured", () => {
+    expect(
+      formatPortwatchBabElMandebValue(rows, {
+        areaLabel: "Bab el-Mandeb",
+        sourceUrl: "https://services.marinetraffic.com/api/exportvessels-custom-area/example",
+        vesselCount: 24,
+        latestTimestamp: "2026-06-25T01:02:00.000Z",
+        typeSummary: "Cargo 10; Tanker 14",
+        sampleVessels: "CHARLIE; DELTA"
+      })
+    ).toContain(
+      [
+        "MarineTraffic alpha:",
+        "Area: Bab el-Mandeb",
+        "Live AIS vessels: 24",
+        "Latest AIS timestamp: 2026-06-25T01:02:00.000Z"
+      ].join("\n")
+    );
+  });
 });

@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from "../http.js";
 import { parsePolymarketDateRangeWindow, resolveIntegrationPolymarketQueue, type PolymarketQueueMarket, upsertPolymarketQueueUrl } from "../polymarketQueue.js";
 import { parseSettingsJson } from "../settingsJson.js";
+import { fetchOptionalMarineTrafficAlpha, formatMarineTrafficAlphaSnapshot, type MarineTrafficAlphaSnapshot } from "./marineTrafficAlpha.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://portwatch.imf.org/pages/cb5856222a5b4105adc6ee7e880a1730";
@@ -61,8 +62,8 @@ export const portwatchHormuzShipsAdapter: WebsiteAdapter = {
     return (await refreshHormuzShipsPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
-    const rows = await fetchPortwatchHormuzRows();
-    const value = extractPortwatchHormuzValue(rows, integration?.polymarketUrl ?? defaultPolymarketUrl);
+    const [rows, marineTrafficAlpha] = await Promise.all([fetchPortwatchHormuzRows(), fetchOptionalMarineTrafficAlpha("hormuz")]);
+    const value = extractPortwatchHormuzValue(rows, integration?.polymarketUrl ?? defaultPolymarketUrl, new Date(), marineTrafficAlpha);
     return {
       value,
       rawValue: value,
@@ -128,7 +129,12 @@ export function normalizePortwatchHormuzRows(payload: PortwatchFeatureResponse):
     .sort((left, right) => left.date.localeCompare(right.date));
 }
 
-export function extractPortwatchHormuzValue(rows: PortwatchHormuzRow[], polymarketUrl = defaultPolymarketUrl, now = new Date()): string {
+export function extractPortwatchHormuzValue(
+  rows: PortwatchHormuzRow[],
+  polymarketUrl = defaultPolymarketUrl,
+  now = new Date(),
+  marineTrafficAlpha: MarineTrafficAlphaSnapshot | null = null
+): string {
   const window = parsePolymarketDateRangeWindow(polymarketUrl, now);
   if (!window) {
     throw new Error(`Could not parse Hormuz ships market date range from Polymarket URL: ${polymarketUrl}`);
@@ -136,14 +142,15 @@ export function extractPortwatchHormuzValue(rows: PortwatchHormuzRow[], polymark
 
   const startDate = formatEasternDate(new Date(window.startAt));
   const endDate = formatEasternDate(new Date(window.endAt));
-  return formatPortwatchHormuzValue(rows, startDate, endDate, polymarketUrl);
+  return formatPortwatchHormuzValue(rows, startDate, endDate, polymarketUrl, marineTrafficAlpha);
 }
 
 export function formatPortwatchHormuzValue(
   rows: PortwatchHormuzRow[],
   startDate: string,
   endDate: string,
-  polymarketUrl = defaultPolymarketUrl
+  polymarketUrl = defaultPolymarketUrl,
+  marineTrafficAlpha: MarineTrafficAlphaSnapshot | null = null
 ): string {
   const dates = enumerateDates(startDate, endDate);
   const rowByDate = new Map(rows.map((row) => [row.date, row]));
@@ -168,6 +175,7 @@ export function formatPortwatchHormuzValue(
     `Latest ObjectId: ${latestRow?.ObjectId ?? "none"}`,
     `Missing dates: ${missingDates.length ? missingDates.join(", ") : "none"}`,
     `Daily values: ${dailyValues || "none"}`,
+    ...formatMarineTrafficAlphaSnapshot(marineTrafficAlpha),
     `Categories: container, dry bulk, general cargo, roll-on/roll-off, tanker`,
     `Resolution: ${sourceUrl}`,
     `API: ${buildPortwatchHormuzApiUrl()}`,
