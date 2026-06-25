@@ -88,8 +88,8 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `umich-consumer-sentiment` | `/umichsentiment` | `#umichsentiment` | `UMich Sentiment Alerts` | `📊` | Monitors UMich Surveys of Consumers final June 2026 Index of Consumer Sentiment and polls fast around the scheduled release. |
 | `usgs-earthquakes` | `/earthquake` | `#earthquake` | `USGS Earthquake Alerts` | `🌎` | Tracks the USGS count of 5.5+ earthquakes in the active weekly market window and alerts on count increases or revision-driven decreases. |
 | `usgs-earthquakes-6-5` | `/earthquake65` | `#earthquake65` | `USGS 6.5 Earthquake Alerts` | `🌏` | Tracks the USGS count of 6.5+ earthquakes in the active weekly market window and auto-discovers upcoming 6.5 weekly markets. |
-| `usgs-earthquakes-7-plus` | `/earthquake7` | `#earthquake7` | `USGS 7.0 Earthquake Alerts` | `🌋` | Tracks the USGS count of 7.0+ earthquakes from Dec 4, 2025 12:00 PM ET through Jun 30, 2026 11:59 PM ET. |
-| `usgs-earthquakes-7-plus-2026` | `/earthquake2026` | `#earthquake2026` | `USGS 2026 Earthquake Alerts` | `📅` | Tracks the USGS count of 7.0+ earthquakes from Jan 1, 2026 12:00 AM ET through Dec 31, 2026 11:59 PM ET. |
+| `usgs-earthquakes-7-plus` | `/earthquake7` | `#earthquake7` | `USGS 7.0 Earthquake Alerts` | `🌋` | Tracks the Dec 4-Jun 30 7.0+ earthquake market and includes the overlapping full-year 2026 count in each alert. |
+| `usgs-earthquakes-7-plus-2026` | `/earthquake2026` | `#earthquake2026` | `USGS 2026 Earthquake Alerts` | `📅` | Tracks the full-year 2026 7.0+ earthquake market and includes the overlapping Dec 4-Jun 30 count in each alert. |
 | `volmex-bviv-low-strikes` | `/bviv` | `#bviv` | `BVIV Alerts` | `📉` | Monitors Volmex BVIV 1-minute low candles and alerts once when tracked low strikes are crossed. |
 | `volmex-eviv-high-strikes` | `/eviv` | `#eviv` | `EVIV Alerts` | `📈` | Monitors Volmex EVIV 1-minute high candles and alerts once when tracked high strikes are crossed. |
 | `white-house-aliens-nyc` | `/aliennyc` | `#aliennyc` | `Alien NYC Arrests Alerts` | `🛸` | Monitors the White House aliens table Total Arrests counter for New York, NY. |

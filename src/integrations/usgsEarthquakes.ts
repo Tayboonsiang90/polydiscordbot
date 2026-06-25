@@ -237,22 +237,15 @@ export const usgsSevenPlusEarthquakesAdapter: WebsiteAdapter = {
   shouldAlertOnChange: shouldAlertOnUsgsEarthquakeCountChange,
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const polymarketUrl = integration?.polymarketUrl ?? sevenPlusPolymarketUrl;
-    const response = await fetchWithTimeout(buildUsgsApiUrl(polymarketUrl, sevenPlusOptions), {
-      headers: {
-        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`USGS returned HTTP ${response.status}`);
-    }
-
-    const data = (await response.json()) as UsgsEarthquakeFeatureCollection;
-    const value = extractUsgsEarthquakeCountValue(data, polymarketUrl, sevenPlusOptions);
+    const [juneWindowData, yearWindowData] = await Promise.all([
+      fetchUsgsEarthquakeData(polymarketUrl, sevenPlusOptions),
+      fetchUsgsEarthquakeData(sevenPlusYearPolymarketUrl, sevenPlusYearOptions)
+    ]);
+    const value = formatSevenPlusConcurrentValue(juneWindowData, yearWindowData, polymarketUrl);
     return {
       value,
       rawValue: extractUsgsEarthquakeCount(value) ?? value,
-      unit: "USGS 7.0+ earthquake count",
+      unit: "USGS 7.0+ earthquake counts",
       observedAt: new Date()
     };
   }
@@ -270,22 +263,15 @@ export const usgsSevenPlusEarthquakesYearAdapter: WebsiteAdapter = {
   shouldAlertOnChange: shouldAlertOnUsgsEarthquakeCountChange,
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const polymarketUrl = integration?.polymarketUrl ?? sevenPlusYearPolymarketUrl;
-    const response = await fetchWithTimeout(buildUsgsApiUrl(polymarketUrl, sevenPlusYearOptions), {
-      headers: {
-        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`USGS returned HTTP ${response.status}`);
-    }
-
-    const data = (await response.json()) as UsgsEarthquakeFeatureCollection;
-    const value = extractUsgsEarthquakeCountValue(data, polymarketUrl, sevenPlusYearOptions);
+    const [yearWindowData, juneWindowData] = await Promise.all([
+      fetchUsgsEarthquakeData(polymarketUrl, sevenPlusYearOptions),
+      fetchUsgsEarthquakeData(sevenPlusPolymarketUrl, sevenPlusOptions)
+    ]);
+    const value = formatSevenPlusConcurrentValue(juneWindowData, yearWindowData, sevenPlusPolymarketUrl);
     return {
       value,
       rawValue: extractUsgsEarthquakeCount(value) ?? value,
-      unit: "USGS 7.0+ earthquake count in 2026",
+      unit: "USGS 7.0+ earthquake counts",
       observedAt: new Date()
     };
   }
@@ -298,13 +284,61 @@ export function shouldAlertOnUsgsEarthquakeCountChange(previousValue: string | n
     return false;
   }
 
-  return Number(currentCount) !== Number(previousCount);
+  return currentCount !== previousCount;
 }
 
 export const shouldAlertOnUsgsEarthquakeChange = shouldAlertOnUsgsEarthquakeCountChange;
 
 function extractUsgsEarthquakeCount(value: string | null): string | null {
+  const concurrent = value?.match(/^Stored counts:\s*by-june-30=(\d+);\s*full-year-2026=(\d+)$/m);
+  if (concurrent) {
+    return `${concurrent[1]}:${concurrent[2]}`;
+  }
+
   return value?.match(/^Total earthquakes:\s*(\d+)$/m)?.[1] ?? null;
+}
+
+async function fetchUsgsEarthquakeData(
+  polymarketUrl: string,
+  options: UsgsEarthquakeCountOptions
+): Promise<UsgsEarthquakeFeatureCollection> {
+  const response = await fetchWithTimeout(buildUsgsApiUrl(polymarketUrl, options), {
+    headers: {
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`USGS returned HTTP ${response.status}`);
+  }
+
+  return (await response.json()) as UsgsEarthquakeFeatureCollection;
+}
+
+function formatSevenPlusConcurrentValue(
+  juneWindowData: UsgsEarthquakeFeatureCollection,
+  yearWindowData: UsgsEarthquakeFeatureCollection,
+  juneWindowPolymarketUrl = sevenPlusPolymarketUrl
+): string {
+  const juneCount = getUsgsEarthquakeCount(juneWindowData);
+  const yearCount = getUsgsEarthquakeCount(yearWindowData);
+  return [
+    "Metric: USGS 7.0+ earthquake counts",
+    "Concurrent market counts:",
+    `By June 30 market: ${juneCount}`,
+    `Full-year 2026 market: ${yearCount}`,
+    `Stored counts: by-june-30=${juneCount}; full-year-2026=${yearCount}`,
+    "",
+    "By June 30 market details:",
+    extractUsgsEarthquakeCountValue(juneWindowData, juneWindowPolymarketUrl, sevenPlusOptions),
+    "",
+    "Full-year 2026 market details:",
+    extractUsgsEarthquakeCountValue(yearWindowData, sevenPlusYearPolymarketUrl, sevenPlusYearOptions)
+  ].join("\n");
+}
+
+function getUsgsEarthquakeCount(data: UsgsEarthquakeFeatureCollection): number {
+  return typeof data.metadata?.count === "number" ? data.metadata.count : (data.features?.length ?? 0);
 }
 
 export async function refreshEarthquakePolymarketQueue(

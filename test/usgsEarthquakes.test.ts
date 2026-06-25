@@ -143,10 +143,16 @@ describe("USGS earthquakes adapter", () => {
   it("tracks the fixed 7.0+ by-June-30 market rules window", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ metadata: { count: 6 }, features: [feature] })
-      })
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ metadata: { count: 6 }, features: [feature] })
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ metadata: { count: 12 }, features: [feature] })
+        })
     );
     const { usgsSevenPlusEarthquakesAdapter } = await import("../src/integrations/usgsEarthquakes.js");
 
@@ -154,25 +160,36 @@ describe("USGS earthquakes adapter", () => {
       polymarketUrl: "https://polymarket.com/event/how-many-7pt0-or-above-earthquakes-by-june-30-higher-strikes"
     } as Integration);
     const requestedUrl = new URL(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]));
+    const concurrentRequestedUrl = new URL(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1][0]));
 
     expect(requestedUrl.searchParams.get("minmagnitude")).toBe("7.0");
     expect(requestedUrl.searchParams.get("starttime")).toBe("2025-12-04T17:00:00.000Z");
     expect(requestedUrl.searchParams.get("endtime")).toBe("2026-07-01T03:59:00.000Z");
-    expect(result.value).toContain("Metric: USGS 7.0+ earthquake count");
+    expect(concurrentRequestedUrl.searchParams.get("starttime")).toBe("2026-01-01T05:00:00.000Z");
+    expect(concurrentRequestedUrl.searchParams.get("endtime")).toBe("2027-01-01T04:59:00.000Z");
+    expect(result.value).toContain("Metric: USGS 7.0+ earthquake counts");
+    expect(result.value).toContain("By June 30 market: 6");
+    expect(result.value).toContain("Full-year 2026 market: 12");
     expect(result.value).toContain("Window ET: 2025-12-04 12:00 to 2026-06-30 23:59");
     expect(result.value).toContain("Market start UTC: 2025-12-04T17:00:00.000Z");
     expect(result.value).toContain("Market end UTC: 2026-07-01T03:59:00.000Z");
     expect(result.value).toContain("Minimum magnitude: 7.0");
-    expect(result.rawValue).toBe("6");
+    expect(result.rawValue).toBe("6:12");
   });
 
   it("tracks the separate full-year 2026 7.0+ market rules window", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ metadata: { count: 12 }, features: [feature] })
-      })
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ metadata: { count: 12 }, features: [feature] })
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ metadata: { count: 6 }, features: [feature] })
+        })
     );
     const { usgsSevenPlusEarthquakesYearAdapter } = await import("../src/integrations/usgsEarthquakes.js");
 
@@ -180,16 +197,21 @@ describe("USGS earthquakes adapter", () => {
       polymarketUrl: "https://polymarket.com/event/how-many-7pt0-or-above-earthquakes-in-2026"
     } as Integration);
     const requestedUrl = new URL(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]));
+    const concurrentRequestedUrl = new URL(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1][0]));
 
     expect(requestedUrl.searchParams.get("minmagnitude")).toBe("7.0");
     expect(requestedUrl.searchParams.get("starttime")).toBe("2026-01-01T05:00:00.000Z");
     expect(requestedUrl.searchParams.get("endtime")).toBe("2027-01-01T04:59:00.000Z");
-    expect(result.value).toContain("Metric: USGS 7.0+ earthquake count in 2026");
+    expect(concurrentRequestedUrl.searchParams.get("starttime")).toBe("2025-12-04T17:00:00.000Z");
+    expect(concurrentRequestedUrl.searchParams.get("endtime")).toBe("2026-07-01T03:59:00.000Z");
+    expect(result.value).toContain("Metric: USGS 7.0+ earthquake counts");
+    expect(result.value).toContain("By June 30 market: 6");
+    expect(result.value).toContain("Full-year 2026 market: 12");
     expect(result.value).toContain("Window ET: 2026-01-01 00:00 to 2026-12-31 23:59");
     expect(result.value).toContain("Market start UTC: 2026-01-01T05:00:00.000Z");
     expect(result.value).toContain("Market end UTC: 2027-01-01T04:59:00.000Z");
     expect(result.value).toContain("Minimum magnitude: 7.0");
-    expect(result.rawValue).toBe("12");
+    expect(result.rawValue).toBe("6:12");
   });
 
   it("discovers and queues the next weekly 5.5 earthquake market with a timestamped slug near expiry", async () => {
@@ -249,6 +271,8 @@ describe("USGS earthquakes adapter", () => {
   });
 
   it("discovers and queues weekly 6.5 earthquake markets separately", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-20T12:00:00.000Z"));
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
