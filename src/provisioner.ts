@@ -15,12 +15,45 @@ import type { Integration, WebsiteAdapter } from "./integrations/types.js";
 
 const defaultRoleChannelName = "market-alert-roles";
 const defaultRoleGroupTitle = "Market Alert Roles";
+const uncategorizedAlertRoleName = "Uncategorized Alerts";
+const uncategorizedCategoryName = "Uncategorized";
 const networkRetryDelaysMs = [1_000, 3_000, 10_000];
 const maxReactionsPerRoleMessage = 20;
 const fallbackAlertRoleEmojis = ["\uD83D\uDD14", "\uD83D\uDCE3", "\u2705", "\u2B50", "\uD83D\uDCCC", "\uD83D\uDCAC"];
+const categoryAlertRoleEmojis = [
+  "📌",
+  "🔴",
+  "📰",
+  "💬",
+  "📊",
+  "🌦️",
+  "🎧",
+  "🎵",
+  "🏦",
+  "🛢️",
+  "🌎",
+  "🤖",
+  "🏛️",
+  "✈️",
+  "🚢",
+  "⚡",
+  "📈",
+  "📉",
+  "🧠",
+  "🧾"
+];
+const umaAdapterIds = new Set([
+  "polymarket-clarifications",
+  "polymarket-disputes",
+  "polymarket-proposals",
+  "uma-vote-commits",
+  "uma-vote-reveals",
+  "uma-voting-committee"
+]);
 
 type AlertRoleEntry = GroupedRoleSelectorEntry & {
   integration: Integration;
+  integrations?: Integration[];
   adapter: WebsiteAdapter;
   role: Role;
   roleChannelName: string;
@@ -29,6 +62,7 @@ type AlertRoleEntry = GroupedRoleSelectorEntry & {
 
 export class IntegrationProvisioner {
   private refreshTimer: NodeJS.Timeout | null = null;
+  private onDemandTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly client: Client,
@@ -47,6 +81,22 @@ export class IntegrationProvisioner {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
+    if (this.onDemandTimer) {
+      clearTimeout(this.onDemandTimer);
+      this.onDemandTimer = null;
+    }
+  }
+
+  requestSync(): void {
+    if (this.onDemandTimer) {
+      clearTimeout(this.onDemandTimer);
+    }
+
+    this.onDemandTimer = setTimeout(() => {
+      this.onDemandTimer = null;
+      void this.provisionAll().catch(logProvisionerError);
+    }, 5_000);
+    this.onDemandTimer.unref();
   }
 
   async provisionAll(): Promise<void> {
@@ -88,7 +138,9 @@ export class IntegrationProvisioner {
         currentIntegration = this.database.updateIntegrationChannel(currentIntegration.id, channel.id);
       }
       currentIntegration = await this.provisionAdapterOwnedChannels(guild, adapter, currentIntegration, channel);
-      await findOrCreateRole(guild, currentIntegration.alertRoleId, adapter.alertRoleName);
+      if (usesPerIntegrationAlertRole(adapter)) {
+        await findOrCreateRole(guild, currentIntegration.alertRoleId, adapter.alertRoleName);
+      }
       return;
     }
 
@@ -104,7 +156,9 @@ export class IntegrationProvisioner {
     });
 
     await channel.send({ embeds: [buildSetupEmbed(integration, adapter.commandName)] });
-    await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
+    if (usesPerIntegrationAlertRole(adapter)) {
+      await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
+    }
   }
 
   private async provisionAdapterOwnedChannels(
@@ -141,12 +195,14 @@ export class IntegrationProvisioner {
         activeMessageIds.add(roleMessage.id);
 
         for (const entry of reactedEntries) {
-          this.database.setAlertRoleMetadata(entry.integration.id, {
-            alertRoleId: entry.role.id,
-            roleMessageId: roleMessage.id,
-            roleChannelId: roleChannel.id,
-            roleEmoji: entry.emoji
-          });
+          for (const integration of getEntryIntegrations(entry)) {
+            this.database.setAlertRoleMetadata(integration.id, {
+              alertRoleId: entry.role.id,
+              roleMessageId: roleMessage.id,
+              roleChannelId: roleChannel.id,
+              roleEmoji: entry.emoji
+            });
+          }
         }
       }
 
@@ -155,28 +211,57 @@ export class IntegrationProvisioner {
   }
 
   private async buildAlertRoleEntries(guild: Guild): Promise<AlertRoleEntry[]> {
-    const entries: AlertRoleEntry[] = [];
+    const perIntegrationEntries: AlertRoleEntry[] = [];
+    const categoryEntries = new Map<string, AlertRoleEntry>();
     for (const adapter of listAdapters()) {
       const integration = this.database.getIntegrationByAdapter(guild.id, adapter.id);
       if (!integration) {
         continue;
       }
 
-      const role = await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
-      entries.push({
+      if (usesPerIntegrationAlertRole(adapter)) {
+        const role = await findOrCreateRole(guild, integration.alertRoleId, adapter.alertRoleName);
+        perIntegrationEntries.push({
+          integration,
+          adapter,
+          role,
+          displayName: adapter.displayName,
+          commandName: adapter.commandName,
+          roleId: role.id,
+          roleName: role.name,
+          emoji: integration.roleEmoji ?? adapter.alertRoleEmoji,
+          roleChannelName: adapter.alertRoleChannelName ?? defaultRoleChannelName,
+          roleGroupTitle: adapter.alertRoleGroupTitle ?? defaultRoleGroupTitle
+        });
+        continue;
+      }
+
+      const category = getIntegrationCategory(guild, integration);
+      const roleName = buildCategoryAlertRoleName(category.name);
+      const role = await findOrCreateCategoryRole(guild, roleName);
+      const existingEntry = categoryEntries.get(category.key);
+      if (existingEntry) {
+        existingEntry.integrations = [...getEntryIntegrations(existingEntry), integration];
+        existingEntry.description = buildCategoryRoleDescription(existingEntry.role.id, getEntryIntegrations(existingEntry).length);
+        continue;
+      }
+
+      categoryEntries.set(category.key, {
         integration,
+        integrations: [integration],
         adapter,
         role,
-        displayName: adapter.displayName,
+        displayName: category.name,
         commandName: adapter.commandName,
         roleId: role.id,
         roleName: role.name,
-        emoji: integration.roleEmoji ?? adapter.alertRoleEmoji,
-        roleChannelName: adapter.alertRoleChannelName ?? defaultRoleChannelName,
-        roleGroupTitle: adapter.alertRoleGroupTitle ?? defaultRoleGroupTitle
+        emoji: integration.roleEmoji && integration.alertRoleId === role.id ? integration.roleEmoji : getCategoryAlertRoleEmoji(category.name),
+        description: buildCategoryRoleDescription(role.id, 1),
+        roleChannelName: defaultRoleChannelName,
+        roleGroupTitle: defaultRoleGroupTitle
       });
     }
-    return entries;
+    return [...categoryEntries.values(), ...perIntegrationEntries];
   }
 }
 
@@ -259,6 +344,19 @@ async function findOrCreateRole(guild: Guild, roleId: string | null, roleName: s
   });
 }
 
+async function findOrCreateCategoryRole(guild: Guild, roleName: string): Promise<Role> {
+  const existingByName = guild.roles.cache.find((role) => role.name === roleName);
+  if (existingByName) {
+    return existingByName;
+  }
+
+  return guild.roles.create({
+    name: roleName,
+    mentionable: true,
+    reason: "Create category alert role"
+  });
+}
+
 async function findOrCreateRoleChannel(guild: Guild, channelName: string, title: string): Promise<TextChannel> {
   const existing = findTextChannelByName(guild, channelName);
   if (existing) {
@@ -291,7 +389,7 @@ async function findOrCreateGroupedRoleMessage(
   title: string,
   claimedMessageIds: Set<string>
 ): Promise<Message> {
-  const existingMessageIds = [...new Set(entries.map((entry) => entry.integration.roleMessageId).filter(Boolean))] as string[];
+  const existingMessageIds = uniqueStrings(entries.flatMap(getEntryRoleMessageIds));
   for (const messageId of existingMessageIds) {
     if (claimedMessageIds.has(messageId)) {
       continue;
@@ -328,7 +426,7 @@ async function syncGroupedRoleMessage(
 
 async function removeObsoleteBotRoleReactions(roleMessage: Message, entries: AlertRoleEntry[]): Promise<void> {
   const allowedEmojis = new Set(
-    entries.flatMap((entry) => [entry.emoji, entry.adapter.alertRoleEmoji, entry.integration.roleEmoji].filter(isNonEmptyString))
+    entries.flatMap((entry) => [entry.emoji, entry.adapter.alertRoleEmoji, ...getEntryIntegrations(entry).map((integration) => integration.roleEmoji)].filter(isNonEmptyString))
   );
   const botUserId = roleMessage.client.user?.id;
   if (!botUserId) {
@@ -350,7 +448,7 @@ async function reactWithFallbackEmoji(
   entry: AlertRoleEntry,
   usedEmojis: Set<string>
 ): Promise<string> {
-  const candidates = uniqueStrings([entry.integration.roleEmoji, entry.adapter.alertRoleEmoji, ...fallbackAlertRoleEmojis].filter(isNonEmptyString))
+  const candidates = uniqueStrings([entry.emoji, entry.adapter.alertRoleEmoji, ...fallbackAlertRoleEmojis].filter(isNonEmptyString))
     .filter((emoji) => !usedEmojis.has(emoji));
   for (const emoji of candidates) {
     if (hasReactionEmoji(roleMessage, emoji)) {
@@ -381,7 +479,7 @@ export function groupAlertRoleEntries(entries: AlertRoleEntry[]): AlertRoleEntry
   const groupsByMessageId = new Map<string, AlertRoleEntry[]>();
   const ungroupedEntries: AlertRoleEntry[] = [];
   for (const entry of entries) {
-    const roleMessageId = entry.integration.roleMessageId;
+    const roleMessageId = getEntryRoleMessageIds(entry)[0];
     const roleEmoji = getRoleEntryGroupingEmoji(entry);
     if (roleMessageId) {
       const group = groupsByMessageId.get(roleMessageId) ?? [];
@@ -418,7 +516,56 @@ function canAddEntryToRoleGroup(group: AlertRoleEntry[], roleEmoji: string): boo
 }
 
 function getRoleEntryGroupingEmoji(entry: AlertRoleEntry): string {
-  return entry.integration.roleEmoji ?? entry.emoji ?? entry.adapter.alertRoleEmoji;
+  return entry.emoji ?? entry.integration.roleEmoji ?? entry.adapter.alertRoleEmoji;
+}
+
+function getEntryIntegrations(entry: AlertRoleEntry): Integration[] {
+  return entry.integrations?.length ? entry.integrations : [entry.integration];
+}
+
+function getEntryRoleMessageIds(entry: AlertRoleEntry): string[] {
+  return uniqueStrings(getEntryIntegrations(entry).map((integration) => integration.roleMessageId).filter(isNonEmptyString));
+}
+
+function usesPerIntegrationAlertRole(adapter: WebsiteAdapter): boolean {
+  return umaAdapterIds.has(adapter.id);
+}
+
+function getIntegrationCategory(guild: Guild, integration: Integration): { key: string; name: string } {
+  const channel = guild.channels.cache.get(integration.channelId);
+  const parentId = channel && "parentId" in channel ? channel.parentId : null;
+  if (!parentId) {
+    return { key: "uncategorized", name: uncategorizedCategoryName };
+  }
+
+  const category = guild.channels.cache.get(parentId);
+  if (!category || category.type !== ChannelType.GuildCategory) {
+    return { key: "uncategorized", name: uncategorizedCategoryName };
+  }
+
+  return { key: category.id, name: category.name };
+}
+
+export function buildCategoryAlertRoleName(categoryName: string): string {
+  const normalized = categoryName.trim() || uncategorizedCategoryName;
+  const roleName = normalized.toLowerCase().endsWith(" alerts") ? normalized : `${normalized} Alerts`;
+  return roleName.length <= 100 ? roleName : roleName.slice(0, 100);
+}
+
+export function getCategoryAlertRoleEmoji(categoryName: string): string {
+  if (categoryName === uncategorizedCategoryName) {
+    return categoryAlertRoleEmojis[0];
+  }
+
+  let hash = 0;
+  for (const character of categoryName) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return categoryAlertRoleEmojis[(hash % (categoryAlertRoleEmojis.length - 1)) + 1];
+}
+
+function buildCategoryRoleDescription(roleId: string, integrationCount: number): string {
+  return `Role: <@&${roleId}>\nCovers ${integrationCount} integration channel(s) in this Discord category. Move a channel to change which category role it pings.`;
 }
 
 function groupEntriesByRoleChannel(entries: AlertRoleEntry[]): Array<{ channelName: string; title: string; entries: AlertRoleEntry[] }> {

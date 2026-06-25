@@ -769,6 +769,7 @@ export type GroupedRoleSelectorEntry = {
   roleId: string;
   roleName: string;
   emoji: string;
+  description?: string;
 };
 
 export function buildGroupedRoleSelectorEmbed(
@@ -785,7 +786,7 @@ export function buildGroupedRoleSelectorEmbed(
     .addFields(
       entries.map((entry) => ({
         name: `${entry.emoji} ${entry.displayName}`,
-        value: `Role: <@&${entry.roleId}>\nCommand: \`/${entry.commandName}\``,
+        value: entry.description ?? `Role: <@&${entry.roleId}>\nCommand: \`/${entry.commandName}\``,
         inline: false
       }))
     )

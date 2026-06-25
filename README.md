@@ -9,7 +9,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 - Local SQLite persistence.
 - Polling and Discord alerts only.
 - Integration channels are auto-created from registered adapters.
-- Alert roles are auto-created from registered adapters.
+- Alert roles are auto-created from Discord channel categories for non-UMA integrations; UMA integrations keep their individual UMA alert roles.
 - Current adapters include Bonbast USD/IRR, AAA Regular Gas, All-In Podcast, Aligned Layer Sale, Artist Song Releases, Arena AI No Style Control, AWS Disrupted Events, Based Revenue, BEA Current Releases, Bank Indonesia JISDOR USD/IDR, Billboard 200 #1 Album, Billboard Hot 100 #1 Song, BLS CPI Releases, BLS Jobs Added, CDC General Fertility Rate, CDC Flu Hospitalization Rate, CDC Measles Cases, Census Durable Goods Orders, ChatGPT Outage Days, Claude Code Commits, Claude Code 7D Avg, Claude Downtime Days, Cloudflare Critical Incidents, Discord Critical Incidents, ECDSA.fail Quantum Benchmark, EIA Crude Oil SPR Stocks, Elon X Posts, FDIC Failed Bank List, FRED Egg Price, FRED Ground Beef Price, Free App Store Top 5, Paid App Store Top 5, Joe Rogan Podcast, Lemonade Stand Podcast, Parcl DC Metro Home Value, Parcl NYC Home Value, PBoC Rate Change, PortWatch Bab el-Mandeb Arrivals, Powerball Jackpot, Polymarket Mention Markets, UMA Clarification Alerts, UMA Proposal Alerts, UMA Vote Commits, UMA Vote Reveals, UMA.rocks, ISM Services PMI, Kaito Polymarket Mindshare, KPop Song Releases, Met Office London Precipitation, MrBeast Gaming Videos, MrBeast YouTube Subscribers, MrBeast YouTube Views, NASA GISTEMP Temperature, NBS Press Releases, NCEI U.S. Tornadoes, NYT Front Page, NOAA daily rain cities, ORNN B200 Index, ORNN H100 Index, ORNN H200 Index, Pyth Natural Gas Strikes, Pyth WTI Strikes, Pyth XAGUSD Strikes, Pyth XAUUSD Strikes, Silver Trump Approval, Spider-Man Trailer, Spotify Top 50 USA, Spotify Top 50 Global, Strategy Bitcoin Purchases, Tesla Deliveries, Treasury MTS Deficit, Trump Getty Photos, Trump Schedule, Trump Truth Social, TSA Passenger Volumes, UMich Consumer Sentiment, USGS 5.5+ Earthquakes, USGS 6.5+ Earthquakes, USGS 7.0+ Earthquakes, USGS 7.0+ Earthquakes 2026, Volmex BVIV Low Strikes, Volmex EVIV High Strikes, White House Alien Arrests NYC, White House Briefings, White House Full Lid, White House X Posts, HKO Hong Kong Precipitation, KMA Seoul Precipitation, NOAA NYC Precipitation, and NOAA Seattle Precipitation.
 
 ## Current Integrations
@@ -124,7 +124,7 @@ No archived integrations currently.
 
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
-- One adapter normally creates one monitor channel, one slash-command group, one alert role, and one reaction-role selector. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts.
+- One adapter normally creates one monitor channel and one slash-command group. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA integrations keep individual UMA alert roles and reaction selectors. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts.
 - Shared commands are generated in `src/commands.ts`: `status`, `check`, `last`, `updates`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `archive`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`.
 - Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
@@ -189,7 +189,9 @@ The bot invite needs `Manage Channels`, `Send Messages`, `View Channels`, `Manag
 
 ## Commands
 
-The bot creates a channel for each registered adapter when it starts, then checks every minute for missing channels.
+The bot creates a channel for each registered adapter when it starts, then checks every minute for missing channels and alert-role drift.
+
+Non-UMA alert subscriptions are category-based. `#market-alert-roles` shows one reaction entry per Discord category, and every integration channel in that category pings the same category role. Moving a channel between categories or renaming a category is detected by Discord channel updates and by the periodic provisioner sync. UMA integrations keep their separate UMA-specific subscription roles.
 
 Every integration uses the same command shape inside its own channel. Replace `/bonbast` below with that channel's command, for example `/trumptruth`, `/tsa`, or `/mrbeastviews`:
 

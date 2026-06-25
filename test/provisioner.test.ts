@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupAlertRoleEntries } from "../src/provisioner.js";
+import { buildCategoryAlertRoleName, getCategoryAlertRoleEmoji, groupAlertRoleEntries } from "../src/provisioner.js";
 
 type AlertRoleEntry = Parameters<typeof groupAlertRoleEntries>[0][number];
 
@@ -80,5 +80,29 @@ describe("alert role selector grouping", () => {
       ["adapter-1", "adapter-3"],
       ["adapter-2"]
     ]);
+  });
+
+  it("groups category entries by the shared category emoji instead of stale integration emojis", () => {
+    const categoryEntry = {
+      ...buildEntry("1", "message-a", "💱"),
+      emoji: "🔴",
+      integrations: [
+        buildEntry("1", "message-a", "💱").integration,
+        buildEntry("2", "message-b", "⛽").integration
+      ]
+    };
+    const groups = groupAlertRoleEntries([categoryEntry, buildEntry("3", "message-a", "🔴")]);
+
+    expect(groups.map((group) => group.map((entry) => entry.integration.adapterId))).toEqual([
+      ["adapter-1"],
+      ["adapter-3"]
+    ]);
+  });
+
+  it("normalizes category alert role names and emojis", () => {
+    expect(buildCategoryAlertRoleName("Services Down Bots")).toBe("Services Down Bots Alerts");
+    expect(buildCategoryAlertRoleName("Mention Alerts")).toBe("Mention Alerts");
+    expect(getCategoryAlertRoleEmoji("Uncategorized")).toBe("📌");
+    expect(getCategoryAlertRoleEmoji("Services Down Bots")).toBe(getCategoryAlertRoleEmoji("Services Down Bots"));
   });
 });

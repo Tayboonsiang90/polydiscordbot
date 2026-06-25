@@ -147,6 +147,10 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
   }
 });
 
+client.on(Events.ChannelUpdate, () => {
+  provisioner?.requestSync();
+});
+
 client.on(Events.Error, (error) => {
   console.error("Discord client error:", error);
 });
