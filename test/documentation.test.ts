@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { shouldRegisterAdapterCommand } from "../src/commands.js";
 import { listAdapters } from "../src/integrations/registry.js";
 
 type ReadmeIntegrationRow = {
@@ -13,11 +14,11 @@ type ReadmeIntegrationRow = {
 function readCurrentIntegrationRows(): ReadmeIntegrationRow[] {
   const markdown = readFileSync("README.md", "utf8");
   const rows: ReadmeIntegrationRow[] = [];
-  const rowPattern = /^\| `([^`]+)` \| `\/([^`]+)` \| `#([^`]+)` \| `([^`]+)` \| `([^`]+)` \| .+ \|$/gm;
+  const rowPattern = /^\| `([^`]+)` \| (?:`\/([^`]+)`|polling only) \| `#([^`]+)` \| `([^`]+)` \| `([^`]+)` \| .+ \|$/gm;
   for (const match of markdown.matchAll(rowPattern)) {
     rows.push({
       id: match[1],
-      commandName: match[2],
+      commandName: match[2] ?? "polling only",
       defaultChannelName: match[3],
       alertRoleName: match[4],
       alertRoleEmoji: match[5]
@@ -35,7 +36,7 @@ describe("README integration documentation", () => {
     for (const adapter of listAdapters()) {
       expect(rowById.get(adapter.id)).toEqual({
         id: adapter.id,
-        commandName: adapter.commandName,
+        commandName: shouldRegisterAdapterCommand(adapter) ? adapter.commandName : "polling only",
         defaultChannelName: adapter.defaultChannelName,
         alertRoleName: adapter.alertRoleName,
         alertRoleEmoji: adapter.alertRoleEmoji

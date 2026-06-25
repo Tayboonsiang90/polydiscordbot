@@ -4,6 +4,7 @@ import {
   buildBotCommands,
   formatPolymarketLine,
   handleAdapterCommand,
+  listSlashCommandAdapters,
   normalizePolymarketUrl
 } from "../src/commands.js";
 import { listAdapters } from "../src/integrations/registry.js";
@@ -102,7 +103,7 @@ describe("adapter commands", () => {
       "resume"
     ];
 
-    for (const adapter of listAdapters()) {
+    for (const adapter of listSlashCommandAdapters()) {
       const command = commandByName.get(adapter.commandName);
       const options = command?.options ?? [];
 
@@ -141,14 +142,19 @@ describe("adapter commands", () => {
       expect(options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "analysis" })]));
     }
 
-    expect(commandByName.get("alignedsale")).toMatchObject({
-      name: "alignedsale",
-      description: "Manage Aligned Layer Sale"
+    expect(commandByName.has("alignedsale")).toBe(false);
+    expect(commandByName.get("iswmap")).toMatchObject({
+      name: "iswmap",
+      description: "Manage ISW Ukraine Map"
     });
     expect(commandByName.get("mentions")).toMatchObject({
       name: "mentions",
       description: "Manage Polymarket Mention Markets"
     });
+  });
+
+  it("keeps registered slash commands within Discord's guild command cap", () => {
+    expect(buildAdapterCommands().length + buildBotCommands().length).toBeLessThanOrEqual(100);
   });
 
   it("registers UMA address bulk import and export options", () => {

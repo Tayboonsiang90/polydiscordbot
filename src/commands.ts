@@ -69,9 +69,10 @@ const roleChannelName = "market-alert-roles";
 const checkFailedTitleSuffix = " - Check failed";
 const maxAddressImportBytes = 256_000;
 const addressImportDownloadTimeoutMs = 10_000;
+const unregisteredAdapterCommandNames = new Set(["alignedsale"]);
 
 export function buildAdapterCommands() {
-  return listAdapters().map((adapter) => {
+  return listSlashCommandAdapters().map((adapter) => {
     const command = new SlashCommandBuilder()
       .setName(adapter.commandName)
       .setDescription(`Manage ${adapter.displayName}`)
@@ -435,6 +436,14 @@ export function buildAdapterCommands() {
 
     return command;
   });
+}
+
+export function listSlashCommandAdapters(): WebsiteAdapter[] {
+  return listAdapters().filter((adapter) => shouldRegisterAdapterCommand(adapter));
+}
+
+export function shouldRegisterAdapterCommand(adapter: WebsiteAdapter): boolean {
+  return !unregisteredAdapterCommandNames.has(adapter.commandName);
 }
 
 export function buildBotCommands() {
