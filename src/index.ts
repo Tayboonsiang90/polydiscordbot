@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { setDefaultResultOrder } from "node:dns";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
@@ -23,6 +24,8 @@ import { handleReactionRoleChange } from "./reactionRoles.js";
 import { UmaAlertSubscriber } from "./umaAlertSubscriber.js";
 import { UmaDisputeSubscriber } from "./umaDisputeSubscriber.js";
 import { UmaProposalSubscriber } from "./umaProposalSubscriber.js";
+
+setDefaultResultOrder("ipv4first");
 
 const heartbeatIntervalMs = 10 * 60 * 1000;
 const heartbeatPath = process.env.BOT_HEARTBEAT_PATH ?? ".health/bot-heartbeat.json";

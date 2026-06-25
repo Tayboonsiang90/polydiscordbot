@@ -2,6 +2,7 @@ import { fetchWithTimeout } from "../http.js";
 import type { AdapterValue, WebsiteAdapter } from "./types.js";
 
 export const sourceUrl = "https://storymaps.arcgis.com/stories/36a7f6a6f5a9448496de641cf64bd375";
+const iswFetchTimeoutMs = 10_000;
 
 export type IswUkraineMapNotice = {
   notice: string;
@@ -54,11 +55,16 @@ export const iswUkraineMapAdapter: WebsiteAdapter = {
   getPollIntervalReason: () => "Fixed 1-minute check for ISW StoryMaps frontline geometry notice changes",
   getErrorNoticeWindowMinutes: () => 30,
   async fetchCurrentValue(): Promise<AdapterValue> {
-    const response = await fetchWithTimeout(sourceUrl, {
-      headers: {
-        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-      }
-    });
+    const response = await fetchWithTimeout(
+      sourceUrl,
+      {
+        headers: {
+          accept: "text/html,application/xhtml+xml",
+          "user-agent": "curl/8.5.0 PolymarketResolutionMonitorBot/0.1"
+        }
+      },
+      iswFetchTimeoutMs
+    );
 
     if (!response.ok) {
       throw new Error(`ISW StoryMap returned HTTP ${response.status}`);
