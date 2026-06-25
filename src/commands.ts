@@ -499,8 +499,10 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
   }
 
   if (subcommand === "clearroles") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
-      await interaction.reply({ content: "You need Manage Messages permission to clear alert role messages.", flags: MessageFlags.Ephemeral });
+      await interaction.editReply("You need Manage Messages permission to clear alert role messages.");
       return;
     }
 
@@ -508,17 +510,16 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
       (channel) => channel.type === ChannelType.GuildText && channel.name === roleChannelName
     ) as TextChannel | undefined;
     if (!roleChannel) {
-      await interaction.reply({ content: `Could not find #${roleChannelName}.`, flags: MessageFlags.Ephemeral });
+      await interaction.editReply(`Could not find #${roleChannelName}.`);
       return;
     }
 
     const botPermissions = roleChannel.permissionsFor(interaction.client.user);
     if (!botPermissions?.has(PermissionFlagsBits.ManageMessages)) {
-      await interaction.reply({ content: `I need Manage Messages permission in #${roleChannelName}.`, flags: MessageFlags.Ephemeral });
+      await interaction.editReply(`I need Manage Messages permission in #${roleChannelName}.`);
       return;
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const deletedCount = await clearTextChannel(roleChannel);
     await interaction.editReply(
       `Cleared ${deletedCount} message(s) from #${roleChannelName}. The bot will recreate the grouped alert-role selector shortly.`
