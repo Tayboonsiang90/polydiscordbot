@@ -126,7 +126,7 @@ No archived integrations currently.
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
 - One adapter normally creates one monitor channel and one slash-command group. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA integrations keep individual UMA alert roles and reaction selectors. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts.
-- Shared commands are generated in `src/commands.ts`: `status`, `check`, `last`, `updates`, `clear`, `polymarket`, `enddate`, `interval`, `pause`, `archive`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`.
+- Shared integration commands are generated in `src/commands.ts`: `status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `pause`, `archive`, `resume`; adapters with month/year settings also get `period`, snapshot adapters get `snapshot`, strike-text adapters get `strikes`, searchable strike adapters get `search`, and tag-filtered adapters get `tagsearch` and `tags`. Channel cleanup is bot-level through `/bot clear`.
 - Discord allows 100 guild slash commands per app. `src/registerCommands.ts` enforces this cap, and `src/commands.ts` can keep stale/temporary monitors polling while excluding their slash commands from registration.
 - Channel names should match or clearly hint at the slash-command prefix so users do not have to guess the command.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
@@ -203,7 +203,6 @@ Every integration uses the same command shape inside its own channel. Replace `/
 - `/bonbast updates`
 - `/freeappstore snapshot`
 - `/paidappstore snapshot`
-- `/bonbast clear`
 - `/bonbast polymarket url:https://polymarket.com/event/example`
 - `/bonbast enddate datetime:2026-05-10 23:59`
 - `/bonbast interval minutes:1`
@@ -218,6 +217,7 @@ Every integration uses the same command shape inside its own channel. Replace `/
 - `/bonbast archive reason:market ended`
 - `/bonbast resume`
 - `/bot summarize`
+- `/bot clear`
 - `/bot clearerrors keep-latest:true`
 
 Month/year integrations also support:
@@ -246,7 +246,7 @@ MarineTraffic alpha for `/hormuzships` and `/babmandeb` is optional. The public 
 Bonbast replies use Discord embeds with compact fields, colored status accents, and clickable links.
 Use `/bonbast polymarket` once per market so future alerts include a clickable Polymarket link.
 The stored Polymarket URL also drives market-end reminders. For queued dated URLs, the bot uses the ET-derived queue end time; otherwise it reads the market `endDate` from Polymarket Gamma API once per integration/Polymarket URL, stores it locally, and alerts 24 hours before, 12 hours before, 1 hour before, and at the returned end time. If a later queued market is already stored for the integration, rollover reminders for the current market are skipped. If Gamma does not return an `endDate`, the bot sends one warning in that integration channel instead of repeatedly querying Gamma. Failed Gamma lookups back off before retrying so a VPN/DNS/API outage does not flood logs. Use the channel's `enddate` command to manually set the end time in ET, for example `/bonbast enddate datetime:2026-05-10 23:59`.
-Use `/bonbast clear` to clear the current integration channel. You and the bot both need `Manage Messages`.
+Use `/bot clear` to clear the current text channel. You and the bot both need `Manage Messages`.
 
 ## Raspberry Pi Health Alerts
 

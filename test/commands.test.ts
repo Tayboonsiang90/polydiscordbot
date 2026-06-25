@@ -78,6 +78,7 @@ describe("adapter commands", () => {
       name: "bot",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "summarize" }),
+        expect.objectContaining({ name: "clear" }),
         expect.objectContaining({ name: "clearerrors" }),
         expect.objectContaining({ name: "clearroles" })
       ])
@@ -94,7 +95,6 @@ describe("adapter commands", () => {
       "check",
       "last",
       "updates",
-      "clear",
       "polymarket",
       "interval",
       "enddate",
@@ -114,6 +114,7 @@ describe("adapter commands", () => {
       for (const subcommandName of sharedSubcommands) {
         expect(options).toEqual(expect.arrayContaining([expect.objectContaining({ name: subcommandName })]));
       }
+      expect(options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "clear" })]));
       expect(options).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "test" })]));
 
       const optionalSubcommands: Array<[unknown, string]> = [

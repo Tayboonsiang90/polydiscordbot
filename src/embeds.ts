@@ -395,6 +395,17 @@ export function buildClearEmbed(integration: Integration, deletedCount: number):
     .setFooter({ text: `Cleared at ${nowSingaporeDateTime()}` });
 }
 
+export function buildBotChannelClearEmbed(channelName: string, deletedCount: number): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(successColor)
+    .setTitle("Channel cleared")
+    .addFields(
+      { name: "Channel", value: `#${channelName}`, inline: true },
+      { name: "Deleted messages", value: String(deletedCount), inline: true }
+    )
+    .setFooter({ text: `Cleared at ${nowSingaporeDateTime()}` });
+}
+
 export function buildClearErrorsEmbed(summary: ErrorCleanupSummary): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(summary.failedDeletes || summary.skippedChannels ? warningColor : successColor)

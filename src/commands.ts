@@ -9,7 +9,7 @@ import {
   buildAddressLabelsEmbed,
   buildArbitrageSetupEmbed,
   buildArbitrageWatchEmbed,
-  buildClearEmbed,
+  buildBotChannelClearEmbed,
   buildClearErrorsEmbed,
   buildCheckEmbed,
   buildEventPostMessagePayload,
@@ -80,7 +80,6 @@ export function buildAdapterCommands() {
       .addSubcommand((subcommand) => subcommand.setName("check").setDescription("Fetch the current value now"))
       .addSubcommand((subcommand) => subcommand.setName("last").setDescription("Show the last stored value"))
       .addSubcommand((subcommand) => subcommand.setName("updates").setDescription("Show recent source update timing logs"))
-      .addSubcommand((subcommand) => subcommand.setName("clear").setDescription("Clear messages from this monitor channel"))
       .addSubcommand((subcommand) =>
         subcommand
           .setName("polymarket")
@@ -452,6 +451,7 @@ export function buildBotCommands() {
       .setName("bot")
       .setDescription("Bot-level utility commands")
       .addSubcommand((subcommand) => subcommand.setName("summarize").setDescription("Summarize all integrations"))
+      .addSubcommand((subcommand) => subcommand.setName("clear").setDescription("Clear messages from the current text channel"))
       .addSubcommand((subcommand) =>
         subcommand
           .setName("clearerrors")
@@ -504,6 +504,30 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
     const keepLatest = interaction.options.getBoolean("keep-latest") ?? true;
     const summary = await clearOldCheckFailedMessages(interaction.guild, database, keepLatest);
     await interaction.editReply({ embeds: [buildClearErrorsEmbed(summary)] });
+    return;
+  }
+
+  if (subcommand === "clear") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+      await interaction.editReply("You need Manage Messages permission to clear this channel.");
+      return;
+    }
+
+    if (!interaction.channel || interaction.channel.type !== ChannelType.GuildText) {
+      await interaction.editReply("This command only works in a text channel.");
+      return;
+    }
+
+    const botPermissions = interaction.channel.permissionsFor(interaction.client.user);
+    if (!botPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+      await interaction.editReply("I need Manage Messages permission to clear this channel.");
+      return;
+    }
+
+    const deletedCount = await clearTextChannel(interaction.channel);
+    await interaction.editReply({ embeds: [buildBotChannelClearEmbed(interaction.channel.name, deletedCount)] });
     return;
   }
 
@@ -918,29 +942,6 @@ export async function handleAdapterCommand(
     return;
   }
 
-  if (subcommand === "clear") {
-    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
-      await interaction.reply({ content: "You need Manage Messages permission to clear this channel.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    if (interaction.channel.type !== ChannelType.GuildText) {
-      await interaction.reply({ content: "This command only works in a text channel.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    const botPermissions = interaction.channel.permissionsFor(interaction.client.user);
-    if (!botPermissions?.has(PermissionFlagsBits.ManageMessages)) {
-      await interaction.reply({ content: "I need Manage Messages permission to clear this channel.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const deletedCount = await clearTextChannel(interaction.channel);
-    await interaction.editReply({ embeds: [buildClearEmbed(integration, deletedCount)] });
-    return;
-  }
-
   if (subcommand === "polymarket") {
     const polymarketUrl = normalizePolymarketUrl(interaction.options.getString("url", true));
     if (!polymarketUrl) {
@@ -1094,7 +1095,13 @@ export async function handleAdapterCommand(
       const result = await checkIntegration(database, integration);
       await interaction.editReply({ content: "", embeds: [buildCheckEmbed(result)] });
     }
+    return;
   }
+
+  await interaction.reply({
+    content: subcommand === "clear" ? "Channel clearing moved to `/bot clear`." : "Unknown integration command.",
+    flags: MessageFlags.Ephemeral
+  });
 }
 
 export function describeAdapterCommand(adapter: WebsiteAdapter): string {
