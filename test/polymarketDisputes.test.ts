@@ -192,12 +192,11 @@ describe("fetchPolymarketDisputeUpdates", () => {
       ),
       result.posts[0]
     )[0].data.fields ?? [];
-    expect(embedFields.slice(0, 9).map((field) => field.name)).toEqual([
+    expect(embedFields.slice(0, 8).map((field) => field.name)).toEqual([
       "Question",
       "Proposed outcome",
-      "Posted at (SGT)",
+      "Posted at",
       "Notification latency",
-      "Posted at (ET)",
       "Market tags",
       "Proposer",
       "Disputer",

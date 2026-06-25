@@ -96,11 +96,10 @@ describe("Polymarket clarification parsing", () => {
       buildIntegration(JSON.stringify({ addressLabels: [{ address: creator, label: "Polymarket Creator" }] })),
       post
     )[0].data.fields ?? [];
-    expect(embedFields.slice(0, 7).map((field) => field.name)).toEqual([
+    expect(embedFields.slice(0, 6).map((field) => field.name)).toEqual([
       "Question",
-      "Posted at (SGT)",
+      "Posted at",
       "Notification latency",
-      "Posted at (ET)",
       "Clarification",
       "Creator",
       "Event type"

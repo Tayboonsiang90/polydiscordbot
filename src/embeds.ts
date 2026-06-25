@@ -21,7 +21,12 @@ import type {
 } from "./integrations/types.js";
 import type { MarketEndReminder } from "./marketEnd.js";
 import { parseSettingsJson } from "./settingsJson.js";
-import { formatSingaporeDateTime, nowSingaporeDateTime } from "./time.js";
+import {
+  formatEasternDateTime as formatSharedEasternDateTime,
+  formatSingaporeDateTime,
+  nowEasternDateTime,
+  nowSingaporeDateTime
+} from "./time.js";
 
 const successColor = 0x2ecc71;
 const warningColor = 0xf1c40f;
@@ -409,12 +414,12 @@ export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
   return baseEmbed(result.integration, "Value changed")
     .setColor(successColor)
     .addFields(
-      { name: "Previous", value: formatValue(result.previousValue), inline: true },
-      { name: "Current", value: formatValue(result.currentValue), inline: true },
+      { name: "Previous", value: formatAlertValue(result.previousValue), inline: true },
+      { name: "Current", value: formatAlertValue(result.currentValue), inline: true },
       { name: "Retrieved at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false },
       { name: "Links", value: formatLinks(result.integration), inline: false }
     )
-    .setFooter({ text: `Alert sent at ${nowSingaporeDateTime()}` });
+    .setFooter({ text: `Alert sent at ${nowEasternDateTime()}` });
 }
 
 export function buildEventPostEmbed(integration: Integration, post: EventMonitorPost): EmbedBuilder[] {
@@ -434,20 +439,20 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
     ...formatPrioritySummaryFields(integration, post, alertSentAt),
     ...(post.summaryFields ?? []).map((field) => ({
       name: field.name,
-      value: truncateEmbedValue(field.value),
+      value: truncateEmbedValue(convertIsoTimestampsToEastern(field.value)),
       inline: field.inline ?? false
     })),
     ...(post.hideDefaultEventFields
       ? []
       : [
           { name: "Event type", value: post.type, inline: true },
-          { name: "Posted at", value: formatSingaporeDateTime(post.postedAt), inline: false },
+          { name: "Posted at", value: formatSharedEasternDateTime(post.postedAt), inline: false },
           ...formatNotificationLatencyFields(post, alertSentAt),
           { name: sourceLabel, value: post.url, inline: false }
         ]),
     ...(post.fields ?? []).map((field) => ({
       name: field.name,
-      value: truncateEmbedValue(field.value),
+      value: truncateEmbedValue(convertIsoTimestampsToEastern(field.value)),
       inline: field.inline ?? false
     })),
     ...(post.matchedTerms.length ? [{ name: "Matched text terms", value: post.matchedTerms.join(", "), inline: false }] : []),
@@ -461,10 +466,10 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
         ]
       : []),
     ...(post.strikeTerms.length ? [{ name: "Strike list", value: formatStrikeTerms(post.strikeTerms), inline: false }] : []),
-    ...(post.imageText ? [{ name: "Image text", value: formatValue(post.imageText), inline: false }] : []),
+    ...(post.imageText ? [{ name: "Image text", value: formatAlertValue(post.imageText), inline: false }] : []),
     ...(post.hideTextField
       ? []
-      : [{ name: post.textFieldName ?? "Post text", value: formatValue(post.text || "(no text)"), inline: false }]),
+      : [{ name: post.textFieldName ?? "Post text", value: formatAlertValue(post.text || "(no text)"), inline: false }]),
     ...(post.hideLinksField
       ? []
       : [
@@ -479,7 +484,7 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
     baseEmbed(integration, title)
       .setColor(hasStrike ? errorColor : successColor)
       .addFields(eventFields)
-      .setFooter({ text: `Alert sent at ${formatSingaporeDateTime(alertSentAt)}` })
+      .setFooter({ text: `Alert sent at ${formatSharedEasternDateTime(alertSentAt)}` })
   ];
 
   if (imageAttachmentNames.length) {
@@ -596,10 +601,8 @@ function formatPrioritySummaryFields(
   const proposerShares = formatActorShares(summary.proposerAligned, summary.proposerHedge);
   const disputerShares = formatActorShares(summary.disputerAligned, summary.disputerHedge);
   const isProposalSummary = post.type === "Polymarket UMA proposal";
-  const postedAtSgtLabel = isProposalSummary ? "Proposed at" : "Posted at (SGT)";
-  const postedAtEtLabel = isProposalSummary ? "Proposed at (ET)" : "Posted at (ET)";
-  const expirationSgtLabel = isProposalSummary ? "Dispute Window Ends" : "Proposal expiration (SGT)";
-  const expirationEtLabel = isProposalSummary ? "Dispute Window Ends (ET)" : "Proposal expiration (ET)";
+  const postedAtLabel = isProposalSummary ? "Proposed at" : "Posted at";
+  const expirationLabel = isProposalSummary ? "Dispute Window Ends" : "Proposal expiration";
 
   return [
     ...(summary.question
@@ -618,15 +621,11 @@ function formatPrioritySummaryFields(
     ...(summary.proposedSideLiquidityCheck
       ? [{ name: "PENNY PICK CHECK", value: `**${summary.proposedSideLiquidityCheck}**`, inline: false }]
       : []),
-    { name: postedAtSgtLabel, value: formatSingaporeDateTime(post.postedAt), inline: true },
+    { name: postedAtLabel, value: formatSharedEasternDateTime(post.postedAt), inline: true },
     ...(summary.proposalExpirationAt
-      ? [{ name: expirationSgtLabel, value: formatSingaporeDateTime(summary.proposalExpirationAt), inline: true }]
+      ? [{ name: expirationLabel, value: formatSharedEasternDateTime(summary.proposalExpirationAt), inline: true }]
       : []),
     ...formatNotificationLatencyFields(post, alertSentAt),
-    { name: postedAtEtLabel, value: formatEasternDateTime(post.postedAt), inline: true },
-    ...(summary.proposalExpirationAt
-      ? [{ name: expirationEtLabel, value: formatEasternDateTime(new Date(summary.proposalExpirationAt)), inline: true }]
-      : []),
     ...(summary.marketTags?.length
       ? [{ name: "Market tags", value: formatMarketTags(summary.marketTags, summary.matchedTags ?? []), inline: false }]
       : []),
@@ -684,12 +683,12 @@ export function buildSnapshotCapturedEmbed(result: SnapshotResult): EmbedBuilder
     .setColor(successColor)
     .addFields(
       { name: "Snapshot date", value: result.snapshotDate, inline: true },
-      { name: "Captured at", value: formatSingaporeDateTime(result.integration.snapshotCheckedAt), inline: false },
-      { name: "Snapshot value", value: formatValue(result.snapshotValue), inline: false },
+      { name: "Retrieved at", value: formatSingaporeDateTime(result.integration.snapshotCheckedAt), inline: false },
+      { name: "Snapshot value", value: formatAlertValue(result.snapshotValue), inline: false },
       { name: "Stored separately", value: "Regular interval checks cannot overwrite this daily snapshot.", inline: false },
       { name: "Links", value: formatLinks(result.integration), inline: false }
     )
-    .setFooter({ text: `Snapshot alert sent at ${nowSingaporeDateTime()}` });
+    .setFooter({ text: `Snapshot alert sent at ${nowEasternDateTime()}` });
 }
 
 export function buildMarketEndReminderEmbed(integration: Integration, reminder: MarketEndReminder): EmbedBuilder {
@@ -697,14 +696,12 @@ export function buildMarketEndReminderEmbed(integration: Integration, reminder: 
     .setColor(warningColor)
     .addFields(
       { name: "Reminder", value: reminder.label, inline: false },
-      { name: "Market ends ET", value: formatEasternDateTime(reminder.endAt), inline: false },
-      { name: "Market ends SGT", value: formatSingaporeDateTime(reminder.endAt), inline: false },
-      { name: "Market ends UTC", value: reminder.endAt.toISOString(), inline: false },
+      { name: "Market ends", value: formatSharedEasternDateTime(reminder.endAt), inline: false },
       { name: "Action", value: "Update this integration's Polymarket URL if you are moving to the next market.", inline: false },
       { name: "Command", value: "Use this channel's `/... polymarket url:<new-polymarket-url>` subcommand.", inline: false },
       { name: "Links", value: formatLinks(integration), inline: false }
     )
-    .setFooter({ text: `Reminder sent at ${nowSingaporeDateTime()}` });
+    .setFooter({ text: `Reminder sent at ${nowEasternDateTime()}` });
 }
 
 export function buildMarketRolloverEmbed(integration: Integration, rollover: MarketRollover): EmbedBuilder {
@@ -720,7 +717,7 @@ export function buildMarketRolloverEmbed(integration: Integration, rollover: Mar
       },
       { name: "Resolution", value: integration.sourceUrl, inline: false }
     )
-    .setFooter({ text: `Rollover detected at ${nowSingaporeDateTime()}` });
+    .setFooter({ text: `Rollover detected at ${nowEasternDateTime()}` });
 }
 
 export function buildMarketEndMissingEmbed(integration: Integration): EmbedBuilder {
@@ -732,7 +729,7 @@ export function buildMarketEndMissingEmbed(integration: Integration): EmbedBuild
       { name: "Example", value: "`/... enddate datetime:2026-05-10 23:59`", inline: false },
       { name: "Links", value: formatLinks(integration), inline: false }
     )
-    .setFooter({ text: `Warning sent at ${nowSingaporeDateTime()}` });
+    .setFooter({ text: `Warning sent at ${nowEasternDateTime()}` });
 }
 
 export function buildErrorEmbed(integration: Integration, message: string): EmbedBuilder {
@@ -742,7 +739,7 @@ export function buildErrorEmbed(integration: Integration, message: string): Embe
       { name: "Error", value: truncateEmbedValue(message), inline: false },
       ...formatOptionalPolymarketField(integration)
     )
-    .setFooter({ text: `Failed at ${nowSingaporeDateTime()}` });
+    .setFooter({ text: `Failed at ${nowEasternDateTime()}` });
 }
 
 export function buildSetupEmbed(integration: Integration, commandName: string): EmbedBuilder {
@@ -1165,6 +1162,17 @@ function formatEasternDateTime(date: Date): string {
 
 function formatValue(value: string | null): string {
   return value ? truncateEmbedValue(value) : "not checked yet";
+}
+
+function formatAlertValue(value: string | null): string {
+  return convertIsoTimestampsToEastern(formatValue(value));
+}
+
+function convertIsoTimestampsToEastern(value: string): string {
+  return value.replace(
+    /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:?\d{2})\b/g,
+    (timestamp) => formatSharedEasternDateTime(timestamp)
+  );
 }
 
 function formatArbitrageOutcomes(outcomes: ArbitrageSetupResult["outcomes"]): string {
