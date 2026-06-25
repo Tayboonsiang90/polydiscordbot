@@ -25,6 +25,8 @@ import type { EventMonitorPost, Integration, WebsiteAdapter } from "./integratio
 import { getDueMarketEndReminders, getStoredOrFetchPolymarketEndDate, type MarketEndReminder } from "./marketEnd.js";
 import { resolveIntegrationPolymarketQueue } from "./polymarketQueue.js";
 import { mergeSettingsJson, parseSettingsJson } from "./settingsJson.js";
+import { formatSingaporeDateTime } from "./time.js";
+import { getTurboPollingSettings } from "./turboPolling.js";
 
 export { formatSchedulerNetworkError, getErrorNoticeDecision, getErrorNoticeSignature } from "./errorNotices.js";
 
@@ -66,6 +68,7 @@ export type MarketRollover = {
 };
 
 const maxEventSeenPostIds = 100;
+const schedulerRefreshMs = 5_000;
 const schedulerErrorNoticeWindowMs = 10 * 60_000;
 const checkFailedTitleSuffix = " - Check failed";
 const maxStaleErrorCleanupPages = 10;
@@ -403,7 +406,8 @@ export function getDueSnapshotDate(
 }
 
 export class PollScheduler {
-  private readonly timers = new Map<number, { timer: NodeJS.Timeout; pollIntervalMinutes: number }>();
+  private readonly timers = new Map<number, { timer: NodeJS.Timeout; pollIntervalMs: number }>();
+  private readonly inFlight = new Set<number>();
   private readonly errorNotices = new Map<number, ErrorNoticeState>();
   private readonly snapshotRuns = new Set<number>();
   private snapshotTimer: NodeJS.Timeout | null = null;
@@ -416,7 +420,7 @@ export class PollScheduler {
 
   start(): void {
     this.refresh();
-    setInterval(() => this.refresh(), 30_000).unref();
+    setInterval(() => this.refresh(), schedulerRefreshMs).unref();
     this.snapshotTimer = setInterval(() => void this.runDueDailySnapshots().catch(logSchedulerError), 30_000);
     this.snapshotTimer.unref();
     void this.runDueDailySnapshots().catch(logSchedulerError);
@@ -445,27 +449,33 @@ export class PollScheduler {
     }
 
     for (const integration of knownActiveIntegrations) {
-      const pollIntervalMinutes = getEffectivePollIntervalMinutes(integration);
+      const pollIntervalMs = getEffectivePollIntervalMs(integration);
       const existing = this.timers.get(integration.id);
-      if (existing && existing.pollIntervalMinutes !== pollIntervalMinutes) {
+      if (existing && existing.pollIntervalMs !== pollIntervalMs) {
         clearInterval(existing.timer);
         this.timers.delete(integration.id);
       }
 
       if (!this.timers.has(integration.id)) {
-        this.schedule(integration, pollIntervalMinutes);
+        this.schedule(integration, pollIntervalMs);
       }
     }
   }
 
-  private schedule(integration: Integration, pollIntervalMinutes: number): void {
+  private schedule(integration: Integration, pollIntervalMs: number): void {
     const run = async () => {
-      const latest = this.database.getIntegrationById(integration.id);
-      if (latest.status !== "active") {
+      if (this.inFlight.has(integration.id)) {
         return;
       }
 
+      this.inFlight.add(integration.id);
+      let latest: Integration | null = null;
       try {
+        latest = this.database.getIntegrationById(integration.id);
+        if (latest.status !== "active") {
+          return;
+        }
+
         const adapter = getAdapter(latest.adapterId);
         if (adapter.fetchEventUpdates) {
           await this.sendDueEventAlerts(latest.id);
@@ -487,14 +497,20 @@ export class PollScheduler {
         }
         this.clearErrorNoticeState(latest.id);
       } catch (error) {
-        await this.sendErrorIfDue(latest.channelId, latest, error).catch(logSchedulerError);
+        if (latest) {
+          await this.sendErrorIfDue(latest.channelId, latest, error).catch(logSchedulerError);
+        } else {
+          logSchedulerError(error);
+        }
+      } finally {
+        this.inFlight.delete(integration.id);
       }
     };
 
     void run().catch(logSchedulerError);
-    const timer = setInterval(() => void run().catch(logSchedulerError), pollIntervalMinutes * 60_000);
+    const timer = setInterval(() => void run().catch(logSchedulerError), pollIntervalMs);
     timer.unref();
-    this.timers.set(integration.id, { timer, pollIntervalMinutes });
+    this.timers.set(integration.id, { timer, pollIntervalMs });
   }
 
   private async sendAlert(channelId: string, result: CheckResult): Promise<void> {
@@ -1016,11 +1032,25 @@ function formatMarketRolloverSummary(rollover: MarketRollover): string {
 }
 
 export function getEffectivePollIntervalMinutes(integration: Integration, now: Date = new Date()): number {
+  return getEffectivePollIntervalMs(integration, now) / 60_000;
+}
+
+export function getEffectivePollIntervalMs(integration: Integration, now: Date = new Date()): number {
+  const turbo = getTurboPollingSettings(integration.settingsJson, now);
+  if (turbo) {
+    return turbo.intervalSeconds * 1000;
+  }
+
   const adapter = getAdapter(integration.adapterId);
-  return adapter.getPollIntervalMinutes?.(integration, now) ?? integration.pollIntervalMinutes;
+  return (adapter.getPollIntervalMinutes?.(integration, now) ?? integration.pollIntervalMinutes) * 60_000;
 }
 
 export function getPollIntervalReason(integration: Integration, now: Date = new Date()): string {
+  const turbo = getTurboPollingSettings(integration.settingsJson, now);
+  if (turbo) {
+    return `Turbo polling every ${turbo.intervalSeconds} second(s) until ${formatSingaporeDateTime(turbo.until)}`;
+  }
+
   const adapter = getAdapter(integration.adapterId);
   return adapter.getPollIntervalReason?.(integration, now) ?? "Configured interval";
 }

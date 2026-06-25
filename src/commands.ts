@@ -29,6 +29,7 @@ import {
   buildTagSearchEmbed,
   buildThresholdEmbed,
   buildStatusEmbed,
+  buildTurboUpdatedEmbed,
   buildUpdateLogsEmbed
 } from "./embeds.js";
 import { exportAddressLabelsCsv, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
@@ -60,10 +61,17 @@ import { mergeSettingsJson, parseSettingsJson, stringifySettingsJson } from "./s
 import {
   checkEventIntegration,
   checkIntegration,
-  getEffectivePollIntervalMinutes,
+  getEffectivePollIntervalMs,
   getPollIntervalReason
 } from "./poller.js";
 import { syncUmaAddressLabels } from "./umaAddressLabels.js";
+import {
+  clearTurboPollingSettings,
+  maxTurboDurationMinutes,
+  maxTurboIntervalSeconds,
+  minTurboIntervalSeconds,
+  setTurboPollingSettings
+} from "./turboPolling.js";
 
 const roleChannelName = "market-alert-roles";
 const checkFailedTitleSuffix = " - Check failed";
@@ -118,9 +126,9 @@ function buildAdapterCommand(
             .setMaxLength(2048)
         )
     )
-    .addSubcommand((subcommand) =>
-      subcommand
-        .setName("interval")
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("interval")
         .setDescription("Change polling interval")
         .addIntegerOption((option) =>
           option
@@ -128,12 +136,33 @@ function buildAdapterCommand(
             .setDescription("Polling interval in minutes")
             .setRequired(true)
             .setMinValue(1)
-            .setMaxValue(1440)
-        )
-    )
-    .addSubcommand((subcommand) =>
-      subcommand
-        .setName("enddate")
+              .setMaxValue(1440)
+          )
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("turbo")
+          .setDescription("Temporarily poll this monitor faster")
+          .addIntegerOption((option) =>
+            option
+              .setName("seconds")
+              .setDescription("Poll every N seconds. Use 0 to turn turbo off.")
+              .setRequired(true)
+              .setMinValue(0)
+              .setMaxValue(maxTurboIntervalSeconds)
+          )
+          .addIntegerOption((option) =>
+            option
+              .setName("duration-minutes")
+              .setDescription("How long turbo should run, in minutes")
+              .setRequired(false)
+              .setMinValue(1)
+              .setMaxValue(maxTurboDurationMinutes)
+          )
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("enddate")
         .setDescription("Manually set the Polymarket market end time in ET")
         .addStringOption((option) =>
           option
@@ -1044,6 +1073,39 @@ export async function handleAdapterCommand(
     return;
   }
 
+  if (subcommand === "turbo") {
+    const seconds = interaction.options.getInteger("seconds", true);
+    if (seconds === 0) {
+      const updated = database.setSettingsJson(integration.id, clearTurboPollingSettings(integration.settingsJson));
+      await interaction.reply({ embeds: [buildTurboUpdatedEmbed(updated)] });
+      return;
+    }
+
+    if (seconds < minTurboIntervalSeconds) {
+      await interaction.reply({
+        content: `Turbo interval must be at least ${minTurboIntervalSeconds} seconds, or 0 to turn turbo off.`,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    const durationMinutes = interaction.options.getInteger("duration-minutes");
+    if (!durationMinutes) {
+      await interaction.reply({
+        content: "`duration-minutes` is required when turning turbo on.",
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    const updated = database.setSettingsJson(
+      integration.id,
+      setTurboPollingSettings(integration.settingsJson, seconds, durationMinutes)
+    );
+    await interaction.reply({ embeds: [buildTurboUpdatedEmbed(updated)] });
+    return;
+  }
+
   if (subcommand === "enddate") {
     if (!integration.polymarketUrl) {
       await interaction.reply({
@@ -1195,7 +1257,7 @@ export function normalizePolymarketUrl(value: string): string | null {
 
 function buildStatusReplyEmbed(integration: Integration) {
   return buildStatusEmbed(integration, {
-    effectiveIntervalMinutes: getEffectivePollIntervalMinutes(integration),
+    effectiveIntervalMs: getEffectivePollIntervalMs(integration),
     reason: getPollIntervalReason(integration)
   });
 }
@@ -1450,7 +1512,7 @@ async function buildIntegrationSummaryRows(database: BotDatabase, integrations: 
       marketEnd: formatMarketEnd(marketEnd.endAt),
       marketExpired: marketEnd.endAt ? marketEnd.endAt.getTime() <= Date.now() : false,
       baseIntervalMinutes: integration.pollIntervalMinutes,
-      currentIntervalMinutes: getEffectivePollIntervalMinutes(integration)
+      currentIntervalMinutes: getEffectivePollIntervalMs(integration) / 60_000
     };
   }));
 }

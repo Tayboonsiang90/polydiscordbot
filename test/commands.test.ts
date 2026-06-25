@@ -21,6 +21,7 @@ import {
   buildMarketRolloverEmbed,
   buildStrikeSearchEmbed,
   buildStatusEmbed,
+  buildTurboUpdatedEmbed,
   buildUpdateLogsEmbed,
   parseAddressLabelButtonCustomId,
   parseEventDetailsCustomId,
@@ -99,6 +100,7 @@ describe("adapter commands", () => {
       "updates",
       "polymarket",
       "interval",
+      "turbo",
       "enddate",
       "pause",
       "archive",
@@ -801,6 +803,52 @@ describe("adapter commands", () => {
       ])
     );
     expect(embed.footer?.text).toContain("Returned at");
+  });
+
+  it("formats active turbo polling status", () => {
+    const embed = buildStatusEmbed(
+      {
+        ...checkedIntegration,
+        settingsJson: JSON.stringify({
+          turboPolling: {
+            intervalSeconds: 10,
+            startedAt: "2099-05-06T01:02:03.000Z",
+            until: "2099-05-06T02:02:03.000Z"
+          }
+        })
+      },
+      { effectiveIntervalMs: 10_000, reason: "Turbo polling every 10 second(s)" }
+    ).toJSON();
+
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Current interval", value: "10 second(s)" }),
+        expect.objectContaining({ name: "Turbo interval", value: "10 second(s)" }),
+        expect.objectContaining({ name: "Turbo ends", value: "06/05/2099, 10:02:03 SGT" })
+      ])
+    );
+  });
+
+  it("formats turbo polling updates", () => {
+    const embed = buildTurboUpdatedEmbed({
+      ...checkedIntegration,
+      settingsJson: JSON.stringify({
+        turboPolling: {
+          intervalSeconds: 5,
+          startedAt: "2099-05-06T01:02:03.000Z",
+          until: "2099-05-06T02:02:03.000Z"
+        }
+      })
+    }).toJSON();
+
+    expect(embed.title).toBe("Bonbast USD/IRR - Turbo polling updated");
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Turbo", value: "on" }),
+        expect.objectContaining({ name: "Turbo interval", value: "5 second(s)" }),
+        expect.objectContaining({ name: "Turbo ends", value: "06/05/2099, 10:02:03 SGT" })
+      ])
+    );
   });
 
   it("formats archived status metadata", () => {

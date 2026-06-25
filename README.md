@@ -126,7 +126,7 @@ No archived integrations currently.
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
 - One adapter normally creates one monitor channel. Non-UMA integrations use the generic `/monitor` command inside that channel; UMA integrations keep individual UMA command groups, individual UMA alert roles, and reaction selectors. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts.
-- Shared integration commands are generated in `src/commands.ts`: `/monitor status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `pause`, `archive`, `resume`; channel-specific capability commands such as `period`, `snapshot`, `strikes`, `search`, `tagsearch`, `tags`, `watchlist`, `threshold`, `setup`, and `watch` are visible under `/monitor` but only execute in channels whose adapter supports them. Channel cleanup is bot-level through `/bot clear`.
+- Shared integration commands are generated in `src/commands.ts`: `/monitor status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `turbo`, `pause`, `archive`, `resume`; channel-specific capability commands such as `period`, `snapshot`, `strikes`, `search`, `tagsearch`, `tags`, `watchlist`, `threshold`, `setup`, and `watch` are visible under `/monitor` but only execute in channels whose adapter supports them. Channel cleanup is bot-level through `/bot clear`.
 - Discord allows 100 guild slash commands per app. `src/registerCommands.ts` enforces this cap; normal monitors share `/monitor` so new integrations do not consume one command each.
 - Channel names should identify the monitor topic, while the command is `/monitor` for non-UMA channels.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
@@ -205,6 +205,8 @@ Most integrations use the same generic command inside their own channel. Run `/m
 - `/monitor polymarket url:https://polymarket.com/event/example`
 - `/monitor enddate datetime:2026-05-10 23:59`
 - `/monitor interval minutes:1`
+- `/monitor turbo seconds:10 duration-minutes:30`
+- `/monitor turbo seconds:0`
 - `/umacommits threshold value:250k`
 - `/umareveals threshold value:250k`
 - `/monitor watchlist action:add market:https://polymarket.com/market/example`
@@ -236,6 +238,7 @@ Monthly precipitation, ChatGPT Outage, and Claude Downtime adapters auto-discove
 Commands are intentionally channel-scoped. `/monitor` detects the adapter from the current channel and rejects unsupported subcommands for that channel. UMA commands remain adapter-specific.
 Command replies and alerts display timestamps in Singapore local time.
 Status replies show both the configured base interval and the current effective interval. Dynamic polling integrations also show the current polling mode/reason.
+Use `/monitor turbo seconds:<seconds> duration-minutes:<minutes>` to temporarily poll the current channel faster. Turbo is stored in `settingsJson`, takes effect within a few seconds, overrides adapter dynamic intervals while active, and expires automatically. Use `/monitor turbo seconds:0` to turn it off early. Minimum turbo interval is 5 seconds; maximum duration is 24 hours.
 
 Use `/monitor archive` when a market is done but the adapter should remain available for future market restarts. Archive sets the integration to `paused`, stores `archivedAt` plus optional `archiveReason` in `settingsJson`, and leaves the channel, role, source code, Polymarket URL, last values, and update logs intact. `/monitor resume` clears archive metadata and resumes polling.
 Use `/monitor updates` in each channel to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.

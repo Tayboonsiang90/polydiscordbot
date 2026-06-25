@@ -27,6 +27,7 @@ import {
   nowEasternDateTime,
   nowSingaporeDateTime
 } from "./time.js";
+import { getTurboPollingSettings } from "./turboPolling.js";
 
 const successColor = 0x2ecc71;
 const warningColor = 0xf1c40f;
@@ -41,6 +42,7 @@ export type AddressLabelButtonRole = "proposer" | "disputer";
 
 export type StatusPollingInfo = {
   effectiveIntervalMinutes?: number;
+  effectiveIntervalMs?: number;
   reason?: string;
 };
 
@@ -66,7 +68,7 @@ export type ErrorCleanupSummary = {
 };
 
 export function buildStatusEmbed(integration: Integration, pollingInfo: StatusPollingInfo = {}): EmbedBuilder {
-  const effectiveIntervalMinutes = pollingInfo.effectiveIntervalMinutes ?? integration.pollIntervalMinutes;
+  const effectiveIntervalMs = pollingInfo.effectiveIntervalMs ?? (pollingInfo.effectiveIntervalMinutes ?? integration.pollIntervalMinutes) * 60_000;
   const archiveFields = formatArchiveFields(integration);
 
   return baseEmbed(integration, "Monitor status")
@@ -74,8 +76,9 @@ export function buildStatusEmbed(integration: Integration, pollingInfo: StatusPo
       { name: "Value", value: formatValue(integration.lastValue), inline: true },
       { name: "Status", value: archiveFields.length ? `${integration.status} (archived)` : integration.status, inline: true },
       { name: "Base interval", value: `${integration.pollIntervalMinutes} minute(s)`, inline: true },
-      { name: "Current interval", value: `${effectiveIntervalMinutes} minute(s)`, inline: true },
+      { name: "Current interval", value: formatIntervalMs(effectiveIntervalMs), inline: true },
       ...(pollingInfo.reason ? [{ name: "Polling mode", value: pollingInfo.reason, inline: false }] : []),
+      ...formatTurboFields(integration),
       ...archiveFields,
       ...formatSettingsFields(integration),
       ...formatSnapshotFields(integration),
@@ -101,7 +104,7 @@ export function buildIntegrationSummaryEmbeds(rows: IntegrationSummaryRow[]): Em
               `Resolution: ${row.sourceUrl}`,
               `Polymarket: ${row.polymarketUrl ?? "not set"}`,
               `End: ${row.marketExpired ? "⚠️ EXPIRED - " : ""}${row.marketEnd}`,
-              `Interval: ${row.currentIntervalMinutes} min current / ${row.baseIntervalMinutes} min base`
+              `Interval: ${formatIntervalSummaryFromMinutes(row.currentIntervalMinutes)} current / ${row.baseIntervalMinutes} min base`
             ].join("\n"),
             800
           ),
@@ -374,6 +377,26 @@ export function buildIntervalUpdatedEmbed(integration: Integration): EmbedBuilde
       { name: "Links", value: formatLinks(integration), inline: false }
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+}
+
+export function buildTurboUpdatedEmbed(integration: Integration): EmbedBuilder {
+  const turbo = getTurboPollingSettings(integration.settingsJson);
+  const embed = baseEmbed(integration, "Turbo polling updated")
+    .addFields(
+      { name: "Base interval", value: `${integration.pollIntervalMinutes} minute(s)`, inline: true },
+      { name: "Links", value: formatLinks(integration), inline: false }
+    )
+    .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
+
+  if (!turbo) {
+    return embed.addFields({ name: "Turbo", value: "off", inline: true });
+  }
+
+  return embed.addFields(
+    { name: "Turbo", value: "on", inline: true },
+    { name: "Turbo interval", value: `${turbo.intervalSeconds} second(s)`, inline: true },
+    { name: "Turbo ends", value: formatSingaporeDateTime(turbo.until), inline: false }
+  );
 }
 
 export function buildPeriodUpdatedEmbed(integration: Integration, year: number, month: number): EmbedBuilder {
@@ -1176,6 +1199,24 @@ function formatValue(value: string | null): string {
   return value ? truncateEmbedValue(value) : "not checked yet";
 }
 
+function formatIntervalMs(intervalMs: number): string {
+  if (intervalMs % 60_000 === 0) {
+    return `${intervalMs / 60_000} minute(s)`;
+  }
+
+  const seconds = intervalMs / 1000;
+  return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} second(s)`;
+}
+
+function formatIntervalSummaryFromMinutes(minutes: number): string {
+  if (minutes < 1) {
+    const seconds = minutes * 60;
+    return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} sec`;
+  }
+
+  return `${Number.isInteger(minutes) ? minutes : minutes.toFixed(2)} min`;
+}
+
 function formatAlertValue(value: string | null): string {
   return convertIsoTimestampsToEastern(formatValue(value));
 }
@@ -1270,6 +1311,18 @@ function formatArchiveFields(integration: Integration) {
     ...(typeof settings.archiveReason === "string" && settings.archiveReason.trim()
       ? [{ name: "Archive reason", value: truncateEmbedValue(settings.archiveReason.trim(), 500), inline: false }]
       : [])
+  ];
+}
+
+function formatTurboFields(integration: Integration) {
+  const turbo = getTurboPollingSettings(integration.settingsJson);
+  if (!turbo) {
+    return [];
+  }
+
+  return [
+    { name: "Turbo interval", value: `${turbo.intervalSeconds} second(s)`, inline: true },
+    { name: "Turbo ends", value: formatSingaporeDateTime(turbo.until), inline: false }
   ];
 }
 

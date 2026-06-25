@@ -9,6 +9,7 @@ import {
   captureDailySnapshot,
   formatErrorNoticeDiscordMessage,
   getDueSnapshotDate,
+  getEffectivePollIntervalMs,
   getEffectivePollIntervalMinutes,
   getErrorNoticeDecision,
   getErrorNoticeSignature,
@@ -512,6 +513,47 @@ describe("getEffectivePollIntervalMinutes", () => {
         new Date("2026-05-12T16:00:00.000Z")
       )
     ).toBe("EIA release watch: Tuesday/Wednesday ET");
+  });
+
+  it("uses active turbo polling before adapter-defined polling", () => {
+    const integration = {
+      ...snapshotIntegration,
+      adapterId: "eia-crude-spr",
+      pollIntervalMinutes: 5,
+      settingsJson: JSON.stringify({
+        turboPolling: {
+          intervalSeconds: 10,
+          startedAt: "2026-05-12T15:55:00.000Z",
+          until: "2026-05-12T16:30:00.000Z"
+        }
+      })
+    };
+
+    expect(getEffectivePollIntervalMs(integration, new Date("2026-05-12T16:00:00.000Z"))).toBe(10_000);
+    expect(getEffectivePollIntervalMinutes(integration, new Date("2026-05-12T16:00:00.000Z"))).toBe(1 / 6);
+    expect(getPollIntervalReason(integration, new Date("2026-05-12T16:00:00.000Z"))).toContain(
+      "Turbo polling every 10 second(s)"
+    );
+  });
+
+  it("ignores expired turbo polling settings", () => {
+    expect(
+      getEffectivePollIntervalMinutes(
+        {
+          ...snapshotIntegration,
+          adapterId: "eia-crude-spr",
+          pollIntervalMinutes: 5,
+          settingsJson: JSON.stringify({
+            turboPolling: {
+              intervalSeconds: 10,
+              startedAt: "2026-05-12T15:30:00.000Z",
+              until: "2026-05-12T15:59:59.000Z"
+            }
+          })
+        },
+        new Date("2026-05-12T16:00:00.000Z")
+      )
+    ).toBe(1);
   });
 });
 
