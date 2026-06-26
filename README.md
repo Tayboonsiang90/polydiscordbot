@@ -269,6 +269,12 @@ Production on the Pi has three moving parts:
 
 The main bot writes `.health/bot-heartbeat.json` every `BOT_HEARTBEAT_INTERVAL_SECONDS` while the Node process is alive. The provisioner creates `#bot-status`, and the bot posts a startup message there after each successful login. The watchdog can post to the same channel through `DISCORD_HEALTH_WEBHOOK_URL`; if no webhook is configured, it falls back to the normal `DISCORD_TOKEN` and `DISCORD_GUILD_ID` to find or create `#bot-status`.
 
+Health channel policy:
+
+- `#bot-status`: only bot lifecycle and liveness events: startup, Pi boot, stale/missing heartbeat, inactive service, watchdog restart attempt/result, recovery after unhealthy state, and fatal runtime errors such as uncaught exceptions or startup/login failures.
+- `#errorlogs`: integration check failures only. The poller keeps one editable failure post per integration and updates repeated failures there.
+- Healthy-service retry noise, such as transient Discord `UND_ERR_CONNECT_TIMEOUT` provisioning sends or scheduler send retries, stays in `journalctl` and `.health/watchdog.log`; it should not alert Discord unless it makes the heartbeat stale or service unhealthy.
+
 Recommended Pi `.env` health settings:
 
 ```bash

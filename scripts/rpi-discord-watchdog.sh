@@ -66,7 +66,7 @@ VPN/Public IP: $(curl -4s --connect-timeout 5 https://ifconfig.me 2>/dev/null ||
 
 Issues:
 $issue_text
-Recent service errors:
+Recent critical service logs:
 \`\`\`
 $(printf '%s' "${errors:-none}" | tail -c 2500)
 \`\`\`
@@ -168,7 +168,7 @@ send_healthchecks_ping() {
     return 0
   fi
 
-  build_description "Bot unhealthy" "$status" "$heartbeat_summary" "$recent_errors" |
+  build_description "Bot unhealthy" "$status" "$heartbeat_summary" "$critical_errors" |
     curl -fsS --connect-timeout 10 --max-time 20 --data-binary @- "$base_url/fail" >/dev/null || true
 }
 
@@ -217,9 +217,9 @@ else
   fi
 fi
 
-recent_errors="$(
+critical_errors="$(
   journalctl -u "$SERVICE_NAME" -b --since "@$previous_check_epoch" --no-pager 2>/dev/null |
-    grep -Ei "Discord login failed|Bot startup failed|Unhandled promise rejection|Uncaught exception|Captured uncaught exception|Main process exited|Failed with result|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|Connect Timeout Error" |
+    grep -Ei "Discord login failed|Bot startup failed|Unhandled promise rejection|Uncaught exception|Captured uncaught exception|Main process exited|Failed with result|Killed process|Out of memory|FATAL|panic" |
     tail -n 20 || true
 )"
 
@@ -261,33 +261,27 @@ fi
 message_status="$status; restart: $restart_summary"
 message_sent="true"
 if [ "$boot_id" != "$last_boot_id" ]; then
-  if ! send_webhook "RPi bot host booted" 3447003 "$(build_description "Boot detected" "$message_status" "$heartbeat_summary" "$recent_errors")"; then
-    message_sent="false"
-  else
+  if send_webhook "RPi bot host booted" 3447003 "$(build_description "Boot detected" "$message_status" "$heartbeat_summary" "$critical_errors")"; then
     echo "$boot_id" > "$BOOT_ID_FILE"
-  fi
-fi
-
-if [ -n "$recent_errors" ]; then
-  if ! send_webhook "Discord bot runtime errors detected" 16753920 "$(build_description "Recent bot errors" "$message_status" "$heartbeat_summary" "$recent_errors")"; then
+  else
     message_sent="false"
   fi
 fi
 
 if [ "$restart_alert_needed" = "true" ]; then
-  if ! send_webhook "Discord bot watchdog restart" 16753920 "$(build_description "Watchdog restart action" "$message_status" "$heartbeat_summary" "$recent_errors")"; then
+  if ! send_webhook "Discord bot watchdog restart" 16753920 "$(build_description "Watchdog restart action" "$message_status" "$heartbeat_summary" "$critical_errors")"; then
     message_sent="false"
   fi
 fi
 
 if [ "$status" = "bad" ] && [ "$previous_status" != "bad" ]; then
-  if ! send_webhook "Discord bot watchdog alert" 15158332 "$(build_description "Bot unhealthy" "$message_status" "$heartbeat_summary" "$recent_errors")"; then
+  if ! send_webhook "Discord bot watchdog alert" 15158332 "$(build_description "Bot unhealthy" "$message_status" "$heartbeat_summary" "$critical_errors")"; then
     message_sent="false"
   fi
 fi
 
 if [ "$status" = "ok" ] && [ "$previous_status" = "bad" ]; then
-  if ! send_webhook "Discord bot recovered" 3066993 "$(build_description "Bot healthy again" "$message_status" "$heartbeat_summary" "$recent_errors")"; then
+  if ! send_webhook "Discord bot recovered" 3066993 "$(build_description "Bot healthy again" "$message_status" "$heartbeat_summary" "$critical_errors")"; then
     message_sent="false"
   fi
 fi
