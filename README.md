@@ -358,13 +358,14 @@ UMA Proposal Alerts also supports:
 - `/umaproposals tags action:list`
 - `/umaproposals tags action:remove tag:sports`
 - `/umaproposals tags action:clear`
-- `/umaproposals tagblocks action:add blocked:mentions`
-- `/umaproposals tagblocks action:list`
-- `/umaproposals tagblocks action:remove blocked:mentions`
-- `/umaproposals tagblocks action:clear`
+- In `#uma-proposals-politics`: `/umaproposals tagblocks action:add blocked:mentions`
+- In `#uma-proposals-politics`: `/umaproposals tagblocks action:list`
+- In `#uma-proposals-politics`: `/umaproposals tagblocks action:remove blocked:mentions`
+- In `#uma-proposals-politics`: `/umaproposals tagblocks action:clear`
+- From base `#uma-proposals`: `/umaproposals tagblocks action:add tag:politics blocked:mentions`
 
 Proposal alerts are off until at least one Polymarket tag filter is configured. The bot watches UMA `ProposePrice` logs first, then enriches each proposal with Polymarket CLOB market metadata and only alerts when the market tags exactly match a configured tag label or slug. Adding a tag creates a dedicated channel named `#uma-proposals-<tag-slug>`, removing a tag deletes that tag channel, and matching alerts are sent to the tag-specific channel instead of the base `#uma-proposals` command channel.
-Run `/umaproposals tagblocks` inside a tag-specific proposal channel to exclude another tag only from that channel, for example excluding `mentions` from `#uma-proposals-politics`. From the base `#uma-proposals` channel, include `tag:<configured-tag>` to choose which tag channel gets the exclusion.
+Run `/umaproposals tagblocks` inside a tag-specific proposal channel to ban another market tag only from that channel; the same blocked tag can still alert in other UMA proposal tag channels unless those channels also block it. From the base `#uma-proposals` channel, include `tag:<configured-tag>` to choose which tag channel gets the exclusion.
 
 UMA Proposal and Dispute Alerts also support address labels:
 

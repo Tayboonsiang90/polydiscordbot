@@ -319,11 +319,11 @@ function buildAdapterCommand(
       command.addSubcommand((subcommand) =>
         subcommand
           .setName("tagblocks")
-          .setDescription("Exclude market tags from one proposal tag channel")
+          .setDescription("Ban market tags from one proposal tag channel")
           .addStringOption((option) =>
             option
               .setName("action")
-              .setDescription("Blocklist action")
+              .setDescription("Ban-list action")
               .setRequired(true)
               .addChoices(
                 { name: "add", value: "add" },
@@ -335,7 +335,7 @@ function buildAdapterCommand(
           .addStringOption((option) =>
             option
               .setName("blocked")
-              .setDescription("Tag to exclude from this proposal channel")
+              .setDescription("Market tag to ban from this proposal channel")
               .setRequired(false)
               .setMinLength(1)
               .setMaxLength(120)
@@ -343,7 +343,7 @@ function buildAdapterCommand(
           .addStringOption((option) =>
             option
               .setName("tag")
-              .setDescription("Configured proposal tag; optional inside its tag channel")
+              .setDescription("Proposal channel tag; defaults to the current tag channel")
               .setRequired(false)
               .setMinLength(1)
               .setMaxLength(120)

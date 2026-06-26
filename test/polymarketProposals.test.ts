@@ -806,6 +806,34 @@ describe("proposal tag filters", () => {
 
     expect(resolvePolymarketProposalChannelIds(integration, post)).toEqual(["trump-channel"]);
   });
+
+  it("keeps proposal tag exclusions scoped to the individual tag channel", () => {
+    const integration = {
+      settingsJson: JSON.stringify({
+        tagFilters: [
+          {
+            id: "1",
+            label: "Sports",
+            slug: "sports",
+            channelId: "sports-channel",
+            channelName: "uma-proposals-sports",
+            excludedTags: [{ id: "2", label: "Politics", slug: "politics" }]
+          },
+          { id: "2", label: "Politics", slug: "politics", channelId: "politics-channel", channelName: "uma-proposals-politics" },
+          { id: "3", label: "Crypto", slug: "crypto", channelId: "crypto-channel", channelName: "uma-proposals-crypto" }
+        ]
+      })
+    } as Integration;
+    const post = {
+      prioritySummary: {
+        marketTags: ["Sports", "Politics", "Crypto"],
+        matchedTags: ["Sports", "Politics", "Crypto"]
+      },
+      fields: []
+    } as unknown as EventMonitorPost;
+
+    expect(resolvePolymarketProposalChannelIds(integration, post)).toEqual(["politics-channel", "crypto-channel"]);
+  });
 });
 
 function buildIntegration(settingsJson: string | null = null): Integration {

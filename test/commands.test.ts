@@ -193,10 +193,17 @@ describe("adapter commands", () => {
     const action = addressOptions.find((option) => option.name === "action");
     const tagAction = tags?.options?.find((option) => option.name === "action");
     const tagblockAction = tagblocks?.options?.find((option) => option.name === "action");
+    const tagblockOptions = tagblocks?.options ?? [];
 
     expect(action?.choices?.map((choice) => choice.value)).toEqual(expect.arrayContaining(["add", "remove", "list", "clear", "import", "export"]));
     expect(tagAction?.choices?.map((choice) => choice.value)).toEqual(["add", "remove", "list", "clear"]);
     expect(tagblockAction?.choices?.map((choice) => choice.value)).toEqual(["add", "remove", "list", "clear"]);
+    expect(tagblockOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "blocked" }),
+        expect.objectContaining({ name: "tag" })
+      ])
+    );
     expect(addressOptions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "file" }),
