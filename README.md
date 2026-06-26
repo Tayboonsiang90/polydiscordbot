@@ -125,7 +125,7 @@ No archived integrations currently.
 
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
-- One adapter normally creates one monitor channel. Non-UMA integrations use the generic `/monitor` command inside that channel; UMA integrations keep individual UMA command groups, individual UMA alert roles, and reaction selectors. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts.
+- One adapter normally creates one monitor channel. Non-UMA integrations use the generic `/monitor` command inside that channel; UMA integrations keep individual UMA command groups, individual UMA alert roles, and reaction selectors. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts and `#bot-status` for runtime health/restart alerts.
 - Shared integration commands are generated in `src/commands.ts`: `/monitor status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `turbo`, `pause`, `archive`, `resume`; channel-specific capability commands such as `period`, `snapshot`, `strikes`, `search`, `tagsearch`, `tags`, `watchlist`, `threshold`, `setup`, and `watch` are visible under `/monitor` but only execute in channels whose adapter supports them. Channel cleanup is bot-level through `/bot clear`.
 - Discord allows 100 guild slash commands per app. `src/registerCommands.ts` enforces this cap; normal monitors share `/monitor` so new integrations do not consume one command each.
 - Channel names should identify the monitor topic, while the command is `/monitor` for non-UMA channels.
@@ -158,8 +158,16 @@ No archived integrations currently.
    DATABASE_PATH=data/bot.sqlite
    DEFAULT_POLL_INTERVAL_MINUTES=5
    BOT_HEARTBEAT_PATH=.health/bot-heartbeat.json
+   BOT_HEARTBEAT_INTERVAL_SECONDS=30
+   BOT_STATUS_CHANNEL_NAME=bot-status
+   BOT_SERVICE_NAME=discord-bot.service
+   BOT_HEARTBEAT_MAX_AGE_SECONDS=120
+   BOT_WATCHDOG_RESTART_ON_BAD=true
+   BOT_WATCHDOG_RESTART_COOLDOWN_SECONDS=300
+   BOT_WATCHDOG_RESTART_WINDOW_SECONDS=900
+   BOT_WATCHDOG_MAX_RESTARTS_PER_WINDOW=3
+   BOT_RESTART_COMMAND=
    DISCORD_HEALTH_WEBHOOK_URL=...
-   BOT_HEARTBEAT_MAX_AGE_SECONDS=900
    HEALTHCHECKS_PING_URL=...
    DUNE_API_KEY=...
    KAITO_INFOMARKETS_API_URL=...
@@ -253,18 +261,34 @@ Use `/bot clear` to clear the current text channel. You and the bot both need `M
 
 ## Raspberry Pi Health Alerts
 
-The bot writes a heartbeat file while it is logged in and healthy. An external watchdog script can run from cron and post to a Discord webhook when the service is down, the heartbeat is stale, the Pi reboots, or recent service logs show startup/network/runtime failures.
+Production on the Pi has three moving parts:
 
-Create a private Discord status channel, create a webhook for that channel, then add this to `.env` on the Pi:
+- `discord-bot.service` runs Guangdang Bot through `npm run dev`.
+- The existing deploy cron runs `deploy.sh` every minute; it pulls `origin/main`, builds, registers commands, and restarts `discord-bot.service` only when GitHub has a new commit.
+- `scripts/rpi-discord-watchdog.sh` is the local watchdog. It checks the bot heartbeat, posts health alerts to `#bot-status`, and restarts `discord-bot.service` when the heartbeat is stale or the service is not active.
+
+The main bot writes `.health/bot-heartbeat.json` every `BOT_HEARTBEAT_INTERVAL_SECONDS` while the Node process is alive. The provisioner creates `#bot-status`, and the bot posts a startup message there after each successful login. The watchdog can post to the same channel through `DISCORD_HEALTH_WEBHOOK_URL`; if no webhook is configured, it falls back to the normal `DISCORD_TOKEN` and `DISCORD_GUILD_ID` to find or create `#bot-status`.
+
+Recommended Pi `.env` health settings:
 
 ```bash
 BOT_HEARTBEAT_PATH=.health/bot-heartbeat.json
-BOT_HEARTBEAT_MAX_AGE_SECONDS=900
-DISCORD_HEALTH_WEBHOOK_URL=https://discord.com/api/webhooks/...
+BOT_HEARTBEAT_INTERVAL_SECONDS=30
+BOT_STATUS_CHANNEL_NAME=bot-status
+BOT_SERVICE_NAME=discord-bot.service
+BOT_HEARTBEAT_MAX_AGE_SECONDS=120
+BOT_WATCHDOG_RESTART_ON_BAD=true
+BOT_WATCHDOG_RESTART_COOLDOWN_SECONDS=300
+BOT_WATCHDOG_RESTART_WINDOW_SECONDS=900
+BOT_WATCHDOG_MAX_RESTARTS_PER_WINDOW=3
+BOT_RESTART_COMMAND=
+DISCORD_HEALTH_WEBHOOK_URL=
 HEALTHCHECKS_PING_URL=https://hc-ping.com/your-uuid
 ```
 
-Install the watchdog cron job on the Pi:
+`BOT_RESTART_COMMAND` is optional. If unset, the watchdog runs `sudo -n systemctl restart discord-bot.service`. If that fails, either run the watchdog from root's cron/systemd or set `BOT_RESTART_COMMAND` to the exact command that works on the Pi.
+
+Install or confirm the watchdog cron job on the Pi:
 
 ```bash
 cd /home/financegeek/apps/discord-bot
@@ -273,15 +297,36 @@ chmod +x scripts/rpi-discord-watchdog.sh
 (crontab -l 2>/dev/null; echo '* * * * * cd /home/financegeek/apps/discord-bot && ./scripts/rpi-discord-watchdog.sh >> .health/watchdog-cron.log 2>&1') | crontab -
 ```
 
-Manual test:
+Common Pi commands:
 
 ```bash
 cd /home/financegeek/apps/discord-bot
+
+# Is the bot process active?
+systemctl status discord-bot.service --no-pager -l
+
+# Latest bot logs.
+journalctl -u discord-bot.service -n 120 --no-pager
+
+# Watch auto-deploy logs.
+tail -n 80 deploy.log
+
+# Watch watchdog logs.
+tail -n 80 .health/watchdog.log
+tail -n 80 .health/watchdog-cron.log
+
+# Check the current deployed commit.
+git rev-parse --short HEAD
+git log -1 --oneline
+
+# Manual restart.
+sudo systemctl restart discord-bot.service
+
+# Manual watchdog test.
 ./scripts/rpi-discord-watchdog.sh
-tail -n 20 .health/watchdog.log
 ```
 
-This local watchdog cannot send a Discord webhook while the whole Pi or its internet connection is fully down. It will notify after reboot/recovery and will catch bot/service crashes, stale heartbeats, and recent `journalctl` errors. For true "Pi is unreachable" alerts, set `HEALTHCHECKS_PING_URL` from a Healthchecks.io check and configure that service to post missed-ping alerts into Discord.
+What the watchdog reports as the "reason" is the concrete local evidence it sees: inactive service state, missing/stale heartbeat age, recent `journalctl` errors, and whether the restart command succeeded. It cannot send Discord alerts while the whole Pi or its internet connection is fully down. For true "Pi is unreachable" alerts, set `HEALTHCHECKS_PING_URL` from a Healthchecks.io check and configure that service to post missed-ping alerts into Discord.
 
 ## Polymarket URL Queue
 

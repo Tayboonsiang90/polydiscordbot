@@ -1,7 +1,8 @@
 import { ChannelType, type Client, type Guild, type Message, type Role, type TextChannel } from "discord.js";
-import { errorLogChannelName } from "./channels.js";
+import { botStatusChannelName as defaultBotStatusChannelName, errorLogChannelName } from "./channels.js";
 import type { BotConfig } from "./config.js";
 import type { BotDatabase } from "./database.js";
+import { findOrCreateBotStatusChannel } from "./botStatus.js";
 import { buildGroupedRoleSelectorEmbed, buildSetupEmbed, type GroupedRoleSelectorEntry } from "./embeds.js";
 import {
   getPolymarketProposalStoredTagFilter,
@@ -114,6 +115,7 @@ export class IntegrationProvisioner {
     }
 
     await retryTransientDiscordNetworkError(() => findOrCreateErrorLogChannel(guild));
+    await retryTransientDiscordNetworkError(() => findOrCreateBotStatusChannel(guild, this.config.botStatusChannelName ?? defaultBotStatusChannelName));
     await retryTransientDiscordNetworkError(() => this.provisionAlertRoleSelectors(guild));
   }
 

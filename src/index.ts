@@ -15,6 +15,7 @@ import {
 } from "discord.js";
 import { handleArbitrageSelectMenu } from "./arbitrageInteractions.js";
 import { loadConfig } from "./config.js";
+import { buildRuntimeErrorStatusFields, buildStartupStatusFields, sendBotStatusAlert } from "./botStatus.js";
 import { handleAdapterCommand, handleBotCommand, isAdapterCommand, isBotCommand } from "./commands.js";
 import { BotDatabase } from "./database.js";
 import { handleEventDetailsButton, handleEventDetailsModalSubmit } from "./eventDetails.js";
@@ -27,10 +28,9 @@ import { UmaProposalSubscriber } from "./umaProposalSubscriber.js";
 
 setDefaultResultOrder("ipv4first");
 
-const heartbeatIntervalMs = 10 * 60 * 1000;
-const heartbeatPath = process.env.BOT_HEARTBEAT_PATH ?? ".health/bot-heartbeat.json";
 const startedAt = new Date().toISOString();
 const config = loadConfig();
+const heartbeatIntervalMs = config.heartbeatIntervalSeconds * 1000;
 const database = new BotDatabase(config.databasePath);
 const client = new Client({
   intents: [
@@ -52,6 +52,13 @@ client.once(Events.ClientReady, (readyClient) => {
   try {
     console.log(`Logged in as ${readyClient.user.tag} at ${new Date().toISOString()} (commit ${runtimeGitCommit}, pid ${process.pid})`);
     writeHeartbeat(readyClient.user.tag);
+    void sendBotStatusAlert(
+      client,
+      config,
+      "ok",
+      "Guangdang Bot started",
+      buildStartupStatusFields(readyClient.user.tag, runtimeGitCommit, process.pid, startedAt)
+    ).catch((error) => console.error("Failed to send startup status alert:", error));
     provisioner = new IntegrationProvisioner(client, database, config);
     provisioner.start();
     new PollScheduler(client, database).start();
@@ -160,14 +167,17 @@ client.on(Events.Error, (error) => {
 
 process.on("unhandledRejection", (error) => {
   console.error("Unhandled promise rejection:", error);
+  sendRuntimeErrorStatus("Unhandled promise rejection", error);
 });
 
 process.on("uncaughtException", (error) => {
   console.error("Uncaught exception:", error);
+  sendRuntimeErrorStatus("Uncaught exception", error);
 });
 
 process.setUncaughtExceptionCaptureCallback((error) => {
   console.error("Captured uncaught exception:", error);
+  sendRuntimeErrorStatus("Captured uncaught exception", error);
 });
 
 process.on("SIGINT", () => {
@@ -228,7 +238,7 @@ function getRuntimeGitCommit(): string {
 }
 
 function writeHeartbeat(userTag: string): void {
-  const absolutePath = resolve(heartbeatPath);
+  const absolutePath = resolve(config.heartbeatPath);
   const tempPath = `${absolutePath}.${process.pid}.tmp`;
   const now = new Date();
   const payload = {
@@ -248,4 +258,18 @@ function writeHeartbeat(userTag: string): void {
   } catch (error) {
     console.error("Failed to write heartbeat file:", error);
   }
+}
+
+function sendRuntimeErrorStatus(title: string, error: unknown): void {
+  if (!client.isReady()) {
+    return;
+  }
+
+  void sendBotStatusAlert(
+    client,
+    config,
+    "error",
+    title,
+    buildRuntimeErrorStatusFields(error, runtimeGitCommit, process.pid)
+  ).catch((statusError) => console.error("Failed to send runtime error status alert:", statusError));
 }
