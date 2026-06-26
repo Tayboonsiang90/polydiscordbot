@@ -5,6 +5,7 @@ import type { BotDatabase } from "./database.js";
 import { AttachmentBuilder, type Attachment } from "discord.js";
 import type { Guild } from "discord.js";
 import type { Message } from "discord.js";
+import type { Role } from "discord.js";
 import {
   buildAddressLabelsEmbed,
   buildArbitrageSetupEmbed,
@@ -57,6 +58,7 @@ import type {
 } from "./integrations/types.js";
 import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from "./marketEnd.js";
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
+import { buildCategoryAlertRoleName } from "./provisioner.js";
 import { mergeSettingsJson, parseSettingsJson, stringifySettingsJson } from "./settingsJson.js";
 import {
   checkEventIntegration,
@@ -521,6 +523,24 @@ export function buildBotCommands() {
           )
       )
       .addSubcommand((subcommand) => subcommand.setName("clearroles").setDescription("Clear the market alert role selector channel"))
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("pruneroles")
+          .setDescription("Preview or delete stale alert roles no longer used by the bot")
+          .addStringOption((option) =>
+            option
+              .setName("mode")
+              .setDescription("Preview candidates first, then delete if the list looks right")
+              .setRequired(true)
+              .addChoices({ name: "preview", value: "preview" }, { name: "delete", value: "delete" })
+          )
+          .addBooleanOption((option) =>
+            option
+              .setName("include-member-roles")
+              .setDescription("Also delete stale roles assigned to members. Defaults to false.")
+              .setRequired(false)
+          )
+      )
   ];
 }
 
@@ -621,7 +641,196 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
     return;
   }
 
+  if (subcommand === "pruneroles") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageRoles)) {
+      await interaction.editReply("You need Manage Roles permission to prune alert roles.");
+      return;
+    }
+
+    const botMember = await interaction.guild.members.fetchMe();
+    if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      await interaction.editReply("I need Manage Roles permission to prune alert roles.");
+      return;
+    }
+
+    const mode = interaction.options.getString("mode", true) as "preview" | "delete";
+    const includeMemberRoles = interaction.options.getBoolean("include-member-roles") ?? false;
+    const summary = await pruneStaleAlertRoles(interaction, database, mode, includeMemberRoles);
+    await interaction.editReply(formatRolePruneSummary(summary));
+    return;
+  }
+
   await interaction.reply({ content: "Unknown bot command.", flags: MessageFlags.Ephemeral });
+}
+
+type RolePruneMode = "preview" | "delete";
+
+type RolePruneCandidate = {
+  id: string;
+  name: string;
+  memberCount: number;
+  reason: string;
+  deletable: boolean;
+  skippedReason: string | null;
+  deleted: boolean;
+};
+
+type RolePruneSummary = {
+  mode: RolePruneMode;
+  includeMemberRoles: boolean;
+  candidates: RolePruneCandidate[];
+};
+
+async function pruneStaleAlertRoles(
+  interaction: ChatInputCommandInteraction,
+  database: BotDatabase,
+  mode: RolePruneMode,
+  includeMemberRoles: boolean
+): Promise<RolePruneSummary> {
+  if (!interaction.guild) {
+    throw new Error("This command only works inside a guild.");
+  }
+
+  await interaction.guild.channels.fetch();
+  await interaction.guild.roles.fetch();
+  await interaction.guild.members.fetch().catch(() => null);
+
+  const integrations = database.listIntegrations().filter((integration) => integration.guildId === interaction.guild!.id);
+  const knownAdapterIds = new Set(listAdapters().map((adapter) => adapter.id));
+  const activeRoleIds = new Set(
+    integrations
+      .filter((integration) => knownAdapterIds.has(integration.adapterId))
+      .map((integration) => integration.alertRoleId)
+      .filter(isNonEmptyString)
+  );
+  const expectedRoleNames = buildExpectedAlertRoleNames(interaction.guild, integrations);
+  const adapterAlertRoleNames = new Set(listAdapters().map((adapter) => adapter.alertRoleName));
+  const candidates = interaction.guild.roles.cache
+    .filter((role) => isPotentialStaleAlertRole(role, activeRoleIds, expectedRoleNames))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((role) => buildRolePruneCandidate(role, adapterAlertRoleNames, includeMemberRoles));
+
+  if (mode === "delete") {
+    for (const candidate of candidates) {
+      if (!candidate.deletable) {
+        continue;
+      }
+
+      const role = interaction.guild.roles.cache.get(candidate.id);
+      if (!role) {
+        candidate.deletable = false;
+        candidate.skippedReason = "role disappeared before delete";
+        continue;
+      }
+
+      try {
+        await role.delete("Prune stale alert role no longer used by the bot");
+        candidate.deleted = true;
+      } catch (error) {
+        candidate.deletable = false;
+        candidate.skippedReason = error instanceof Error ? error.message : String(error);
+      }
+    }
+  }
+
+  return { mode, includeMemberRoles, candidates };
+}
+
+function buildExpectedAlertRoleNames(guild: Guild, integrations: Integration[]): Set<string> {
+  const names = new Set<string>();
+  for (const integration of integrations) {
+    const adapter = listAdapters().find((candidate) => candidate.id === integration.adapterId);
+    if (!adapter) {
+      continue;
+    }
+
+    if (shouldRegisterAdapterCommand(adapter)) {
+      names.add(adapter.alertRoleName);
+      continue;
+    }
+
+    names.add(buildCategoryAlertRoleName(getIntegrationCategoryName(guild, integration)));
+  }
+  return names;
+}
+
+function getIntegrationCategoryName(guild: Guild, integration: Integration): string {
+  const channel = guild.channels.cache.get(integration.channelId);
+  const parentId = channel && "parentId" in channel ? channel.parentId : null;
+  if (!parentId) {
+    return "Uncategorized";
+  }
+
+  const category = guild.channels.cache.get(parentId);
+  return category?.type === ChannelType.GuildCategory ? category.name : "Uncategorized";
+}
+
+function isPotentialStaleAlertRole(role: Role, activeRoleIds: Set<string>, expectedRoleNames: Set<string>): boolean {
+  if (role.managed || role.id === role.guild.id || activeRoleIds.has(role.id) || expectedRoleNames.has(role.name)) {
+    return false;
+  }
+  return role.name.endsWith(" Alerts");
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function buildRolePruneCandidate(
+  role: Role,
+  adapterAlertRoleNames: Set<string>,
+  includeMemberRoles: boolean
+): RolePruneCandidate {
+  const memberCount = role.members.size;
+  const skippedReason = !role.editable
+    ? "bot role is not high enough to delete this role"
+    : !includeMemberRoles && memberCount > 0
+      ? `role still has ${memberCount} member(s)`
+      : null;
+
+  return {
+    id: role.id,
+    name: role.name,
+    memberCount,
+    reason: adapterAlertRoleNames.has(role.name)
+      ? "legacy per-integration alert role"
+      : "stale alert role not referenced by current category/UMA mapping",
+    deletable: skippedReason === null,
+    skippedReason,
+    deleted: false
+  };
+}
+
+function formatRolePruneSummary(summary: RolePruneSummary): string {
+  const deletedCount = summary.candidates.filter((candidate) => candidate.deleted).length;
+  const deletableCount = summary.candidates.filter((candidate) => candidate.deletable).length;
+  const skippedCount = summary.candidates.length - deletableCount;
+  const actionLabel = summary.mode === "delete" ? "deleted" : "would delete";
+  const lines = [
+    `Stale alert role ${summary.mode}`,
+    `Candidates: ${summary.candidates.length}`,
+    summary.mode === "delete" ? `Deleted: ${deletedCount}` : `Would delete: ${deletableCount}`,
+    `Skipped: ${skippedCount}`,
+    `Include roles with members: ${summary.includeMemberRoles ? "yes" : "no"}`,
+    "",
+    ...summary.candidates.slice(0, 30).map((candidate) => {
+      const status = candidate.deleted ? "deleted" : candidate.deletable ? actionLabel : "skipped";
+      const skip = candidate.skippedReason ? `; ${candidate.skippedReason}` : "";
+      return `- ${status}: ${candidate.name} (${candidate.memberCount} member(s)) - ${candidate.reason}${skip}`;
+    })
+  ];
+
+  if (summary.candidates.length > 30) {
+    lines.push(`...and ${summary.candidates.length - 30} more role(s).`);
+  }
+
+  if (summary.mode === "preview" && summary.candidates.some((candidate) => candidate.deletable)) {
+    lines.push("", "If this list looks right, run `/bot pruneroles mode:delete`.");
+  }
+
+  return lines.join("\n").slice(0, 1_950);
 }
 
 export async function handleAdapterCommand(

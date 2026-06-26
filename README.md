@@ -229,6 +229,8 @@ Most integrations use the same generic command inside their own channel. Run `/m
 - `/bot clear`
 - `/bot clearerrors keep-latest:true`
 - `/bot clearroles`
+- `/bot pruneroles mode:preview`
+- `/bot pruneroles mode:delete`
 
 Month/year integrations also support:
 
@@ -252,6 +254,7 @@ Use `/monitor archive` when a market is done but the adapter should remain avail
 Use `/monitor updates` in each channel to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
 Check-failure errors are posted to `#errorlogs` when that channel exists. The bot keeps one editable `Check failed` post per integration, updates repeated failures there, and falls back to the integration channel only if `#errorlogs` is unavailable. Use `/bot clearerrors` to scan integration channels plus `#errorlogs` and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
+Use `/bot pruneroles mode:preview` to list stale Discord roles ending in `Alerts` that are no longer referenced by the current category-role or UMA-role mapping. Use `/bot pruneroles mode:delete` only after previewing; by default it skips stale roles that still have members unless `include-member-roles:true` is provided.
 Arbitrage replies are alert-only. `/monitor setup` in `#arb` asks for a shared outcome and YES/NO/BOTH side through dropdowns, then alerts only when the best route is positive after configured platform fees and the minimum edge. Alerts include the buy/sell platform, side, executable amount, fees, and expected profit. Predict and Opinion checks require their API keys in `.env`.
 MarineTraffic alpha for `#hormuzships` and `#babmandeb` is optional. The public MarineTraffic map blocks bot fetches; use official MarineTraffic/Kpler export URLs in `MARINETRAFFIC_HORMUZ_ALPHA_URL` and `MARINETRAFFIC_BAB_ALPHA_URL` if you have API/export access. If unset, PortWatch output is unchanged.
 Bonbast replies use Discord embeds with compact fields, colored status accents, and clickable links.
@@ -387,6 +390,8 @@ The Free App Store and Paid App Store integrations run a separate daily snapshot
 The bot creates `#market-alert-roles` and posts grouped reaction selectors for market integration roles. It creates `#uma-alert-roles` for UMA clarification, proposal, and dispute alert roles. React to an alert emoji to receive that alert role; remove your reaction to opt out. Each grouped selector uses up to 20 unique emoji, and the provisioner preserves existing selector-message assignments, user reactions, and stored fallback emoji while adding missing bot reactions. Stale selector messages with user reactions are left in place instead of being deleted automatically.
 
 The Current Integrations table is the source of truth for each adapter's role name and emoji. Normal value-change alerts, daily snapshots, and market-end reminders mention the adapter alert role. Event-post integrations can be quieter: Trump Truth posts every new post but only mentions the role when a strike is detected.
+
+Old per-integration alert roles from before the category-role model are not reused. `/bot pruneroles mode:preview` shows stale `* Alerts` roles that are safe candidates; `/bot pruneroles mode:delete` deletes only editable candidates and skips roles with members unless explicitly told otherwise.
 
 ## Integration Pattern
 

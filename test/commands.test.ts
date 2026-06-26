@@ -81,7 +81,8 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "summarize" }),
         expect.objectContaining({ name: "clear" }),
         expect.objectContaining({ name: "clearerrors" }),
-        expect.objectContaining({ name: "clearroles" })
+        expect.objectContaining({ name: "clearroles" }),
+        expect.objectContaining({ name: "pruneroles" })
       ])
     });
   });
