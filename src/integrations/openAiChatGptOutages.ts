@@ -7,6 +7,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://status.openai.com/";
 const incidentsApiUrl = "https://status.openai.com/api/v2/incidents.json";
+const historyUrl = "https://status.openai.com/history";
 const defaultPolymarketUrl = "https://polymarket.com/event/of-chatgpt-outage-days-in-june-2026";
 const defaultYear = 2026;
 const defaultMonth = 6;
@@ -94,11 +95,14 @@ export const openAiChatGptOutagesAdapter: WebsiteAdapter = {
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const observedAt = new Date();
     const period = getOpenAiChatGptOutagePeriod(integration);
-    const [incidentsResponse, statusPageResponse] = await Promise.all([
+    const [incidentsResponse, statusPageResponse, historyPageResponse] = await Promise.all([
       fetchWithTimeout(incidentsApiUrl, {
         headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
       }),
       fetchWithTimeout(sourceUrl, {
+        headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+      }),
+      fetchWithTimeout(historyUrl, {
         headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
       })
     ]);
@@ -109,12 +113,20 @@ export const openAiChatGptOutagesAdapter: WebsiteAdapter = {
     if (!statusPageResponse.ok) {
       throw new Error(`OpenAI Status page returned HTTP ${statusPageResponse.status}`);
     }
+    if (!historyPageResponse.ok) {
+      throw new Error(`OpenAI Status history page returned HTTP ${historyPageResponse.status}`);
+    }
 
     const chatGptComponents = extractOpenAiChatGptComponentsFromStatusHtml(await statusPageResponse.text());
     const incidentsPayload = (await incidentsResponse.json()) as OpenAiStatusIncidentsResponse;
-    const detailHtmlByIncidentId = await fetchOpenAiIncidentDetailHtml(incidentsPayload.incidents ?? [], period);
+    const historyHtml = await historyPageResponse.text();
+    const incidents = mergeOpenAiStatusIncidents(
+      incidentsPayload.incidents ?? [],
+      extractOpenAiStatusIncidentsFromHistoryHtml(historyHtml)
+    );
+    const detailHtmlByIncidentId = await fetchOpenAiIncidentDetailHtml(incidents, period, historyHtml);
     const outageInput = {
-      incidents: incidentsPayload.incidents ?? [],
+      incidents,
       detailHtmlByIncidentId,
       chatGptComponents,
       period
@@ -174,6 +186,30 @@ export function extractOpenAiIncidentComponentImpacts(html: string): OpenAiIncid
   return [...new Map(impacts.map((impact) => [`${impact.incidentId}:${impact.componentId}:${impact.startAt}:${impact.endAt}:${impact.status}`, impact])).values()];
 }
 
+export function extractOpenAiStatusIncidentsFromHistoryHtml(html: string): OpenAiStatusIncident[] {
+  const incidents = new Map<string, OpenAiStatusIncident>();
+  const incidentRegex =
+    /\\"component_impacts\\":\[[\s\S]*?\],\\"id\\":\\"([^\\"]+)\\",\\"name\\":\\"([^\\"]+)\\",\\"published_at\\":\\"([^\\"]+)\\",\\"status\\":\\"([^\\"]+)\\"[\s\S]*?\\"updates\\":\[(.*?)\],\\"write_up_/g;
+
+  for (const match of html.matchAll(incidentRegex)) {
+    const [segment, id, name, publishedAt, status, updates] = match;
+    if (!id || incidents.has(id)) {
+      continue;
+    }
+
+    const resolvedAt = getResolvedAtFromOpenAiIncidentUpdates(updates) ?? getResolvedAtFromOpenAiIncidentSegment(segment);
+    incidents.set(id, {
+      id,
+      name: unescapeFlightString(name).trim(),
+      status,
+      created_at: publishedAt,
+      resolved_at: status === "resolved" ? resolvedAt : null
+    });
+  }
+
+  return [...incidents.values()];
+}
+
 export function getOpenAiChatGptQualifyingOutages(input: {
   incidents: OpenAiStatusIncident[];
   detailHtmlByIncidentId: Map<string, string>;
@@ -192,9 +228,9 @@ export function getOpenAiChatGptQualifyingOutages(input: {
         return [];
       }
 
-      const impacts = extractOpenAiIncidentComponentImpacts(html).filter(
-        (impact) => chatGptComponentById.has(impact.componentId) && qualifyingComponentStatuses.has(impact.status)
-      );
+      const impacts = extractOpenAiIncidentComponentImpacts(html).filter((impact) => {
+        return impact.incidentId === incident.id && chatGptComponentById.has(impact.componentId) && qualifyingComponentStatuses.has(impact.status);
+      });
       const outageDatesEt = [...new Set(impacts.flatMap((impact) => getOutageDatesEt(impact.startAt, impact.endAt, input.period)))].sort();
       if (!outageDatesEt.length) {
         return [];
@@ -233,7 +269,9 @@ export function getOpenAiReviewOutages(input: {
         return [];
       }
 
-      const impacts = extractOpenAiIncidentComponentImpacts(html).filter((impact) => qualifyingComponentStatuses.has(impact.status));
+      const impacts = extractOpenAiIncidentComponentImpacts(html).filter((impact) => {
+        return impact.incidentId === incident.id && qualifyingComponentStatuses.has(impact.status);
+      });
       const outageDatesEt = [...new Set(impacts.flatMap((impact) => getOutageDatesEt(impact.startAt, impact.endAt, input.period)))].sort();
       if (!outageDatesEt.length) {
         return [];
@@ -332,12 +370,18 @@ export function getOpenAiChatGptOutagePeriod(integration?: Integration, now = ne
 
 async function fetchOpenAiIncidentDetailHtml(
   incidents: OpenAiStatusIncident[],
-  period: OpenAiOutagePeriod
+  period: OpenAiOutagePeriod,
+  historyHtml?: string
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   const candidates = incidents.filter((incident) => incident.id && mightOverlapPeriod(incident, period));
   await Promise.all(
     candidates.map(async (incident) => {
+      if (historyHtml?.includes(`\\"status_page_incident_id\\":\\"${incident.id}\\"`)) {
+        result.set(incident.id!, historyHtml);
+        return;
+      }
+
       const response = await fetchWithTimeout(buildIncidentUrl(incident.id!), {
         headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
       });
@@ -347,6 +391,41 @@ async function fetchOpenAiIncidentDetailHtml(
     })
   );
   return result;
+}
+
+function mergeOpenAiStatusIncidents(...incidentLists: OpenAiStatusIncident[][]): OpenAiStatusIncident[] {
+  const incidents = new Map<string, OpenAiStatusIncident>();
+  for (const incident of incidentLists.flat()) {
+    if (!incident.id) {
+      continue;
+    }
+
+    const existing = incidents.get(incident.id);
+    incidents.set(incident.id, {
+      ...incident,
+      ...existing,
+      ...incident,
+      name: incident.name ?? existing?.name,
+      status: incident.status ?? existing?.status,
+      created_at: incident.created_at ?? existing?.created_at,
+      resolved_at: incident.resolved_at ?? existing?.resolved_at
+    });
+  }
+
+  return [...incidents.values()];
+}
+
+function getResolvedAtFromOpenAiIncidentUpdates(updates: string): string | null {
+  const resolvedUpdates = [...updates.matchAll(/\\"published_at\\":\\"([^\\"]+)\\",\\"to_status\\":\\"resolved\\"/g)];
+  return resolvedUpdates.at(-1)?.[1] ?? null;
+}
+
+function getResolvedAtFromOpenAiIncidentSegment(segment: string): string | null {
+  const summaries = [...segment.matchAll(/\\"end_at\\":\\"([^\\"]+)\\",\\"start_at\\":\\"[^\\"]+\\",\\"worst_component_status\\":\\"[^\\"]+\\"/g)];
+  return summaries
+    .map((match) => match[1])
+    .filter((value) => value !== "$undefined")
+    .at(-1) ?? null;
 }
 
 function mightOverlapPeriod(incident: OpenAiStatusIncident, period: OpenAiOutagePeriod): boolean {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractOpenAiChatGptComponentsFromStatusHtml,
   extractOpenAiIncidentComponentImpacts,
+  extractOpenAiStatusIncidentsFromHistoryHtml,
   filterNewOpenAiDailyReportDay,
   formatOpenAiChatGptOutageValue,
   getOpenAiChatGptOutagePeriod,
@@ -34,6 +35,13 @@ const apiOnlyPartialOutageHtml = String.raw`
   ]
 `;
 
+const historyHtmlWithOlderChatGptIncident = String.raw`
+  \"component_impacts\":[
+  {\"component_id\":\"chat-conv\",\"end_at\":\"2026-06-01T17:28:52.577Z\",\"id\":\"impact-old\",\"start_at\":\"2026-06-01T16:26:44.837Z\",\"status\":\"partial_outage\",\"status_page_incident_id\":\"01KT204M76EYZYJX7WYG1B2QPH\"},
+  {\"component_id\":\"chat-conv\",\"end_at\":\"2026-06-02T17:28:52.577Z\",\"id\":\"impact-other\",\"start_at\":\"2026-06-02T16:26:44.837Z\",\"status\":\"partial_outage\",\"status_page_incident_id\":\"incident-other\"}
+  ],\"id\":\"01KT204M76EYZYJX7WYG1B2QPH\",\"name\":\"Decreased ChatGPT availability for Free users\",\"published_at\":\"2026-06-01T16:26:44.837Z\",\"status\":\"resolved\",\"status_page_id\":\"status-page\",\"status_summaries\":[{\"end_at\":\"2026-06-01T17:28:52.577Z\",\"start_at\":\"2026-06-01T16:26:44.837Z\",\"worst_component_status\":\"partial_outage\"}],\"type\":\"incident\",\"updates\":[{\"published_at\":\"2026-06-01T16:26:44.837Z\",\"to_status\":\"identified\"},{\"published_at\":\"2026-06-01T17:28:52.577Z\",\"to_status\":\"resolved\"}],\"write_up_contents\":\"$undefined\"
+`;
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -59,6 +67,18 @@ describe("OpenAI ChatGPT outage adapter", () => {
         }
       ])
     );
+  });
+
+  it("parses older incidents from the OpenAI status history page", () => {
+    expect(extractOpenAiStatusIncidentsFromHistoryHtml(historyHtmlWithOlderChatGptIncident)).toEqual([
+      {
+        id: "01KT204M76EYZYJX7WYG1B2QPH",
+        name: "Decreased ChatGPT availability for Free users",
+        status: "resolved",
+        created_at: "2026-06-01T16:26:44.837Z",
+        resolved_at: "2026-06-01T17:28:52.577Z"
+      }
+    ]);
   });
 
   it("counts only resolved ChatGPT partial/full outage days in the ET month", () => {
@@ -97,6 +117,26 @@ describe("OpenAI ChatGPT outage adapter", () => {
         componentNames: ["Conversations"],
         componentStatuses: ["partial_outage"],
         outageDatesEt: ["2026-06-02", "2026-06-03"]
+      })
+    ]);
+  });
+
+  it("counts qualifying incidents found only on the OpenAI status history page", () => {
+    const period = getOpenAiChatGptOutagePeriod({ settingsJson: JSON.stringify({ year: 2026, month: 6 }) } as Integration);
+    const incidents = extractOpenAiStatusIncidentsFromHistoryHtml(historyHtmlWithOlderChatGptIncident);
+    const outages = getOpenAiChatGptQualifyingOutages({
+      incidents,
+      detailHtmlByIncidentId: new Map([["01KT204M76EYZYJX7WYG1B2QPH", historyHtmlWithOlderChatGptIncident]]),
+      chatGptComponents: extractOpenAiChatGptComponentsFromStatusHtml(statusHtml),
+      period
+    });
+
+    expect(outages).toEqual([
+      expect.objectContaining({
+        id: "01KT204M76EYZYJX7WYG1B2QPH",
+        componentNames: ["Conversations"],
+        componentStatuses: ["partial_outage"],
+        outageDatesEt: ["2026-06-01"]
       })
     ]);
   });
