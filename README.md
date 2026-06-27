@@ -45,7 +45,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `discord-critical-incidents` | `/monitor` | `#discord-critical` | `Discord Critical Alerts` | `🔴` | Monitors Discord's official incidents API for Critical/red incidents and auto-discovers monthly by-date markets. |
 | `ecdsa-fail` | `/monitor` | `#ecdsafail` | `ECDSA Fail Alerts` | `🔐` | Monitors ECDSA.fail benchmark API for the percent ahead of Google's classified circuit. |
 | `eia-crude-spr` | `/monitor` | `#eia-crude-spr` | `EIA Crude SPR Alerts` | `⛽` | Monitors EIA weekly U.S. Ending Stocks of Crude Oil in the Strategic Petroleum Reserve. |
-| `ethereum-gas-monthly-average` | `/monitor` | `#ethgasmonthly` | `ETH Gas Monthly Alerts` | `⛽` | Monitors Dune Ethereum Gas Prices query 1887488 for the latest finalized monthly `mean_gas` value, using Etherscan public CSV as a clearly labeled no-key fallback. |
+| `ethereum-gas-monthly-average` | `/monitor` | `#ethgasmonthly` | `ETH Gas Monthly Alerts` | `⛽` | Monitors Dune Ethereum Gas Prices query 1887488 for the latest finalized monthly `mean_gas` value. |
 | `elon-x-strikes` | `/monitor` | `#elonx` | `Elon X Alerts` | `🚀` | Monitors @elonmusk posts through a free XCancel/Nitter-style public page reader and parsed weekly Polymarket strike terms. |
 | `fdic-failed-banks` | `/monitor` | `#fdic-failed-banks` | `FDIC Failed Bank Alerts` | `🏦` | Monitors the latest row in the FDIC Failed Bank List for new bank failures. |
 | `fred-egg-price` | `/monitor` | `#eggs` | `FRED Egg Price Alerts` | `🥚` | Monitors monthly FRED Eggs, Grade A, Large cost per dozen, auto-discovers monthly egg-price markets, and uses release-date polling. |
@@ -188,7 +188,7 @@ No archived integrations currently.
    MARINETRAFFIC_BAB_ALPHA_URL=...
    ```
 
-   `DUNE_API_KEY` is required for `#basedrevenue`. `#ethgasmonthly` prefers Dune when the key is present but falls back to Etherscan's public Average Gas Price CSV when the key is absent. `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback.
+   `DUNE_API_KEY` is required for `#basedrevenue` and `#ethgasmonthly`. `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback.
 
 3. Register slash commands for your test server:
 

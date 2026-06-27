@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractEthereumGasMonthlySnapshot,
-  extractEthereumGasMonthlySnapshotFromEtherscanCsv,
   extractEthereumGasMonthlyValue,
-  extractEthereumGasMonthlyValueFromEtherscanCsv,
   ethereumGasMonthlyAdapter
 } from "../src/integrations/ethereumGasMonthly.js";
 
@@ -16,13 +14,6 @@ const sampleDuneResponse = {
     ]
   }
 };
-
-const sampleEtherscanCsv = `"Date(UTC)","UnixTimeStamp","Value (Wei)"
-"4/29/2026","1777420800","1000000000"
-"4/30/2026","1777507200","3000000000"
-"5/1/2026","1777593600","10000000000"
-"5/2/2026","1777680000","20000000000"
-"6/1/2026","1780272000","5000000000"`;
 
 describe("Ethereum monthly gas adapter", () => {
   afterEach(() => {
@@ -50,58 +41,42 @@ describe("Ethereum monthly gas adapter", () => {
     expect(value).toContain("Resolution: https://dune.com/nibty/eth-gas-prices");
   });
 
-  it("uses Etherscan public CSV as the no-key finalized monthly fallback", () => {
-    expect(extractEthereumGasMonthlySnapshotFromEtherscanCsv(sampleEtherscanCsv)).toEqual({
-      finalized: { month: "2026-05", meanGasGwei: 15 },
-      latestDashboardPoint: { month: "2026-06", meanGasGwei: 5 }
-    });
+  it("requires DUNE_API_KEY and does not use a fallback source", async () => {
+    vi.stubEnv("DUNE_API_KEY", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
 
-    const value = extractEthereumGasMonthlyValueFromEtherscanCsv(sampleEtherscanCsv);
-    expect(value).toContain("Finalized month: 2026-05");
-    expect(value).toContain("Finalized mean_gas: 15 Gwei");
-    expect(value).toContain("Data source: Etherscan public CSV fallback");
-    expect(value).toContain("Calculation note: Fallback calculation averages Etherscan daily average gas-price rows by month");
-    expect(value).toContain("Thresholds hit: 10 Gwei, 15 Gwei");
+    await expect(ethereumGasMonthlyAdapter.fetchCurrentValue()).rejects.toThrow("Missing DUNE_API_KEY");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("fetches Etherscan instead of Dune when DUNE_API_KEY is absent", async () => {
-    vi.stubEnv("DUNE_API_KEY", "");
+  it("fetches Dune directly when DUNE_API_KEY is configured", async () => {
+    vi.stubEnv("DUNE_API_KEY", "test-key");
     const fetchMock = vi.fn(async (url: string | URL | Request) => {
-      expect(url.toString()).toBe("https://etherscan.io/chart/gasprice?output=csv");
+      expect(url.toString()).toBe("https://api.dune.com/api/v1/query/1887488/results");
       return {
         ok: true,
-        text: async () => sampleEtherscanCsv
+        json: async () => sampleDuneResponse
       };
     });
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await ethereumGasMonthlyAdapter.fetchCurrentValue();
 
-    expect(result.value).toContain("Data source: Etherscan public CSV fallback");
+    expect(result.value).toContain("Data source: Dune API");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to Etherscan when a configured Dune key fails", async () => {
+  it("throws Dune errors instead of falling back", async () => {
     vi.stubEnv("DUNE_API_KEY", "bad-key");
     const fetchMock = vi.fn(async (url: string | URL | Request) => {
-      if (url.toString() === "https://api.dune.com/api/v1/query/1887488/results") {
-        return { ok: false, status: 401 };
-      }
-      if (url.toString() === "https://etherscan.io/chart/gasprice?output=csv") {
-        return {
-          ok: true,
-          text: async () => sampleEtherscanCsv
-        };
-      }
-      throw new Error(`Unexpected fetch: ${url.toString()}`);
+      expect(url.toString()).toBe("https://api.dune.com/api/v1/query/1887488/results");
+      return { ok: false, status: 401 };
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await ethereumGasMonthlyAdapter.fetchCurrentValue();
-
-    expect(result.value).toContain("Data source: Etherscan public CSV fallback");
-    expect(result.value).toContain("Dune API failed (Dune returned HTTP 401)");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(ethereumGasMonthlyAdapter.fetchCurrentValue()).rejects.toThrow("Dune returned HTTP 401");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("throws when the Dune response has no finalized monthly row", () => {
