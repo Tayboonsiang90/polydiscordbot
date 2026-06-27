@@ -24,6 +24,7 @@ import { crossPlatformArbitrageAdapter } from "./crossPlatformArbitrage.js";
 import { discordCriticalAdapter } from "./discordCritical.js";
 import { ecdsaFailAdapter } from "./ecdsaFail.js";
 import { eiaCrudeSprAdapter } from "./eiaCrudeSpr.js";
+import { ethereumGasMonthlyAdapter } from "./ethereumGasMonthly.js";
 import { elonXAdapter } from "./elonX.js";
 import { fdicFailedBanksAdapter } from "./fdicFailedBanks.js";
 import { fredEggPriceAdapter } from "./fredEggPrice.js";
@@ -130,6 +131,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [discordCriticalAdapter.id, discordCriticalAdapter],
   [ecdsaFailAdapter.id, ecdsaFailAdapter],
   [eiaCrudeSprAdapter.id, eiaCrudeSprAdapter],
+  [ethereumGasMonthlyAdapter.id, ethereumGasMonthlyAdapter],
   [elonXAdapter.id, elonXAdapter],
   [fdicFailedBanksAdapter.id, fdicFailedBanksAdapter],
   [fredEggPriceAdapter.id, fredEggPriceAdapter],

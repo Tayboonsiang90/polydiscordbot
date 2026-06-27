@@ -30,6 +30,7 @@ const expectedCommandIds = [
   ["discord", "discord-critical-incidents"],
   ["ecdsafail", "ecdsa-fail"],
   ["eia", "eia-crude-spr"],
+  ["ethgasmonthly", "ethereum-gas-monthly-average"],
   ["elonx", "elon-x-strikes"],
   ["fdic", "fdic-failed-banks"],
   ["eggs", "fred-egg-price"],
@@ -164,6 +165,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("resolvable").fetchEventUpdates).toBeDefined();
     expect(getAdapterByCommandName("resolvable").getPollIntervalMinutes?.({ settingsJson: null } as never)).toBe(1);
     expect(getAdapterByCommandName("eia").getPollIntervalMinutes?.({} as never, new Date("2026-05-12T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("ethgasmonthly").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("jobsadded").getPollIntervalMinutes?.({ polymarketUrl: "https://polymarket.com/event/how-many-jobs-added-in-may-945" } as never, new Date("2026-06-04T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("durablegoods").getPollIntervalMinutes?.({} as never, new Date("2026-06-25T13:00:00.000Z"))).toBe(1);
