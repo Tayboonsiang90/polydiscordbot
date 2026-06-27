@@ -261,6 +261,20 @@ export function getSilverTrumpApprovalPollIntervalReason(integration: Integratio
 }
 
 export function silverTrumpApprovalShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+  if (currentValue.includes("Metric: Silver Bulletin Trump approval Up/Down")) {
+    const currentResult = extractUpDownResult(currentValue);
+    if (!currentResult || currentResult === "Pending") {
+      return false;
+    }
+
+    const previousResult = extractUpDownResult(previousValue);
+    const currentReferenceDates = extractUpDownReferenceDatesLine(currentValue);
+    const previousReferenceDates = extractUpDownReferenceDatesLine(previousValue);
+    const currentFinalized = currentValue.includes("Status: finalized");
+    const previousFinalized = previousValue?.includes("Status: finalized") ?? false;
+    return currentResult !== previousResult || currentReferenceDates !== previousReferenceDates || (currentFinalized && !previousFinalized);
+  }
+
   const currentFinalized = currentValue.includes("Target status: finalized") || currentValue.includes("Status: finalized");
   const previousFinalized = previousValue?.includes("Target status: finalized") || previousValue?.includes("Status: finalized");
   return currentFinalized && !previousFinalized;
@@ -898,6 +912,15 @@ function formatNullablePercent(value: number | null): string {
 
 function extractRawApproval(value: string): string | null {
   return value.match(/^Result:\s*(.+)$/m)?.[1] ?? value.match(/^Approval:\s*(.+)$/m)?.[1] ?? null;
+}
+
+function extractUpDownResult(value: string | null): string | null {
+  const result = value?.match(/^Result:\s*(.+)$/m)?.[1]?.trim() ?? null;
+  return result && result !== "Pending" ? result.replace(/^(Tentative|Final)\s+/, "") : result;
+}
+
+function extractUpDownReferenceDatesLine(value: string | null): string | null {
+  return value?.match(/^Reference dates:\s*(.+)$/m)?.[1]?.trim() ?? null;
 }
 
 function getEasternDate(date: Date): string {

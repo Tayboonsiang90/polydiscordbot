@@ -69,6 +69,58 @@ describe("Silver Bulletin Trump approval adapter", () => {
     expect(silverTrumpApprovalShouldAlertOnChange(waiting, waiting)).toBe(false);
   });
 
+  it("alerts when an Up/Down market first has a tentative result", () => {
+    const pending = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-06-19 vs 2026-06-26",
+      "Status: pending; waiting for 2026-06-26 data",
+      "Result: Pending"
+    ].join("\n");
+    const tentative = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-06-19 vs 2026-06-26",
+      "Status: tentative; waiting for a data point after 2026-06-26 to finalize",
+      "Result: Tentative Up"
+    ].join("\n");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(pending, tentative)).toBe(true);
+    expect(silverTrumpApprovalShouldAlertOnChange(tentative, tentative)).toBe(false);
+  });
+
+  it("alerts when an Up/Down tentative result finalizes", () => {
+    const tentative = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-06-19 vs 2026-06-26",
+      "Status: tentative; waiting for a data point after 2026-06-26 to finalize",
+      "Result: Tentative Up"
+    ].join("\n");
+    const finalized = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-06-19 vs 2026-06-26",
+      "Status: finalized",
+      "Result: Final Up"
+    ].join("\n");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(tentative, finalized)).toBe(true);
+  });
+
+  it("alerts for a new Up/Down reference window even when the direction matches", () => {
+    const previousFinal = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-06-12 vs 2026-06-19",
+      "Status: finalized",
+      "Result: Final Up"
+    ].join("\n");
+    const currentTentative = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-06-19 vs 2026-06-26",
+      "Status: tentative; waiting for a data point after 2026-06-26 to finalize",
+      "Result: Tentative Up"
+    ].join("\n");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(previousFinal, currentTentative)).toBe(true);
+  });
+
   it("extracts Up/Down reference dates from Polymarket rules", () => {
     expect(
       extractSilverApprovalUpDownReferenceDates(
