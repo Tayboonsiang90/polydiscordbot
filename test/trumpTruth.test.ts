@@ -654,7 +654,7 @@ describe("Trump Truth archive feed", () => {
     ]);
   });
 
-  it("matches strike terms from archive image descriptions", () => {
+  it("does not count archive image descriptions as definitive strikes", () => {
     const post = normalizeTrumpTruthArchiveItem(
       {
         id: "123",
@@ -671,10 +671,11 @@ describe("Trump Truth archive feed", () => {
     expect(post.text).toBe("");
     expect(post.imageUrls).toEqual(["https://example.com/image.jpg"]);
     expect(post.imageText).toBe("A screenshot that mentions King");
-    expect(post.matchedTerms).toEqual(["King"]);
+    expect(post.qualifyingText).toBe("");
+    expect(post.matchedTerms).toEqual([]);
   });
 
-  it("matches strike terms from archive attachment detail text", () => {
+  it("does not count archive attachment detail text as definitive strikes", () => {
     const post = normalizeTrumpTruthArchiveItem(
       {
         id: "123",
@@ -689,7 +690,27 @@ describe("Trump Truth archive feed", () => {
     );
 
     expect(post.imageText).toBe("Screenshot text says FBI");
-    expect(post.matchedTerms).toEqual(["FBI"]);
+    expect(post.qualifyingText).toBe("");
+    expect(post.matchedTerms).toEqual([]);
+  });
+
+  it("does not count archive image descriptions about colors as text strikes", () => {
+    const post = normalizeTrumpTruthArchiveItem(
+      {
+        id: "123",
+        archiveUrl: "https://www.trumpstruth.org/statuses/1",
+        originalUrl: "https://truthsocial.com/@realDonaldTrump/123",
+        originalId: "123",
+        postedAt: new Date("2026-06-26T20:13:47.000Z"),
+        html: '<div class="status-details-attachment__text">Dedication ceremony with red, white, and blue balloons.</div>',
+        title: "Post"
+      },
+      ["White"]
+    );
+
+    expect(post.imageText).toContain("red, white, and blue balloons");
+    expect(post.qualifyingText).toBe("");
+    expect(post.matchedTerms).toEqual([]);
   });
 
   it("matches strike terms from OCR text when archive image text misses", async () => {
@@ -725,7 +746,7 @@ describe("Trump Truth archive feed", () => {
     expect(post.matchedTerms).toEqual(["Jimmy", "Kimmel"]);
   });
 
-  it("still OCRs image posts after archive text already matched", async () => {
+  it("still OCRs image posts when archive image text contains a strike term", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -753,7 +774,10 @@ describe("Trump Truth archive feed", () => {
       ["King", "Kimmel"]
     );
 
-    expect(post.matchedTerms).toEqual(["King", "Kimmel"]);
+    expect(post.imageText).toContain("King screenshot");
+    expect(post.imageText).toContain("Kimmel screenshot");
+    expect(post.qualifyingText).toBe("Kimmel screenshot");
+    expect(post.matchedTerms).toEqual(["Kimmel"]);
   });
 
   it("does not run OCR or count image text for ReTruths", async () => {

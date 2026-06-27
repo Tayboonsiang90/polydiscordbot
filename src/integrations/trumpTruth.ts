@@ -576,7 +576,7 @@ export function normalizeTrumpTruthArchiveItem(item: TrumpTruthArchiveItem, stri
   const imageUrls = extractImageUrls(item.html);
   const imageText = extractImageText(item.html);
   const isReTruth = item.isReTruth || isArchiveReTruth(item.title, item.html);
-  const qualifyingText = isReTruth ? "" : [text, imageText].filter(Boolean).join("\n");
+  const qualifyingText = isReTruth ? "" : text;
   const matchedTerms = isReTruth ? [] : findMatchedStrikeTerms(qualifyingText, strikeTerms);
 
   return {
@@ -608,7 +608,7 @@ export async function enrichTrumpTruthPostWithOcr(post: EventMonitorPost, strike
   }
 
   const imageText = [post.imageText, ocrText].filter(Boolean).join("\n");
-  const qualifyingText = [post.text, imageText].filter(Boolean).join("\n");
+  const qualifyingText = [post.text, ocrText].filter(Boolean).join("\n");
   return {
     ...post,
     imageText,
@@ -1022,7 +1022,7 @@ function extractImageText(html: string): string {
 
 function extractPostText(html: string): string {
   const $ = cheerio.load(html);
-  $(".status__attachments, .status-details-attachment, img, button").remove();
+  $(".status__attachments, .status-details-attachment, .status-details-attachment__text, img, button").remove();
   return $.text().replace(/\s+/g, " ").trim();
 }
 
