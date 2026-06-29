@@ -113,6 +113,10 @@ export async function getStoredOrFetchPolymarketEndDate(
     };
   }
 
+  if (!getPolymarketSlugCandidates(integration.polymarketUrl).length) {
+    return { endAt: null, missingWarningDue: false };
+  }
+
   if (isMarketEndLookupBackedOff(integration.polymarketUrl, now)) {
     return { endAt: null, missingWarningDue: false };
   }

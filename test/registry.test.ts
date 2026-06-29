@@ -66,6 +66,7 @@ const expectedCommandIds = [
   ["nychomevalue", "parcl-nyc-home-value"],
   ["pboc", "pboc-rate-change"],
   ["powerball", "powerball-jackpot"],
+  ["pumpgo", "pump-fun-go"],
   ["mentions", "polymarket-mention-markets"],
   ["umaclarifications", "polymarket-clarifications"],
   ["umadispute", "polymarket-disputes"],
@@ -172,6 +173,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("umichsentiment").getPollIntervalMinutes?.({} as never, new Date("2026-06-26T14:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("trumpschedule").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T13:00:00.000Z"))).toBe(15);
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
+    expect(getAdapterByCommandName("pumpgo").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("pumpgo").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("arb").prepareArbitrageSetup).toBeDefined();

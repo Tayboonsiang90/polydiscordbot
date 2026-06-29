@@ -178,6 +178,23 @@ describe("Polymarket market end reminders", () => {
     database.close();
   });
 
+  it("ignores non-Polymarket URLs for Gamma market-end warnings", async () => {
+    const database = createTestDatabase();
+    const storedIntegration = createIntegration(
+      database,
+      "https://predict.fun/market/will-pump-fun-disable-go-before-july-2026"
+    );
+    vi.stubGlobal("fetch", vi.fn());
+
+    await expect(getStoredOrFetchPolymarketEndDate(database, storedIntegration)).resolves.toEqual({
+      endAt: null,
+      missingWarningDue: false
+    });
+    expect(fetch).not.toHaveBeenCalled();
+
+    database.close();
+  });
+
   it("uses queued ET market end windows without calling Gamma", async () => {
     const database = createTestDatabase();
     const polymarketUrl = "https://polymarket.com/event/number-of-tsa-passengers-may-11-may-17";
