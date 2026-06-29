@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  extractNceiTornadoChartObservations,
   extractNceiReleaseScheduleText,
   extractNceiTornadoValue,
   parseTornadoMarketPeriod,
@@ -18,6 +19,16 @@ const integration = {
   polymarketUrl: "https://polymarket.com/event/how-many-tornadoes-in-the-us-in-may"
 } as Integration;
 
+function buildChartConfig(finalValues: Array<number | null>, preliminaryValues: Array<number | null>): string {
+  return `
+    "series": [
+      { "text": "Final Count", "values": ${JSON.stringify(finalValues)} },
+      { "text": "Preliminary Count", "values": ${JSON.stringify(preliminaryValues)} },
+      { "text": "Fatalities", "values": [] }
+    ]
+  `;
+}
+
 describe("NCEI tornadoes adapter", () => {
   it("parses the month from monthly Polymarket tornado slugs", () => {
     expect(
@@ -34,15 +45,40 @@ describe("NCEI tornadoes adapter", () => {
   });
 
   it("formats a preliminary monthly tornado count", () => {
+    const finalValues = Array<number | null>(77).fill(null);
+    const preliminaryValues = Array<number | null>(77).fill(null);
+    finalValues[76] = 0;
+    preliminaryValues[76] = 168;
     const value = extractNceiTornadoValue(
-      { tornadoes: { "202604": "304*", "202504": 313 } },
-      { year: 2026, month: 4, dataKey: "202604", label: "2026-04" },
-      "April U.S. Release: Fri, 8 May 2026, 11:00 AM EDT"
+      { description: { preliminary: "*denotes preliminary data" }, tornadoes: { "202605": "168*", "202505": 278 } },
+      { year: 2026, month: 5, dataKey: "202605", label: "2026-05" },
+      "May U.S. Release: Mon, 8 Jun 2026, 11:00 AM EDT",
+      buildChartConfig(finalValues, preliminaryValues)
     );
 
-    expect(value).toContain("Value: 304 tornadoes");
-    expect(value).toContain("Preliminary: yes");
-    expect(value).toContain("Release schedule: April U.S. Release");
+    expect(value).toContain("Value: 168 tornadoes");
+    expect(value).toContain("Data status: preliminary");
+    expect(value).toContain("Final count: 0 tornadoes");
+    expect(value).toContain("Preliminary count: 168 tornadoes");
+    expect(value).toContain("Uncertainty range: 109-168 tornadoes");
+    expect(value).toContain("Preliminary note: *denotes preliminary data");
+    expect(value).toContain("Release schedule: May U.S. Release");
+  });
+
+  it("extracts chart preliminary and uncertainty metadata", () => {
+    const finalValues = Array<number | null>(77).fill(null);
+    const preliminaryValues = Array<number | null>(77).fill(null);
+    finalValues[76] = 10;
+    preliminaryValues[76] = 100;
+
+    expect(extractNceiTornadoChartObservations(buildChartConfig(finalValues, preliminaryValues), 5).get("202605")).toMatchObject({
+      count: 110,
+      preliminary: true,
+      finalCount: 10,
+      preliminaryCount: 100,
+      uncertaintyLower: 75,
+      uncertaintyUpper: 110
+    });
   });
 
   it("formats not-published monthly data with the latest same-month value", () => {
@@ -64,9 +100,16 @@ describe("NCEI tornadoes adapter", () => {
     ).toBe("May U.S. Release: Mon, 8 Jun 2026, 11:00 AM EDT");
   });
 
-  it("alerts only when a target month first becomes published", () => {
+  it("alerts when the target value or preliminary metadata changes", () => {
     expect(shouldAlertOnTornadoChange("Value: not published yet", "Value: 304 tornadoes")).toBe(true);
-    expect(shouldAlertOnTornadoChange("Value: 304 tornadoes", "Value: 305 tornadoes")).toBe(false);
+    expect(shouldAlertOnTornadoChange("Value: 304 tornadoes", "Value: 305 tornadoes")).toBe(true);
+    expect(
+      shouldAlertOnTornadoChange(
+        "Value: 304 tornadoes\nData status: preliminary\nFinal count: 0 tornadoes\nPreliminary count: 304 tornadoes\nUncertainty range: 197-304 tornadoes\nRelease schedule: old",
+        "Value: 304 tornadoes\nData status: preliminary\nFinal count: 0 tornadoes\nPreliminary count: 304 tornadoes\nUncertainty range: 197-304 tornadoes\nRelease schedule: new"
+      )
+    ).toBe(false);
+    expect(shouldAlertOnTornadoChange(null, "Value: 304 tornadoes")).toBe(false);
   });
 
   it("auto-discovers active monthly tornado markets and keeps overlap on the older month", async () => {

@@ -32,6 +32,10 @@ type TornadoObservation = {
   date: string;
   count: number;
   preliminary: boolean;
+  finalCount: number | null;
+  preliminaryCount: number | null;
+  uncertaintyLower: number | null;
+  uncertaintyUpper: number | null;
 };
 
 type TornadoDiscoverySettings = {
@@ -52,10 +56,17 @@ type GammaSearchEvent = {
   tags?: Array<{ slug?: unknown }>;
 };
 
-export function extractNceiTornadoValue(data: NceiTornadoData, period: TornadoPeriod, releaseScheduleText?: string): string {
-  const target = parseTornadoObservation(period.dataKey, data.tornadoes?.[period.dataKey]);
-  const latest = findLatestSameMonthObservation(data, period.month);
+export function extractNceiTornadoValue(
+  data: NceiTornadoData,
+  period: TornadoPeriod,
+  releaseScheduleText?: string,
+  chartConfigText?: string | null
+): string {
+  const chartObservations = chartConfigText ? extractNceiTornadoChartObservations(chartConfigText, period.month) : new Map();
+  const target = parseTornadoObservation(period.dataKey, data.tornadoes?.[period.dataKey], chartObservations.get(period.dataKey));
+  const latest = findLatestSameMonthObservation(data, period.month, chartObservations);
   const releaseText = releaseScheduleText ?? "not listed";
+  const preliminaryNote = normalizeText(String(data.description?.preliminary ?? "")) || "not listed";
 
   if (!target) {
     return [
@@ -63,6 +74,7 @@ export function extractNceiTornadoValue(data: NceiTornadoData, period: TornadoPe
       `Period: ${period.label}`,
       "Value: not published yet",
       `Latest available for month: ${latest ? formatObservation(latest) : "none"}`,
+      `Preliminary note: ${preliminaryNote}`,
       `Release schedule: ${releaseText}`
     ].join("\n");
   }
@@ -71,7 +83,11 @@ export function extractNceiTornadoValue(data: NceiTornadoData, period: TornadoPe
     "Metric: NCEI U.S. tornado count",
     `Period: ${period.label}`,
     `Value: ${target.count} tornadoes`,
-    `Preliminary: ${target.preliminary ? "yes" : "no"}`,
+    `Data status: ${target.preliminary ? "preliminary" : "final"}`,
+    `Final count: ${target.finalCount === null ? "not available" : `${target.finalCount} tornadoes`}`,
+    `Preliminary count: ${target.preliminaryCount === null ? "none" : `${target.preliminaryCount} tornadoes`}`,
+    `Uncertainty range: ${formatUncertaintyRange(target)}`,
+    `Preliminary note: ${preliminaryNote}`,
     `Release schedule: ${releaseText}`
   ].join("\n");
 }
@@ -100,7 +116,7 @@ export function parseTornadoMarketPeriod(url: string, now = new Date()): Tornado
 }
 
 export function shouldAlertOnTornadoChange(previousValue: string | null, currentValue: string): boolean {
-  return Boolean(previousValue?.includes("Value: not published yet")) && isPublishedTornadoValue(currentValue);
+  return previousValue !== null && extractTornadoAlertKey(previousValue) !== extractTornadoAlertKey(currentValue);
 }
 
 export const nceiTornadoesAdapter: WebsiteAdapter = {
@@ -119,13 +135,14 @@ export const nceiTornadoesAdapter: WebsiteAdapter = {
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const polymarketUrl = integration?.polymarketUrl ?? defaultPolymarketUrl;
     const period = parseTornadoMarketPeriod(polymarketUrl);
-    const [dataResponse, releaseResponse] = await Promise.all([
+    const [dataResponse, releaseResponse, chartConfigText] = await Promise.all([
       fetchWithTimeout(buildNceiTornadoDataUrl(period.month), {
         headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
       }),
       fetchWithTimeout(releaseScheduleUrl, {
         headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
-      })
+      }),
+      fetchNceiTornadoChartConfig(period.month)
     ]);
 
     if (!dataResponse.ok) {
@@ -138,7 +155,8 @@ export const nceiTornadoesAdapter: WebsiteAdapter = {
     const value = extractNceiTornadoValue(
       (await dataResponse.json()) as NceiTornadoData,
       period,
-      extractNceiReleaseScheduleText(await releaseResponse.text()) ?? undefined
+      extractNceiReleaseScheduleText(await releaseResponse.text()) ?? undefined,
+      chartConfigText
     );
     return {
       value,
@@ -195,17 +213,59 @@ export function buildNceiTornadoDataUrl(month: number): string {
   return `${sourceUrl}/1/${month}/data.json`;
 }
 
-function findLatestSameMonthObservation(data: NceiTornadoData, month: number): TornadoObservation | null {
+export function buildNceiTornadoChartConfigUrl(month: number): string {
+  return `${sourceUrl}/1/${month}/zingchart-config.js?fatalities=false`;
+}
+
+export function extractNceiTornadoChartObservations(chartConfigText: string, month: number): Map<string, TornadoObservation> {
+  const finalValues = parseNceiSeriesValues(chartConfigText, "Final Count") ?? parseNceiSeriesValues(chartConfigText, "Tornadoes");
+  const preliminaryValues = parseNceiSeriesValues(chartConfigText, "Preliminary Count");
+  const observations = new Map<string, TornadoObservation>();
+  if (!finalValues) {
+    return observations;
+  }
+
+  const maxLength = Math.max(finalValues.length, preliminaryValues?.length ?? 0);
+  for (let index = 0; index < maxLength; index += 1) {
+    const finalCount = finalValues[index];
+    const preliminaryCount = preliminaryValues?.[index] ?? null;
+    if (finalCount === null && preliminaryCount === null) {
+      continue;
+    }
+
+    const year = 1950 + index;
+    const dataKey = `${year}${padNumber(month)}`;
+    const safeFinalCount = finalCount ?? 0;
+    const count = safeFinalCount + (preliminaryCount ?? 0);
+    observations.set(dataKey, {
+      date: `${year}-${padNumber(month)}`,
+      count,
+      preliminary: preliminaryCount !== null,
+      finalCount: finalCount ?? (preliminaryCount !== null ? 0 : count),
+      preliminaryCount,
+      uncertaintyLower: preliminaryCount === null ? null : safeFinalCount + Math.floor(preliminaryCount * 0.65),
+      uncertaintyUpper: preliminaryCount === null ? null : count
+    });
+  }
+
+  return observations;
+}
+
+function findLatestSameMonthObservation(
+  data: NceiTornadoData,
+  month: number,
+  chartObservations: Map<string, TornadoObservation>
+): TornadoObservation | null {
   const observations = Object.entries(data.tornadoes ?? {})
     .flatMap(([date, value]) => {
-      const observation = parseTornadoObservation(date, value);
+      const observation = parseTornadoObservation(date, value, chartObservations.get(date));
       return observation && Number(date.slice(4, 6)) === month ? [observation] : [];
     })
     .sort((left, right) => left.date.localeCompare(right.date));
   return observations.at(-1) ?? null;
 }
 
-function parseTornadoObservation(date: string, value: unknown): TornadoObservation | null {
+function parseTornadoObservation(date: string, value: unknown, chartObservation?: TornadoObservation): TornadoObservation | null {
   if (!/^\d{6}$/.test(date)) {
     return null;
   }
@@ -220,15 +280,93 @@ function parseTornadoObservation(date: string, value: unknown): TornadoObservati
     return null;
   }
 
+  if (chartObservation) {
+    return chartObservation;
+  }
+
+  const preliminary = normalized.includes("*");
   return {
     date: `${date.slice(0, 4)}-${date.slice(4, 6)}`,
     count,
-    preliminary: normalized.includes("*")
+    preliminary,
+    finalCount: preliminary ? null : count,
+    preliminaryCount: preliminary ? count : null,
+    uncertaintyLower: preliminary ? Math.floor(count * 0.65) : null,
+    uncertaintyUpper: preliminary ? count : null
   };
 }
 
 function formatObservation(observation: TornadoObservation): string {
-  return `${observation.date} = ${observation.count} tornadoes${observation.preliminary ? " (preliminary)" : ""}`;
+  return `${observation.date} = ${observation.count} tornadoes${observation.preliminary ? ` (preliminary; uncertainty ${formatUncertaintyRange(observation)})` : ""}`;
+}
+
+function formatUncertaintyRange(observation: TornadoObservation): string {
+  if (observation.uncertaintyLower === null || observation.uncertaintyUpper === null) {
+    return "not applicable";
+  }
+
+  return `${observation.uncertaintyLower}-${observation.uncertaintyUpper} tornadoes`;
+}
+
+async function fetchNceiTornadoChartConfig(month: number): Promise<string | null> {
+  try {
+    const response = await fetchWithTimeout(buildNceiTornadoChartConfigUrl(month), {
+      headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    return response.text();
+  } catch {
+    return null;
+  }
+}
+
+function parseNceiSeriesValues(chartConfigText: string, seriesText: string): Array<number | null> | null {
+  const textIndex = chartConfigText.indexOf(`"text": "${seriesText}"`);
+  if (textIndex < 0) {
+    return null;
+  }
+
+  const valuesIndex = chartConfigText.indexOf('"values"', textIndex);
+  if (valuesIndex < 0) {
+    return null;
+  }
+
+  const arrayStart = chartConfigText.indexOf("[", valuesIndex);
+  if (arrayStart < 0) {
+    return null;
+  }
+
+  const arrayText = extractBracketedArrayText(chartConfigText, arrayStart);
+  if (!arrayText) {
+    return null;
+  }
+
+  const parsed = JSON.parse(arrayText) as unknown;
+  if (!Array.isArray(parsed)) {
+    return null;
+  }
+
+  return parsed.map((value) => (typeof value === "number" && Number.isFinite(value) ? value : null));
+}
+
+function extractBracketedArrayText(value: string, startIndex: number): string | null {
+  let depth = 0;
+  for (let index = startIndex; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "[") {
+      depth += 1;
+    } else if (character === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        return value.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
 }
 
 function shouldDiscoverTornadoMarkets(settings: TornadoDiscoverySettings, now: Date): boolean {
@@ -413,8 +551,10 @@ function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, 
   return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
 }
 
-function isPublishedTornadoValue(value: string): boolean {
-  return /Value:\s+\d+\s+tornadoes/i.test(value);
+function extractTornadoAlertKey(value: string): string {
+  return ["Value", "Data status", "Final count", "Preliminary count", "Uncertainty range"]
+    .map((label) => value.match(new RegExp(`^${label}:\\s*(.+)$`, "m"))?.[1] ?? "")
+    .join("|");
 }
 
 function inferMonthOnlyMarketYear(month: number, now: Date): number {
