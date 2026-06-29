@@ -6,12 +6,14 @@ import {
   fetchPolymarketProposalUpdates,
   getPolymarketProposalTagChannelName,
   getPolymarketProposalTagFiltersFromSettingsJson,
+  isPolymarketProposalChannelPingEnabled,
   proposePriceTopic,
   refreshPolymarketProposalPost,
   resolvePolymarketProposalChannelIds,
   setPolymarketProposalTagChannel,
   searchPolymarketProposalTags,
   testOnlyPolymarketProposalHelpers,
+  updatePolymarketProposalTagPingMode,
   updatePolymarketProposalTagBlocklist,
   updatePolymarketProposalTagFilters,
   type PolymarketProposalEvent
@@ -163,14 +165,12 @@ describe("fetchPolymarketProposalUpdates", () => {
       buildIntegration(JSON.stringify({ addressLabels: [{ address: proposer, label: "Known Proposer" }] })),
       result.posts[0]
     )[0].data.fields ?? [];
-    expect(embedFields.slice(0, 9).map((field) => field.name)).toEqual([
+    expect(embedFields.slice(0, 7).map((field) => field.name)).toEqual([
       "Question",
       "Proposed outcome",
       "Proposed at",
       "Dispute Window Ends",
       "Notification latency",
-      "Proposed at (ET)",
-      "Dispute Window Ends (ET)",
       "Market tags",
       "Proposer"
     ]);
@@ -740,6 +740,46 @@ describe("proposal tag filters", () => {
     } as EventMonitorPost;
 
     expect(resolvePolymarketProposalChannelIds(integration, post)).toEqual(["sports-channel"]);
+  });
+
+  it("keeps UMA proposal tag channel pings on by default", () => {
+    const integration = {
+      settingsJson: JSON.stringify({
+        tagFilters: [{ id: "1", label: "Sports", slug: "sports", channelId: "sports-channel", channelName: "uma-proposals-sports" }]
+      })
+    } as Integration;
+
+    expect(isPolymarketProposalChannelPingEnabled(integration, "sports-channel")).toBe(true);
+    expect(isPolymarketProposalChannelPingEnabled(integration, "unknown-channel")).toBe(true);
+  });
+
+  it("stores per-tag-channel UMA proposal ping mode", () => {
+    const integration = {
+      settingsJson: JSON.stringify({
+        tagFilters: [{ id: "1", label: "Sports", slug: "sports", channelId: "sports-channel", channelName: "uma-proposals-sports" }]
+      })
+    } as Integration;
+
+    const disabled = updatePolymarketProposalTagPingMode(integration, "sports", false);
+    expect(disabled.changed).toBe(true);
+    expect(disabled.pingEnabled).toBe(false);
+    expect(getPolymarketProposalTagFiltersFromSettingsJson(disabled.settingsJson)).toEqual([
+      {
+        id: "1",
+        label: "Sports",
+        slug: "sports",
+        channelId: "sports-channel",
+        channelName: "uma-proposals-sports",
+        pingEnabled: false
+      }
+    ]);
+    expect(isPolymarketProposalChannelPingEnabled({ settingsJson: disabled.settingsJson } as Integration, "sports-channel")).toBe(false);
+
+    const enabled = updatePolymarketProposalTagPingMode({ settingsJson: disabled.settingsJson } as Integration, "sports", true);
+    expect(enabled.changed).toBe(true);
+    expect(getPolymarketProposalTagFiltersFromSettingsJson(enabled.settingsJson)).toEqual([
+      { id: "1", label: "Sports", slug: "sports", channelId: "sports-channel", channelName: "uma-proposals-sports" }
+    ]);
   });
 
   it("stores per-subscription excluded proposal tags", async () => {

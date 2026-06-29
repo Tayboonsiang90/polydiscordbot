@@ -125,6 +125,7 @@ export type ProposalTagFilterEntry = TagFilterEntry & {
   channelId?: string;
   channelName?: string;
   excludedTags?: TagFilterEntry[];
+  pingEnabled?: boolean;
 };
 
 export type PolymarketProposalSettings = {
@@ -138,6 +139,14 @@ export type PolymarketProposalSettings = {
   initialLookbackBlocks?: number;
   maxScanBlocksPerRun?: number;
   tagFilters?: ProposalTagFilterEntry[];
+};
+
+export type ProposalTagNotifyResult = {
+  changed: boolean;
+  subscriptionTag: ProposalTagFilterEntry;
+  pingEnabled: boolean;
+  settingsJson: string;
+  message: string;
 };
 
 export type PolymarketProposalEvent = {
@@ -533,6 +542,44 @@ export function setPolymarketProposalTagChannel(
   );
 
   return JSON.stringify({ ...settings, tagFilters: nextFilters });
+}
+
+export function updatePolymarketProposalTagPingMode(
+  integration: Integration,
+  subscriptionTagQuery: string,
+  pingEnabled: boolean
+): ProposalTagNotifyResult {
+  const settings = parsePolymarketProposalSettings(integration.settingsJson);
+  const tagFilters = getTagFiltersFromSettings(settings);
+  const tagIndex = findLocalTagIndex(tagFilters, subscriptionTagQuery);
+  if (tagIndex === -1) {
+    throw new Error(`No configured proposal tag found for "${subscriptionTagQuery}".`);
+  }
+
+  const tag = tagFilters[tagIndex];
+  const previousPingEnabled = tag.pingEnabled !== false;
+  const nextTag = pingEnabled
+    ? omitPingDisabled(tag)
+    : { ...tag, pingEnabled: false };
+  const nextFilters = replaceTagFilter(tagFilters, tag, nextTag);
+  const settingsJson = JSON.stringify({ ...settings, tagFilters: nextFilters });
+  const channelText = nextTag.channelName ? ` in #${nextTag.channelName}` : "";
+  const message = pingEnabled
+    ? `UMA proposal role pings are ON for ${nextTag.label}${channelText}.`
+    : `UMA proposal role pings are OFF for ${nextTag.label}${channelText}. Alerts will still post, but they will not mention the UMA Proposal Alerts role.`;
+
+  return {
+    changed: previousPingEnabled !== pingEnabled,
+    subscriptionTag: nextTag,
+    pingEnabled,
+    settingsJson,
+    message
+  };
+}
+
+export function isPolymarketProposalChannelPingEnabled(integration: Integration, channelId: string): boolean {
+  const tag = getPolymarketProposalTagFilterByChannelId(integration, channelId);
+  return tag?.pingEnabled !== false;
 }
 
 export function resolvePolymarketProposalChannelIds(integration: Integration, post: EventMonitorPost): string[] {
@@ -1227,6 +1274,7 @@ function formatConfiguredTagFilters(tagFilters: ProposalTagFilterEntry[]): strin
         .map((tag) =>
           [
             `${tag.label} (${tag.slug})${tag.channelName ? ` -> #${tag.channelName}` : ""}`,
+            tag.pingEnabled === false ? "pings: off" : "",
             tag.excludedTags?.length ? `excludes: ${tag.excludedTags.map((blockedTag) => blockedTag.label).join(", ")}` : ""
           ]
             .filter(Boolean)
@@ -1447,8 +1495,14 @@ function sanitizeTagFilter(value: unknown): ProposalTagFilterEntry | null {
     ...base,
     ...(typeof tag.channelId === "string" && tag.channelId.trim() ? { channelId: tag.channelId.trim() } : {}),
     ...(typeof tag.channelName === "string" && tag.channelName.trim() ? { channelName: tag.channelName.trim() } : {}),
+    ...(typeof tag.pingEnabled === "boolean" ? { pingEnabled: tag.pingEnabled } : {}),
     ...(excludedTags.length ? { excludedTags } : {})
   };
+}
+
+function omitPingDisabled(tag: ProposalTagFilterEntry): ProposalTagFilterEntry {
+  const { pingEnabled: _pingEnabled, ...rest } = tag;
+  return rest;
 }
 
 function sanitizeBaseTagFilter(value: unknown): TagFilterEntry | null {

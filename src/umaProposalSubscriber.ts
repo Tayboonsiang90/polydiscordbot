@@ -7,6 +7,7 @@ import { parseHexQuantity, type PolygonLog } from "./integrations/polymarketClar
 import {
   buildPolymarketProposalPostFromLog,
   getPolymarketProposalWsUrl,
+  isPolymarketProposalChannelPingEnabled,
   parsePolymarketProposalSettings,
   proposePriceTopic,
   resolvePolymarketProposalChannelIds
@@ -219,7 +220,7 @@ export class UmaProposalSubscriber {
             throw new Error(`UMA proposal channel is not sendable: ${channelId}`);
           }
 
-          await channel.send(buildEventPostMessagePayload(integration, post));
+          await channel.send(buildEventPostMessagePayload(applyChannelNotificationPolicy(integration, channelId), post));
         }
       } catch (error) {
         this.database.markEventAlertPending(integration.id, post.id);
@@ -244,6 +245,10 @@ export class UmaProposalSubscriber {
     this.database.setSettingsJson(integration.id, nextSettingsJson);
     this.database.recordCheck(integration.id, post.id, post.postedAt);
   }
+}
+
+function applyChannelNotificationPolicy(integration: Integration, channelId: string): Integration {
+  return isPolymarketProposalChannelPingEnabled(integration, channelId) ? integration : { ...integration, alertRoleId: null };
 }
 
 function parseSubscriptionMessage(data: RawData | unknown): SubscriptionMessage {

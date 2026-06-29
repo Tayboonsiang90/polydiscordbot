@@ -41,6 +41,7 @@ import {
   getPolymarketProposalTagChannelName,
   getPolymarketProposalTagFiltersFromSettingsJson,
   setPolymarketProposalTagChannel,
+  updatePolymarketProposalTagPingMode,
   type ProposalTagFilterEntry
 } from "./integrations/polymarketProposals.js";
 import { parseTrumpTruthSettings, upsertTrumpTruthPolymarketMarket } from "./integrations/trumpTruth.js";
@@ -339,6 +340,29 @@ function buildAdapterCommand(
               .setRequired(false)
               .setMinLength(1)
               .setMaxLength(120)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("tag")
+              .setDescription("Proposal channel tag; defaults to the current tag channel")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(120)
+          )
+      );
+    }
+
+    if (adapter.id === "polymarket-proposals") {
+      command.addSubcommand((subcommand) =>
+        subcommand
+          .setName("notify")
+          .setDescription("Turn role pings on or off for one proposal tag channel")
+          .addStringOption((option) =>
+            option
+              .setName("mode")
+              .setDescription("Whether this proposal tag channel should ping the UMA role")
+              .setRequired(true)
+              .addChoices({ name: "on", value: "on" }, { name: "off", value: "off" })
           )
           .addStringOption((option) =>
             option
@@ -874,8 +898,8 @@ export async function handleAdapterCommand(
     return;
   }
 
-  if (proposalChannelTag && subcommand !== "tagblocks" && subcommand !== "addresses") {
-    const message = `Use this command in #${adapter.defaultChannelName}. This tag channel only supports /${adapter.commandName} tagblocks and addresses.`;
+  if (proposalChannelTag && subcommand !== "tagblocks" && subcommand !== "notify" && subcommand !== "addresses") {
+    const message = `Use this command in #${adapter.defaultChannelName}. This tag channel only supports /${adapter.commandName} tagblocks, notify, and addresses.`;
     if (checkCommandDeferred) {
       await interaction.editReply(message);
     } else {
@@ -1027,6 +1051,35 @@ export async function handleAdapterCommand(
         ? database.setSettingsJson(integration.id, result.settingsJson)
         : integration;
     await interaction.editReply({ embeds: [buildTagBlocklistEmbed(updated, result)] });
+    return;
+  }
+
+  if (subcommand === "notify") {
+    if (adapter.id !== "polymarket-proposals") {
+      await interaction.reply({ content: "This integration does not support per-channel notification settings.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const mode = interaction.options.getString("mode", true);
+    const subscriptionTagQuery = interaction.options.getString("tag")?.trim() ?? proposalChannelTag?.slug;
+    if (!subscriptionTagQuery) {
+      await interaction.reply({
+        content: "Run this in a proposal tag channel, or provide the configured proposal tag with `tag:`.",
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    const result = updatePolymarketProposalTagPingMode(integration, subscriptionTagQuery, mode === "on");
+    const updated =
+      result.settingsJson !== integration.settingsJson
+        ? database.setSettingsJson(integration.id, result.settingsJson)
+        : integration;
+    await interaction.reply({
+      content: result.changed ? result.message : `${result.message} No setting change was needed.`,
+      allowedMentions: { parse: [] }
+    });
+    integration = updated;
     return;
   }
 

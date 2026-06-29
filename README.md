@@ -367,6 +367,7 @@ UMA Proposal Alerts also supports:
 
 Proposal alerts are off until at least one Polymarket tag filter is configured. The bot watches UMA `ProposePrice` logs first, then enriches each proposal with Polymarket CLOB market metadata and only alerts when the market tags exactly match a configured tag label or slug. Adding a tag creates a dedicated channel named `#uma-proposals-<tag-slug>`, removing a tag deletes that tag channel, and matching alerts are sent to the tag-specific channel instead of the base `#uma-proposals` command channel.
 Run `/umaproposals tagblocks` inside a tag-specific proposal channel to ban another market tag only from that channel; the same blocked tag can still alert in other UMA proposal tag channels unless those channels also block it. From the base `#uma-proposals` channel, include `tag:<configured-tag>` to choose which tag channel gets the exclusion.
+Run `/umaproposals notify mode:off` inside a tag-specific proposal channel to keep alerts posting there without mentioning the shared UMA Proposal Alerts role; `mode:on` restores pings. Notify mode is on by default for every proposal tag channel.
 
 UMA Proposal and Dispute Alerts also support address labels:
 

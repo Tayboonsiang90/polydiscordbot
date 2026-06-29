@@ -21,6 +21,7 @@ import {
   type ErrorNoticeState
 } from "./errorNotices.js";
 import { getAdapter, hasAdapter } from "./integrations/registry.js";
+import { isPolymarketProposalChannelPingEnabled } from "./integrations/polymarketProposals.js";
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "./integrations/types.js";
 import { getDueMarketEndReminders, getStoredOrFetchPolymarketEndDate, type MarketEndReminder } from "./marketEnd.js";
 import { resolveIntegrationPolymarketQueue } from "./polymarketQueue.js";
@@ -636,7 +637,7 @@ export class PollScheduler {
       throw new Error(`Event alert channel is not sendable for ${integration.adapterId}: ${channelId}`);
     }
 
-    await channel.send(buildEventPostMessagePayload(integration, post));
+    await channel.send(buildEventPostMessagePayload(applyChannelNotificationPolicy(integration, channelId), post));
   }
 
   private async sendDueEventAlerts(integrationId: number): Promise<void> {
@@ -1053,6 +1054,14 @@ export function getPollIntervalReason(integration: Integration, now: Date = new 
 
   const adapter = getAdapter(integration.adapterId);
   return adapter.getPollIntervalReason?.(integration, now) ?? "Configured interval";
+}
+
+function applyChannelNotificationPolicy(integration: Integration, channelId: string): Integration {
+  if (integration.adapterId !== "polymarket-proposals" || isPolymarketProposalChannelPingEnabled(integration, channelId)) {
+    return integration;
+  }
+
+  return { ...integration, alertRoleId: null };
 }
 
 function logSchedulerError(error: unknown): void {

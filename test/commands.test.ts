@@ -189,15 +189,18 @@ describe("adapter commands", () => {
     const addresses = command?.options?.find((option) => option.name === "addresses");
     const tags = command?.options?.find((option) => option.name === "tags");
     const tagblocks = command?.options?.find((option) => option.name === "tagblocks");
+    const notify = command?.options?.find((option) => option.name === "notify");
     const addressOptions = addresses?.options ?? [];
     const action = addressOptions.find((option) => option.name === "action");
     const tagAction = tags?.options?.find((option) => option.name === "action");
     const tagblockAction = tagblocks?.options?.find((option) => option.name === "action");
     const tagblockOptions = tagblocks?.options ?? [];
+    const notifyMode = notify?.options?.find((option) => option.name === "mode");
 
     expect(action?.choices?.map((choice) => choice.value)).toEqual(expect.arrayContaining(["add", "remove", "list", "clear", "import", "export"]));
     expect(tagAction?.choices?.map((choice) => choice.value)).toEqual(["add", "remove", "list", "clear"]);
     expect(tagblockAction?.choices?.map((choice) => choice.value)).toEqual(["add", "remove", "list", "clear"]);
+    expect(notifyMode?.choices?.map((choice) => choice.value)).toEqual(["on", "off"]);
     expect(tagblockOptions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "blocked" }),
