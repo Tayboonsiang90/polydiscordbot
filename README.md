@@ -39,7 +39,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `census-durable-goods` | `/monitor` | `#durablegoods` | `Durable Goods Alerts` | `🏭` | Monitors the Census Advance Durable Goods May 2026 MoM new orders report and only polls fast on release day. |
 | `openai-chatgpt-outages` | `/monitor` | `#chatgptoutage` | `ChatGPT Outage Alerts` | `🟠` | Monitors OpenAI Status for resolved ChatGPT partial/full outage days, sends one daily report for each completed ET day, shows all partial/full outages for manual review, and auto-discovers monthly outage markets. |
 | `claude-code-commits` | `/monitor` | `#claudecommits` | `Claude Commits Alerts` | `💻` | Monitors Claude Code Commits Tracker daily data and alerts once when unresolved high/low targets are hit. |
-| `claude-code-commits-average` | `/monitor` | `#claudeavg` | `Claude Avg Alerts` | `📈` | Monitors Claude Code Commits Tracker 7D Avg Commits for the end-of-June bracket market and includes final-window worst-case analysis in every report. |
+| `claude-code-commits-average` | `/monitor` | `#claudeavg` | `Claude Avg Alerts` | `📈` | Monitors Claude Code Commits Tracker 7D Avg Commits for the end-of-June bracket market, with final-window worst-case analysis and GitHub hourly alpha context. |
 | `claude-downtime` | `/monitor` | `#claudedown` | `Claude Downtime Alerts` | `🔴` | Monitors Claude Status claude.ai uptime boxes, sends one daily report for each newly finalized day, and alerts once for finalized non-green days. |
 | `cloudflare-critical-incidents` | `/monitor` | `#cloudflare-critical` | `Cloudflare Critical Alerts` | `🔴` | Monitors Cloudflare's official incidents API for Critical/red incidents. |
 | `discord-critical-incidents` | `/monitor` | `#discord-critical` | `Discord Critical Alerts` | `🔴` | Monitors Discord's official incidents API for Critical/red incidents and auto-discovers monthly by-date markets. |
@@ -173,6 +173,8 @@ No archived integrations currently.
    DISCORD_HEALTH_WEBHOOK_URL=...
    HEALTHCHECKS_PING_URL=...
    DUNE_API_KEY=...
+   GITHUB_TOKEN=...
+   CLAUDE_GITHUB_ALPHA_QUERY="Co-Authored-By: Claude"
    KAITO_INFOMARKETS_API_URL=...
    KAITO_API_KEY=...
    PREDICT_API_KEY=...
@@ -190,7 +192,7 @@ No archived integrations currently.
    MARINETRAFFIC_BAB_ALPHA_URL=...
    ```
 
-   `DUNE_API_KEY` is required for `#basedrevenue` and `#ethgasmonthly`. `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback.
+   `DUNE_API_KEY` is required for `#basedrevenue` and `#ethgasmonthly`. `GITHUB_TOKEN` is optional for `#claudeavg` GitHub alpha but recommended to avoid unauthenticated GitHub search limits. `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback.
 
 3. Register slash commands for your test server:
 
