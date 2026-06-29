@@ -210,6 +210,12 @@ describe("getErrorNoticeSignature", () => {
   it("normalizes aborted fetch errors as transient network errors", () => {
     expect(getErrorNoticeSignature(new Error("The operation was aborted."))).toBe("transient-network-error");
   });
+
+  it("normalizes refused connections as transient network errors", () => {
+    expect(getErrorNoticeSignature(Object.assign(new Error("connect ECONNREFUSED 129.164.141.233:443"), { code: "ECONNREFUSED" }))).toBe(
+      "transient-network-error"
+    );
+  });
 });
 
 describe("latest error message settings", () => {

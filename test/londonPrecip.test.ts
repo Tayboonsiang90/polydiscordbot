@@ -98,6 +98,45 @@ describe("Met Office London precipitation adapter", () => {
     );
   });
 
+  it("reports Infoclimat daily alpha from cumulative changes", () => {
+    const official = extractLondonPrecipitationOfficialValue(
+      sampleText.replace("   2026   5   19.4    10.1       0    42.6   180.0#  Provisional", ""),
+      { year: 2026, month: 5 }
+    );
+    const alpha = extractInfoclimatLondonMonthlyPrecipitation(infoclimatHtml, { year: 2026, month: 5 }, "https://example.com");
+    const previousValue = [
+      "Metric: Met Office Heathrow precipitation",
+      "Period: 2026-05",
+      "Current total: 10.0 mm",
+      "Alpha Infoclimat cumulative: 10.0 mm (updated 2026-05-28 10:00:00)"
+    ].join("\n");
+
+    const value = buildLondonPrecipitationAlphaValue(official, alpha, { year: 2026, month: 5 }, previousValue);
+
+    expect(value).toContain("Alpha daily estimate: 2.4 mm since previous Infoclimat update");
+    expect(value).toContain("Alpha previous cumulative: 10.0 mm (updated 2026-05-28 10:00:00)");
+  });
+
+  it("alerts when Infoclimat publishes a zero-rainfall daily update", () => {
+    expect(
+      londonPrecipShouldAlertOnChange(
+        [
+          "Metric: Met Office Heathrow precipitation",
+          "Period: 2026-05",
+          "Current total: 12.4 mm",
+          "Alpha Infoclimat cumulative: 12.4 mm (updated 2026-05-28 10:00:00)"
+        ].join("\n"),
+        [
+          "Metric: Met Office Heathrow precipitation",
+          "Period: 2026-05",
+          "Current total: 12.4 mm",
+          "Alpha Infoclimat cumulative: 12.4 mm (updated 2026-05-29 10:37:13)",
+          "Alpha daily estimate: 0.0 mm since previous Infoclimat update"
+        ].join("\n")
+      )
+    ).toBe(true);
+  });
+
   it("alerts only when the displayed value changes", () => {
     expect(
       londonPrecipShouldAlertOnChange(

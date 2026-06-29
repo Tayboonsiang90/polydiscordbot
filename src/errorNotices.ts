@@ -65,6 +65,7 @@ export function isTransientNetworkError(error: unknown): boolean {
       [
         "ABORT_ERR",
         "EAI_AGAIN",
+        "ECONNREFUSED",
         "ECONNRESET",
         "ECONNABORTED",
         "EHOSTUNREACH",
@@ -76,6 +77,7 @@ export function isTransientNetworkError(error: unknown): boolean {
     message.includes("aborterror") ||
     message.includes("aborted") ||
     message.includes("eai_again") ||
+    message.includes("econnrefused") ||
     message.includes("timeout") ||
     message.includes("timed out") ||
     message.includes("connection reset")

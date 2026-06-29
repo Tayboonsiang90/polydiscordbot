@@ -41,6 +41,13 @@ export type InfoclimatLondonMonthlyPrecipitation = {
   sourceUrl: string;
 };
 
+type InfoclimatAlphaSnapshot = {
+  period: string | null;
+  total: number;
+  totalText: string;
+  updatedAt: string | null;
+};
+
 export function getLondonPrecipSettings(integration?: Integration): LondonPrecipSettings {
   if (!integration?.settingsJson) {
     return { year: defaultYear, month: defaultMonth };
@@ -91,7 +98,8 @@ export function extractLondonPrecipitationOfficialValue(
 export function buildLondonPrecipitationAlphaValue(
   official: LondonOfficialPrecipitationValue,
   alpha: InfoclimatLondonMonthlyPrecipitation | null,
-  settings: LondonPrecipSettings
+  settings: LondonPrecipSettings,
+  previousValue: string | null = null
 ): string {
   const period = `${settings.year}-${padMonth(settings.month)}`;
   if (official.totalText) {
@@ -113,6 +121,7 @@ export function buildLondonPrecipitationAlphaValue(
     "Official Met Office row: not published yet",
     `Latest official Met Office row: ${official.latestPeriodText ?? "none"}`,
     `Alpha Infoclimat cumulative: ${formatAlphaValue(alpha)}`,
+    ...formatInfoclimatDailyAlphaLines(alpha, previousValue, period),
     `Alpha source: ${buildInfoclimatLondonPrecipitationUrl(settings.year)}`
   ].join("\n");
 }
@@ -184,7 +193,10 @@ export function extractHeathrowClimateRows(text: string): HeathrowClimateRow[] {
 }
 
 export function londonPrecipShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
-  return extractCurrentTotalLine(previousValue) !== extractCurrentTotalLine(currentValue);
+  return (
+    extractCurrentTotalLine(previousValue) !== extractCurrentTotalLine(currentValue) ||
+    extractAlphaCumulativeLine(previousValue) !== extractAlphaCumulativeLine(currentValue)
+  );
 }
 
 export const londonPrecipAdapter: WebsiteAdapter = {
@@ -218,7 +230,7 @@ export const londonPrecipAdapter: WebsiteAdapter = {
     }
 
     const official = extractLondonPrecipitationOfficialValue(await response.text(), settings);
-    const value = buildLondonPrecipitationAlphaValue(official, alpha, settings);
+    const value = buildLondonPrecipitationAlphaValue(official, alpha, settings, integration?.lastValue ?? null);
     return {
       value,
       rawValue: value,
@@ -278,8 +290,63 @@ function formatAlphaValue(alpha: InfoclimatLondonMonthlyPrecipitation | null): s
   return `${alpha.totalText} mm${alpha.updatedAt ? ` (updated ${alpha.updatedAt})` : ""}`;
 }
 
+function formatInfoclimatDailyAlphaLines(
+  alpha: InfoclimatLondonMonthlyPrecipitation | null,
+  previousValue: string | null,
+  period: string
+): string[] {
+  if (!alpha) {
+    return [];
+  }
+
+  const previous = extractInfoclimatAlphaSnapshot(previousValue);
+  if (!previous || previous.period !== period) {
+    return [];
+  }
+
+  const updateChanged = previous.updatedAt !== alpha.updatedAt;
+  const totalChanged = previous.totalText !== alpha.totalText;
+  if (!updateChanged && !totalChanged) {
+    return [];
+  }
+
+  if (alpha.total < previous.total) {
+    return [`Alpha daily estimate: reset baseline; previous cumulative was ${previous.totalText} mm`];
+  }
+
+  const dailyEstimate = (alpha.total - previous.total).toFixed(1);
+  return [
+    `Alpha daily estimate: ${dailyEstimate} mm since previous Infoclimat update`,
+    `Alpha previous cumulative: ${previous.totalText} mm${previous.updatedAt ? ` (updated ${previous.updatedAt})` : ""}`
+  ];
+}
+
 function extractCurrentTotalLine(value: string | null): string | null {
   return value?.match(/^Current total:\s*(.+)$/m)?.[1] ?? value;
+}
+
+function extractAlphaCumulativeLine(value: string | null): string | null {
+  return value?.match(/^Alpha Infoclimat cumulative:\s*(.+)$/m)?.[1] ?? null;
+}
+
+function extractInfoclimatAlphaSnapshot(value: string | null): InfoclimatAlphaSnapshot | null {
+  if (!value) {
+    return null;
+  }
+
+  const period = value.match(/^Period:\s*(.+)$/m)?.[1]?.trim() ?? null;
+  const alphaLine = extractAlphaCumulativeLine(value);
+  const match = alphaLine?.match(/^(\d+(?:\.\d+)?) mm(?: \(updated (.+)\))?$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    period,
+    total: Number(match[1]),
+    totalText: Number(match[1]).toFixed(1),
+    updatedAt: match[2] ?? null
+  };
 }
 
 function normalizeText(value: string): string {

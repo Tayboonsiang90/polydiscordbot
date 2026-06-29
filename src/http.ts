@@ -27,9 +27,12 @@ function isTransientNetworkError(error: unknown): boolean {
   const codes = collectErrorCodes(error);
   return (
     codes.some((code) =>
-      ["EAI_AGAIN", "ECONNRESET", "ECONNABORTED", "EHOSTUNREACH", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].includes(code)
+      ["EAI_AGAIN", "ECONNREFUSED", "ECONNRESET", "ECONNABORTED", "EHOSTUNREACH", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].includes(
+        code
+      )
     ) ||
     message.includes("eai_again") ||
+    message.includes("econnrefused") ||
     message.includes("timeout") ||
     message.includes("etimedout") ||
     message.includes("timed out") ||

@@ -70,6 +70,21 @@ describe("fetchWithTimeout", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("retries refused connections", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error("connect ECONNREFUSED 129.164.141.233:443"), { code: "ECONNREFUSED" }))
+      .mockResolvedValueOnce(new Response("ok"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const assertion = expect(fetchWithTimeout("https://data.giss.nasa.gov")).resolves.toMatchObject({ ok: true });
+    await vi.runAllTimersAsync();
+
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("does not retry non-transient fetch errors", async () => {
     const fetchMock = vi.fn(async () => {
       throw new Error("bad request body");
