@@ -1,14 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildMrBeastViewValue,
   extractMrBeastTargetsFromGamma,
   extractMrBeastTotalViews,
+  normalizeMrBeastViewSearchEvent,
   parseMrBeastMarketDeadline,
   parseMrBeastStoredViews,
-  mrBeastViewsAdapter
+  mrBeastViewsAdapter,
+  refreshMrBeastViewsPolymarketQueue
 } from "../src/integrations/mrBeastViews.js";
+import type { Integration } from "../src/integrations/types.js";
 
 describe("MrBeast YouTube views adapter", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("extracts total views from the YouTube about page metadata", () => {
     const html = [
       '"viewCountText":{"simpleText":"641,313,287 views"}',
@@ -55,6 +63,35 @@ describe("MrBeast YouTube views adapter", () => {
         new Date("2026-05-19T00:00:00.000Z")
       )?.toISOString()
     ).toBe("2026-07-01T03:59:00.000Z");
+
+    expect(
+      parseMrBeastMarketDeadline(
+        "https://polymarket.com/event/will-mrbeast-hit-billion-views-by-july-31-20260623145505885",
+        new Date("2026-06-29T00:00:00.000Z")
+      )?.toISOString()
+    ).toBe("2026-08-01T03:59:00.000Z");
+  });
+
+  it("recognizes active MrBeast billion-view search results", () => {
+    expect(
+      normalizeMrBeastViewSearchEvent(
+        {
+          slug: "will-mrbeast-hit-billion-views-by-july-31-20260623145505885",
+          title: "Will MrBeast hit ___ Billion views by July 31?",
+          active: true,
+          closed: false,
+          startDate: "2026-06-23T20:36:31.255Z",
+          endDate: "2026-07-31T23:59:00Z"
+        },
+        new Date("2026-06-29T00:00:00.000Z")
+      )
+    ).toEqual({
+      slug: "will-mrbeast-hit-billion-views-by-july-31-20260623145505885",
+      url: "https://polymarket.com/event/will-mrbeast-hit-billion-views-by-july-31-20260623145505885",
+      title: "Will MrBeast hit ___ Billion views by July 31?",
+      startDate: "2026-06-23T20:36:31.255Z",
+      endDate: "2026-08-01T03:59:00.000Z"
+    });
   });
 
   it("parses previous stored view totals from bot values", () => {
@@ -129,5 +166,39 @@ describe("MrBeast YouTube views adapter", () => {
   it("polls the YouTube counter every minute", () => {
     expect(mrBeastViewsAdapter.getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(mrBeastViewsAdapter.getPollIntervalReason?.({} as never)).toContain("every minute");
+  });
+
+  it("auto-discovers the active July 31 billion-view market", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "will-mrbeast-hit-billion-views-by-july-31-20260623145505885",
+              title: "Will MrBeast hit ___ Billion views by July 31?",
+              active: true,
+              closed: false,
+              startDate: "2026-06-23T20:36:31.255Z",
+              endDate: "2026-07-31T23:59:00Z"
+            }
+          ]
+        })
+      })
+    );
+
+    const queue = await refreshMrBeastViewsPolymarketQueue(
+      {
+        settingsJson: null,
+        polymarketUrl: "https://polymarket.com/event/will-mrbeast-hit-billion-views-by-june-30"
+      } as Integration,
+      new Date("2026-06-29T00:00:00.000Z")
+    );
+
+    expect(queue.activeUrl).toBe(
+      "https://polymarket.com/event/will-mrbeast-hit-billion-views-by-july-31-20260623145505885"
+    );
+    expect(queue.settingsJson).toContain("will-mrbeast-hit-billion-views-by-july-31-20260623145505885");
   });
 });

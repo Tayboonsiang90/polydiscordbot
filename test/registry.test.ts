@@ -182,6 +182,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("mrbeastgaming").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("mrbeastsubs").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("mrbeastviews").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("mrbeastviews").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("ornnh100").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("ornnh100").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("ornnh200").refreshSettings).toBeDefined();
