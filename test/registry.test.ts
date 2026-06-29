@@ -43,6 +43,7 @@ const expectedCommandIds = [
   ["kpopreleases", "apple-kpop-song-releases"],
   ["koreaprecip", "kma-seoul-precip"],
   ["londonprecip", "met-office-london-precip"],
+  ["mtwind", "mt-washington-wind"],
   ["mrbeastgaming", "mrbeast-gaming-video"],
   ["mrbeastsubs", "mrbeast-subscribers"],
   ["mrbeastviews", "mrbeast-views"],
@@ -136,6 +137,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("hkprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("koreaprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("londonprecip").supportsPeriod).toBe(true);
+    expect(getAdapterByCommandName("mtwind").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("nycprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("seattleprecip").supportsPeriod).toBe(true);
     expect(getAdapterByCommandName("claudedown").supportsPeriod).toBe(true);
@@ -144,6 +146,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("hkprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("koreaprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("londonprecip").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("mtwind").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("nycprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("seattleprecip").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("claudedown").refreshSettings).toBeDefined();
