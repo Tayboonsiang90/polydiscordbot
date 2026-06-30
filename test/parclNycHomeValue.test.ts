@@ -12,11 +12,15 @@ describe("Parcl NYC home value adapter", () => {
   it("extracts Parcl price-feed rows", () => {
     expect(
       extractParclNycPriceFeedRows({
-        items: [
-          { date: "2026-06-02", price_feed: 603.71 },
-          { date: "bad", price_feed: 1 },
-          { date: "2026-06-01", price_feed: "603.70" }
-        ]
+        series: {
+          "5372594": {
+            data: [
+              { date: "2026-06-02", value: 603.71 },
+              { date: "bad", value: 1 },
+              { date: "2026-06-01", value: "603.70" }
+            ]
+          }
+        }
       })
     ).toEqual([
       { date: "2026-06-01", pricePerSqft: 603.7 },
@@ -73,10 +77,8 @@ describe("Parcl NYC home value adapter", () => {
     expect(parclNycHomeValueShouldAlertOnChange(waiting, waiting.replace("23:59", "23:59"))).toBe(false);
   });
 
-  it("uses the Parcl page proxy with the NYC Parcl ID", () => {
-    expect(buildParclNycHomeValueApiUrl()).toBe(
-      "https://app.parcllabs.com/api/price-feed?parclId=5372594&startDate=2026-05-01&endDate=2026-06-30&limit=1000"
-    );
+  it("uses the current public Parcl price-feed history endpoint", () => {
+    expect(buildParclNycHomeValueApiUrl()).toBe("https://api-app-service.parcllabs.com/v1/price-feeds/history");
   });
 });
 

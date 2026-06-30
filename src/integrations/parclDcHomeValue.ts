@@ -2,7 +2,7 @@ import { fetchWithTimeout } from "../http.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://app.parcllabs.com/prediction-market-resolutions/45";
-const apiStartDate = "2026-05-01";
+const apiUrl = "https://api-app-service.parcllabs.com/v1/price-feeds/history";
 const targetDate = "2026-06-30";
 const fallbackDeadline = new Date("2026-07-11T03:59:00.000Z");
 const parclId = 2_900_475;
@@ -81,12 +81,18 @@ export function extractParclDcHomeValue(rows: ParclPriceFeedRow[], now: Date): s
 }
 
 export function extractParclPriceFeedRows(payload: unknown): ParclPriceFeedRow[] {
-  const items = isRecord(payload) && Array.isArray(payload.items) ? payload.items : [];
+  const series = isRecord(payload) && isRecord(payload.series) ? payload.series[String(parclId)] : null;
+  const items =
+    isRecord(series) && Array.isArray(series.data)
+      ? series.data
+      : isRecord(payload) && Array.isArray(payload.items)
+        ? payload.items
+        : [];
   return items
     .filter(isRecord)
     .map((item) => {
       const date = typeof item.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.date) ? item.date : null;
-      const pricePerSqft = parseNumber(item.price_feed);
+      const pricePerSqft = parseNumber(item.value ?? item.price_feed);
       return date && pricePerSqft !== null ? { date, pricePerSqft } : null;
     })
     .filter((row): row is ParclPriceFeedRow => row !== null)
@@ -134,21 +140,20 @@ export function parclDcHomeValueShouldAlertOnChange(previousValue: string | null
 }
 
 export function buildParclDcHomeValueApiUrl(): string {
-  const url = new URL("https://app.parcllabs.com/api/price-feed");
-  url.searchParams.set("parclId", parclId.toString());
-  url.searchParams.set("startDate", apiStartDate);
-  url.searchParams.set("endDate", targetDate);
-  url.searchParams.set("limit", "1000");
-  return url.toString();
+  return apiUrl;
 }
 
 async function fetchParclDcHomeValueRows(): Promise<ParclPriceFeedRow[]> {
   const response = await fetchWithTimeout(buildParclDcHomeValueApiUrl(), {
+    method: "POST",
     headers: {
-      accept: "application/json",
+      accept: "application/json, text/plain, */*",
+      "content-type": "application/json",
+      origin: "https://app.parcllabs.com",
       referer: sourceUrl,
       "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-    }
+    },
+    body: JSON.stringify({ parcl_ids: [parclId] })
   });
   const text = await response.text();
   if (!response.ok) {

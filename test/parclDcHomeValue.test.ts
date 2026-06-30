@@ -12,11 +12,15 @@ describe("Parcl DC Metro home value adapter", () => {
   it("extracts Parcl price-feed rows", () => {
     expect(
       extractParclPriceFeedRows({
-        items: [
-          { date: "2026-06-02", price_feed: 311.25 },
-          { date: "bad", price_feed: 1 },
-          { date: "2026-06-01", price_feed: "310.52" }
-        ]
+        series: {
+          "2900475": {
+            data: [
+              { date: "2026-06-02", value: 311.25 },
+              { date: "bad", value: 1 },
+              { date: "2026-06-01", value: "310.52" }
+            ]
+          }
+        }
       })
     ).toEqual([
       { date: "2026-06-01", pricePerSqft: 310.52 },
@@ -70,10 +74,8 @@ describe("Parcl DC Metro home value adapter", () => {
     expect(parclDcHomeValueShouldAlertOnChange(waiting, waiting.replace("23:59", "23:59"))).toBe(false);
   });
 
-  it("uses the Parcl page proxy with the DC Metro Parcl ID", () => {
-    expect(buildParclDcHomeValueApiUrl()).toBe(
-      "https://app.parcllabs.com/api/price-feed?parclId=2900475&startDate=2026-05-01&endDate=2026-06-30&limit=1000"
-    );
+  it("uses the current public Parcl price-feed history endpoint", () => {
+    expect(buildParclDcHomeValueApiUrl()).toBe("https://api-app-service.parcllabs.com/v1/price-feeds/history");
   });
 });
 
