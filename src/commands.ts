@@ -11,6 +11,7 @@ import {
   buildArbitrageSetupEmbed,
   buildArbitrageWatchEmbed,
   buildBotChannelClearEmbed,
+  buildCheckAllChannelEmbed,
   buildClearErrorsEmbed,
   buildCheckEmbed,
   buildEventPostMessagePayload,
@@ -656,9 +657,9 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
     };
     checkAllRuns.set(guildId, runState);
     await interaction.editReply(
-      `Queued ${targets.length} active non-UMA monitor check(s), ${delaySeconds}s apart. This is fetch-only: it does not update stored values or send alerts. Progress: ${progressMessage.url}`
+      `Queued ${targets.length} active non-UMA monitor check(s), ${delaySeconds}s apart. This is fetch-only: it does not update stored values. Each monitor channel will receive one smoke-check result without role pings. Progress: ${progressMessage.url}`
     );
-    void runCheckAllQueue(targets, delaySeconds, progressMessage, runState).finally(() => {
+    void runCheckAllQueue(interaction.guild, targets, delaySeconds, progressMessage, runState).finally(() => {
       checkAllRuns.delete(guildId);
     });
     return;
@@ -771,6 +772,7 @@ type CheckAllResult = {
   integration: Integration;
   ok: boolean;
   durationMs: number;
+  currentValue?: string;
   error?: string;
 };
 
@@ -788,6 +790,7 @@ export function selectCheckAllTargets(integrations: Integration[], guildId: stri
 }
 
 async function runCheckAllQueue(
+  guild: Guild,
   targets: CheckAllTarget[],
   delaySeconds: number,
   progressMessage: Message,
@@ -798,22 +801,26 @@ async function runCheckAllQueue(
 
   for (const integration of targets) {
     const startedAt = Date.now();
+    let result: CheckAllResult;
     try {
       const adapter = getAdapter(integration.adapterId);
-      await adapter.fetchCurrentValue(integration);
-      results.push({ integration, ok: true, durationMs: Date.now() - startedAt });
+      const value = await adapter.fetchCurrentValue(integration);
+      result = { integration, ok: true, durationMs: Date.now() - startedAt, currentValue: value.value };
       state.passed += 1;
     } catch (error) {
-      results.push({
+      result = {
         integration,
         ok: false,
         durationMs: Date.now() - startedAt,
         error: error instanceof Error ? error.message : String(error)
-      });
+      };
       state.failed += 1;
     }
 
+    results.push(result);
     state.completed += 1;
+    await sendCheckAllChannelResult(guild, result, state).catch(() => null);
+
     const now = Date.now();
     if (now - lastProgressEditAt >= checkAllProgressEditIntervalMs || state.completed === state.total) {
       lastProgressEditAt = now;
@@ -832,6 +839,24 @@ async function runCheckAllQueue(
     .catch(() => null);
 }
 
+async function sendCheckAllChannelResult(guild: Guild, result: CheckAllResult, state: CheckAllRunState): Promise<void> {
+  const channel = await fetchTextChannelById(guild, result.integration.channelId);
+  if (!channel) {
+    return;
+  }
+
+  await channel.send({
+    embeds: [
+      buildCheckAllChannelEmbed({
+        ...result,
+        completed: state.completed,
+        total: state.total
+      })
+    ],
+    allowedMentions: { parse: [] }
+  });
+}
+
 function formatCheckAllProgressMessage(input: {
   total: number;
   delaySeconds: number;
@@ -844,7 +869,7 @@ function formatCheckAllProgressMessage(input: {
       "Bot check-all queued",
       `Targets: ${input.total} active non-UMA monitor(s)`,
       `Delay: ${input.delaySeconds}s between checks`,
-      "Mode: fetch-only; no stored values are updated and no alert messages are sent.",
+      "Mode: fetch-only; stored values are not updated. Each monitor channel gets one smoke-check result without role pings.",
       `Progress: 0/${input.total}`
     ].join("\n");
   }
@@ -864,7 +889,7 @@ function formatCheckAllProgressMessage(input: {
     `Failed: ${input.state.failed}`,
     `Delay: ${input.delaySeconds}s between checks`,
     `Elapsed: ${formatElapsedTime(Date.now() - input.state.startedAt.getTime())}`,
-    "Mode: fetch-only; no stored values are updated and no alert messages are sent.",
+    "Mode: fetch-only; stored values are not updated. Each monitor channel gets one smoke-check result without role pings.",
     ...(failures.length > 0 ? ["", "Failures:", ...failureLines, ...remainingFailureLine] : [])
   ]
     .join("\n")

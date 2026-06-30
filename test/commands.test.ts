@@ -11,6 +11,7 @@ import {
   selectCheckAllTargets
 } from "../src/commands.js";
 import {
+  buildCheckAllChannelEmbed,
   buildCheckEmbed,
   buildClearErrorsEmbed,
   buildErrorEmbed,
@@ -358,6 +359,26 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "Current retrieved at", value: "06/05/2026, 10:43:30 SGT" }),
         expect.objectContaining({ name: "Last stored", value: "181200" }),
         expect.objectContaining({ name: "Last retrieved at", value: "06/05/2026, 10:40:00 SGT" })
+      ])
+    );
+  });
+
+  it("formats check-all channel smoke-check results", () => {
+    const embed = buildCheckAllChannelEmbed({
+      integration: checkedIntegration,
+      ok: true,
+      currentValue: "181300",
+      durationMs: 1234,
+      completed: 2,
+      total: 10
+    }).toJSON();
+
+    expect(embed.title).toBe("Bonbast USD/IRR - Smoke check passed");
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Fetched value", value: "181300" }),
+        expect.objectContaining({ name: "Queue progress", value: "2/10" }),
+        expect.objectContaining({ name: "Mode", value: expect.stringContaining("stored values were not updated") })
       ])
     );
   });

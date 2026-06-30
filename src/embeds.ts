@@ -67,6 +67,16 @@ export type ErrorCleanupSummary = {
   keepLatest: boolean;
 };
 
+export type CheckAllChannelResult = {
+  integration: Integration;
+  ok: boolean;
+  currentValue?: string;
+  durationMs: number;
+  completed: number;
+  total: number;
+  error?: string;
+};
+
 export function buildStatusEmbed(integration: Integration, pollingInfo: StatusPollingInfo = {}): EmbedBuilder {
   const effectiveIntervalMs = pollingInfo.effectiveIntervalMs ?? (pollingInfo.effectiveIntervalMinutes ?? integration.pollIntervalMinutes) * 60_000;
   const archiveFields = formatArchiveFields(integration);
@@ -172,6 +182,24 @@ export function buildCheckEmbed(result: CheckResult): EmbedBuilder {
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 
   return embed;
+}
+
+export function buildCheckAllChannelEmbed(result: CheckAllChannelResult): EmbedBuilder {
+  return baseEmbed(result.integration, result.ok ? "Smoke check passed" : "Smoke check failed")
+    .setColor(result.ok ? successColor : errorColor)
+    .addFields(
+      {
+        name: "Result",
+        value: result.ok ? "Source fetch and parser returned successfully." : truncateEmbedValue(result.error ?? "unknown error"),
+        inline: false
+      },
+      ...(result.ok ? [{ name: "Fetched value", value: formatValue(result.currentValue ?? null), inline: false }] : []),
+      { name: "Queue progress", value: `${result.completed}/${result.total}`, inline: true },
+      { name: "Duration", value: formatDurationMs(result.durationMs), inline: true },
+      { name: "Mode", value: "Fetch-only smoke check; stored values were not updated and alert roles were not mentioned.", inline: false },
+      { name: "Links", value: formatLinks(result.integration), inline: false }
+    )
+    .setFooter({ text: `Checked at ${nowSingaporeDateTime()}` });
 }
 
 export function buildEventCheckEmbed(result: EventCheckResult): EmbedBuilder {
@@ -1215,6 +1243,16 @@ function formatIntervalSummaryFromMinutes(minutes: number): string {
   }
 
   return `${Number.isInteger(minutes) ? minutes : minutes.toFixed(2)} min`;
+}
+
+function formatDurationMs(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
 }
 
 function formatAlertValue(value: string | null): string {
