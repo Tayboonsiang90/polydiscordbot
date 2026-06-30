@@ -145,10 +145,30 @@ describe("UMA vote commit adapter", () => {
     );
     expect(result.posts[0].summaryFields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Commits" })]));
     expect(result.posts[0].hiddenFields).toBeUndefined();
+    expect(result.checkFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Tracked current cycle commits",
+          value: expect.stringContaining("Round 10199: 1 unique voter/request commit(s) above threshold.")
+        }),
+        expect.objectContaining({ name: "Matching commits", value: "2 (1 recommit)" })
+      ])
+    );
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
       lastScannedBlock: 23737650,
       lastRpcUrl: "https://rpc.example",
-      umaCommitThresholdWei: "250000000000000000000000"
+      umaCommitThresholdWei: "250000000000000000000000",
+      umaCommitCycleSummaryThresholdWei: "250000000000000000000000",
+      umaCommitCycleSummaries: [
+        expect.objectContaining({
+          roundId: 10199,
+          uniqueCommitCount: 1,
+          eventCount: 2,
+          recommitCount: 1,
+          voters: ["0x7baa3b328603535006d76d7b80af7260fd8a946a"]
+        })
+      ],
+      umaCommitQualifiedKeys: [expect.objectContaining({ roundId: 10199 })]
     });
   });
 });

@@ -36,6 +36,8 @@ const defaultInitialLookbackBlocks = 20;
 const defaultMaxScanBlocksPerRun = 7_200;
 const maxScanBlocksPerRunLimit = 50_000;
 const maxStoredCommitKeys = 1_000;
+const maxStoredQualifiedCommitKeys = 2_000;
+const maxStoredCycleSummaries = 8;
 const githubRoundRefs = ["voting-committee-1", "main"];
 const roundAnswersCache = new Map<string, Map<string, UmaVotingRoundAnswer>>();
 
@@ -51,6 +53,9 @@ export type UmaVoteCommitSettings = {
   maxScanBlocksPerRun?: number;
   umaCommitThresholdWei?: string;
   umaCommitSeenKeys?: Array<{ key: string; count: number }>;
+  umaCommitQualifiedKeys?: UmaVoteCommitQualifiedKey[];
+  umaCommitCycleSummaries?: UmaVoteCommitCycleSummary[];
+  umaCommitCycleSummaryThresholdWei?: string;
 };
 
 export type EthereumLog = {
@@ -92,6 +97,25 @@ type UmaVoteCommitPostItem = {
   stakeWei: bigint;
   postedAt: Date;
   roundAnswer?: UmaVotingRoundAnswer;
+};
+
+type UmaVoteCommitQualifiedKey = {
+  key: string;
+  roundId: number;
+};
+
+type UmaVoteCommitCycleSummary = {
+  roundId: number;
+  uniqueCommitCount: number;
+  eventCount: number;
+  recommitCount: number;
+  voters: string[];
+  updatedAt: string;
+};
+
+type UmaVoteCommitCycleState = {
+  qualifiedKeys: Map<string, UmaVoteCommitQualifiedKey>;
+  summaries: UmaVoteCommitCycleSummary[];
 };
 
 type JsonRpcResponse<T> = {
@@ -160,7 +184,12 @@ export const umaVoteCommitsAdapter: WebsiteAdapter = {
       .map((log) => decodeUmaVoteCommitLog(log, seenCommitKeys))
       .filter(isUmaVoteCommitEvent)
       .sort(compareCommitEventsAscending);
-    const posts = await normalizeUmaVoteCommitPosts(decodedEvents, thresholdWei, rpcUrls, logResponse.rpcUrl);
+    const matchingItems = await collectUmaVoteCommitPostItems(decodedEvents, thresholdWei, rpcUrls, logResponse.rpcUrl);
+    const posts = normalizeUmaVoteCommitPosts(matchingItems, thresholdWei);
+    const cycleState = updateUmaVoteCommitCycleState(settings, thresholdWei, matchingItems, observedAt);
+    const currentCycleSummary = votingStatus
+      ? cycleState.summaries.find((summary) => summary.roundId === votingStatus.roundId)
+      : undefined;
 
     return {
       posts,
@@ -170,6 +199,9 @@ export const umaVoteCommitsAdapter: WebsiteAdapter = {
         ...parseSettingsJson(integration.settingsJson),
         umaCommitThresholdWei: thresholdWei.toString(),
         umaCommitSeenKeys: commitSeenMapToEntries(seenCommitKeys),
+        umaCommitQualifiedKeys: qualifiedCommitKeyMapToEntries(cycleState.qualifiedKeys),
+        umaCommitCycleSummaries: cycleState.summaries,
+        umaCommitCycleSummaryThresholdWei: thresholdWei.toString(),
         lastScannedBlock: advanceLastScannedBlock(settings.lastScannedBlock, toBlock),
         lastScanRequestedFromBlock: scanPlan.skippedToLiveHead ? scanPlan.requestedFromBlock : undefined,
         lastRpcUrl: logResponse.rpcUrl
@@ -182,9 +214,10 @@ export const umaVoteCommitsAdapter: WebsiteAdapter = {
         latestBlock: latestBlockResponse.result,
         confirmedLatestBlock,
         logsScanned: decodedEvents.length,
-        matchingCommits: posts.length,
-        recommits: posts.filter((post) => post.type === "UMA vote recommit").length,
+        matchingCommits: matchingItems.length,
+        recommits: matchingItems.filter((item) => item.event.previousCommitCount > 0).length,
         votingStatus,
+        currentCycleSummary,
         backfillMode: formatEthGetLogsBackfillMode(scanPlan)
       })
     };
@@ -208,7 +241,10 @@ export const umaVoteCommitsAdapter: WebsiteAdapter = {
     const nextThresholdWei = parseUmaRevealThresholdWei(thresholdQuery);
     const settingsJson = stringifySettingsJson({
       ...settings,
-      umaCommitThresholdWei: nextThresholdWei.toString()
+      umaCommitThresholdWei: nextThresholdWei.toString(),
+      umaCommitQualifiedKeys: nextThresholdWei === previousThresholdWei ? settings.umaCommitQualifiedKeys : undefined,
+      umaCommitCycleSummaries: nextThresholdWei === previousThresholdWei ? settings.umaCommitCycleSummaries : undefined,
+      umaCommitCycleSummaryThresholdWei: nextThresholdWei === previousThresholdWei ? nextThresholdWei.toString() : undefined
     });
     return {
       changed: nextThresholdWei !== previousThresholdWei,
@@ -231,7 +267,11 @@ export function parseUmaVoteCommitSettings(settingsJson: string | null): UmaVote
     initialLookbackBlocks: typeof settings.initialLookbackBlocks === "number" ? settings.initialLookbackBlocks : undefined,
     maxScanBlocksPerRun: typeof settings.maxScanBlocksPerRun === "number" ? settings.maxScanBlocksPerRun : undefined,
     umaCommitThresholdWei: typeof settings.umaCommitThresholdWei === "string" ? settings.umaCommitThresholdWei : undefined,
-    umaCommitSeenKeys: parseCommitSeenEntries(settings.umaCommitSeenKeys)
+    umaCommitSeenKeys: parseCommitSeenEntries(settings.umaCommitSeenKeys),
+    umaCommitQualifiedKeys: parseQualifiedCommitKeyEntries(settings.umaCommitQualifiedKeys),
+    umaCommitCycleSummaries: parseCycleSummaries(settings.umaCommitCycleSummaries),
+    umaCommitCycleSummaryThresholdWei:
+      typeof settings.umaCommitCycleSummaryThresholdWei === "string" ? settings.umaCommitCycleSummaryThresholdWei : undefined
   };
 }
 
@@ -344,16 +384,16 @@ export function normalizeUmaVoteCommitPost(
   };
 }
 
-async function normalizeUmaVoteCommitPosts(
+async function collectUmaVoteCommitPostItems(
   events: UmaVoteCommitEvent[],
   thresholdWei: bigint,
   rpcUrls: string[],
   preferredRpcUrl?: string
-): Promise<EventMonitorPost[]> {
+): Promise<UmaVoteCommitPostItem[]> {
   const blockTimestamps = new Map<number, number>();
   const stakeCache = new Map<string, bigint>();
   const answerMaps = new Map<number, Map<string, UmaVotingRoundAnswer>>();
-  const itemsByVoter = new Map<string, UmaVoteCommitPostItem[]>();
+  const items: UmaVoteCommitPostItem[] = [];
 
   for (const event of events) {
     const stakeCacheKey = `${event.voter}:${event.blockNumber}`;
@@ -379,19 +419,78 @@ async function normalizeUmaVoteCommitPosts(
       answerMaps.set(event.roundId, answerMap);
     }
 
-    const voterKey = event.voter.toLowerCase();
-    const items = itemsByVoter.get(voterKey) ?? [];
     items.push({
       event,
       stakeWei,
       postedAt: new Date(timestamp * 1000),
       roundAnswer: answerMap.get(roundAnswerKey(event))
     });
-    itemsByVoter.set(voterKey, items);
   }
 
-  const posts = [...itemsByVoter.values()].map((items) => normalizeUmaVoteCommitPostGroup(items, thresholdWei));
-  return posts.sort(compareCommitPostsDescending);
+  return items;
+}
+
+function normalizeUmaVoteCommitPosts(items: UmaVoteCommitPostItem[], thresholdWei: bigint): EventMonitorPost[] {
+  const itemsByVoter = new Map<string, UmaVoteCommitPostItem[]>();
+  for (const item of items) {
+    const voterKey = item.event.voter.toLowerCase();
+    const voterItems = itemsByVoter.get(voterKey) ?? [];
+    voterItems.push(item);
+    itemsByVoter.set(voterKey, voterItems);
+  }
+
+  return [...itemsByVoter.values()].map((voterItems) => normalizeUmaVoteCommitPostGroup(voterItems, thresholdWei)).sort(compareCommitPostsDescending);
+}
+
+function updateUmaVoteCommitCycleState(
+  settings: UmaVoteCommitSettings,
+  thresholdWei: bigint,
+  items: UmaVoteCommitPostItem[],
+  observedAt: Date
+): UmaVoteCommitCycleState {
+  const thresholdMatches = settings.umaCommitCycleSummaryThresholdWei === thresholdWei.toString();
+  const qualifiedKeys = thresholdMatches ? qualifiedCommitKeyEntriesToMap(settings.umaCommitQualifiedKeys ?? []) : new Map();
+  const summariesByRound = new Map<number, UmaVoteCommitCycleSummary>(
+    (thresholdMatches ? settings.umaCommitCycleSummaries ?? [] : []).map((summary) => [summary.roundId, cloneCycleSummary(summary)])
+  );
+  const updatedAt = observedAt.toISOString();
+
+  for (const item of items) {
+    const roundId = item.event.roundId;
+    const summary =
+      summariesByRound.get(roundId) ??
+      ({
+        roundId,
+        uniqueCommitCount: 0,
+        eventCount: 0,
+        recommitCount: 0,
+        voters: [],
+        updatedAt
+      } satisfies UmaVoteCommitCycleSummary);
+    const voter = item.event.voter.toLowerCase();
+    const voterSet = new Set(summary.voters.map((candidate) => candidate.toLowerCase()));
+
+    summary.eventCount += 1;
+    if (item.event.previousCommitCount > 0) {
+      summary.recommitCount += 1;
+    }
+    if (!voterSet.has(voter)) {
+      summary.voters = [...summary.voters, voter];
+    }
+    if (!qualifiedKeys.has(item.event.commitKey)) {
+      qualifiedKeys.set(item.event.commitKey, { key: item.event.commitKey, roundId });
+      summary.uniqueCommitCount += 1;
+    }
+    summary.updatedAt = updatedAt;
+    summariesByRound.set(roundId, summary);
+  }
+
+  return {
+    qualifiedKeys,
+    summaries: [...summariesByRound.values()]
+      .sort((left, right) => left.roundId - right.roundId)
+      .slice(-maxStoredCycleSummaries)
+  };
 }
 
 function normalizeUmaVoteCommitPostGroup(items: UmaVoteCommitPostItem[], thresholdWei: bigint): EventMonitorPost {
@@ -544,6 +643,7 @@ function buildCheckFields(input: {
   matchingCommits: number;
   recommits: number;
   votingStatus: { roundId: number; phase: number } | null;
+  currentCycleSummary?: UmaVoteCommitCycleSummary;
   backfillMode?: string;
 }): Array<{ name: string; value: string; inline?: boolean }> {
   return [
@@ -555,10 +655,32 @@ function buildCheckFields(input: {
     },
     { name: "Blocks scanned", value: `${input.fromBlock} to ${input.toBlock}`, inline: false },
     ...(input.backfillMode ? [{ name: "Backfill mode", value: input.backfillMode, inline: false }] : []),
+    { name: "Tracked current cycle commits", value: formatCurrentCycleSummary(input.votingStatus, input.currentCycleSummary), inline: false },
     { name: "Latest block", value: `${input.latestBlock} (${input.confirmedLatestBlock} confirmed)`, inline: true },
     { name: "Commit logs scanned", value: String(input.logsScanned), inline: true },
     { name: "Matching commits", value: `${input.matchingCommits} (${input.recommits} recommit)`, inline: true }
   ];
+}
+
+function formatCurrentCycleSummary(
+  votingStatus: { roundId: number; phase: number } | null,
+  summary?: UmaVoteCommitCycleSummary
+): string {
+  if (!votingStatus) {
+    return "Current round unavailable.";
+  }
+
+  if (!summary) {
+    return `Round ${votingStatus.roundId}: none tracked yet at the current threshold.\nBasis: bot-tracked threshold-qualified logs only; not a full historical backfill.`;
+  }
+
+  return [
+    `Round ${summary.roundId}: ${summary.uniqueCommitCount} unique voter/request commit(s) above threshold.`,
+    `Commit events: ${summary.eventCount} total (${summary.recommitCount} recommit).`,
+    `Unique voters: ${summary.voters.length}.`,
+    `Updated: ${summary.updatedAt}.`,
+    "Basis: bot-tracked threshold-qualified logs only; not a full historical backfill."
+  ].join("\n");
 }
 
 async function fetchLatestBlockNumber(rpcUrls: string[], preferredRpcUrl?: string): Promise<RpcResult<number>> {
@@ -729,6 +851,72 @@ function buildCommitKey(input: { voter: string; roundId: number; identifier: str
   return Buffer.from(
     keccak_256(Buffer.from(`${input.voter.toLowerCase()}:${input.roundId}:${input.identifier}:${input.requestTime}:${normalizeHex(input.ancillaryDataHex)}`))
   ).toString("hex");
+}
+
+function parseQualifiedCommitKeyEntries(value: unknown): UmaVoteCommitQualifiedKey[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const candidate = entry as { key?: unknown; roundId?: unknown };
+      return typeof candidate.key === "string" && isSafeNonNegativeInteger(candidate.roundId)
+        ? { key: candidate.key, roundId: candidate.roundId }
+        : null;
+    })
+    .filter((entry): entry is UmaVoteCommitQualifiedKey => entry !== null);
+}
+
+function qualifiedCommitKeyEntriesToMap(entries: UmaVoteCommitQualifiedKey[]): Map<string, UmaVoteCommitQualifiedKey> {
+  return new Map(entries.map((entry) => [entry.key, entry]));
+}
+
+function qualifiedCommitKeyMapToEntries(map: Map<string, UmaVoteCommitQualifiedKey>): UmaVoteCommitQualifiedKey[] {
+  return [...map.values()].slice(-maxStoredQualifiedCommitKeys);
+}
+
+function parseCycleSummaries(value: unknown): UmaVoteCommitCycleSummary[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const candidate = entry as Record<string, unknown>;
+      if (
+        !isSafeNonNegativeInteger(candidate.roundId) ||
+        !isSafeNonNegativeInteger(candidate.uniqueCommitCount) ||
+        !isSafeNonNegativeInteger(candidate.eventCount) ||
+        !isSafeNonNegativeInteger(candidate.recommitCount)
+      ) {
+        return null;
+      }
+
+      return {
+        roundId: candidate.roundId,
+        uniqueCommitCount: candidate.uniqueCommitCount,
+        eventCount: candidate.eventCount,
+        recommitCount: candidate.recommitCount,
+        voters: Array.isArray(candidate.voters) ? candidate.voters.filter((voter): voter is string => typeof voter === "string") : [],
+        updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : new Date(0).toISOString()
+      };
+    })
+    .filter((entry): entry is UmaVoteCommitCycleSummary => entry !== null)
+    .slice(-maxStoredCycleSummaries);
+}
+
+function cloneCycleSummary(summary: UmaVoteCommitCycleSummary): UmaVoteCommitCycleSummary {
+  return {
+    ...summary,
+    voters: [...summary.voters]
+  };
 }
 
 function parseCommitSeenEntries(value: unknown): Array<{ key: string; count: number }> {
