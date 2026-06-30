@@ -5,8 +5,10 @@ import {
   buildMonitorCommands,
   formatPolymarketLine,
   handleAdapterCommand,
+  isUmaAdapterId,
   listSlashCommandAdapters,
-  normalizePolymarketUrl
+  normalizePolymarketUrl,
+  selectCheckAllTargets
 } from "../src/commands.js";
 import {
   buildCheckEmbed,
@@ -79,12 +81,27 @@ describe("adapter commands", () => {
       name: "bot",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "summarize" }),
+        expect.objectContaining({ name: "checkall" }),
         expect.objectContaining({ name: "clear" }),
         expect.objectContaining({ name: "clearerrors" }),
         expect.objectContaining({ name: "clearroles" }),
         expect.objectContaining({ name: "pruneroles" })
       ])
     });
+  });
+
+  it("selects only active non-UMA integrations for check-all", () => {
+    const integrations: Integration[] = [
+      { ...checkedIntegration, id: 1, adapterId: "bonbast-usd-irr", displayName: "Bonbast USD/IRR", status: "active" },
+      { ...checkedIntegration, id: 2, adapterId: "polymarket-proposals", displayName: "UMA Proposal Alerts", status: "active" },
+      { ...checkedIntegration, id: 3, adapterId: "aaa-regular-gas", displayName: "AAA Regular Gas", status: "paused" },
+      { ...checkedIntegration, id: 4, adapterId: "does-not-exist", displayName: "Unknown Adapter", status: "active" },
+      { ...checkedIntegration, id: 5, guildId: "other-guild", adapterId: "aaa-regular-gas", displayName: "Other Guild", status: "active" }
+    ];
+
+    expect(selectCheckAllTargets(integrations, "guild").map((integration) => integration.displayName)).toEqual(["Bonbast USD/IRR"]);
+    expect(isUmaAdapterId("polymarket-proposals")).toBe(true);
+    expect(isUmaAdapterId("bonbast-usd-irr")).toBe(false);
   });
 
   it("registers a generic monitor command plus UMA-specific command groups", () => {

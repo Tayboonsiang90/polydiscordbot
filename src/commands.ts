@@ -34,7 +34,7 @@ import {
   buildUpdateLogsEmbed
 } from "./embeds.js";
 import { exportAddressLabelsCsv, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
-import { getAdapter, getAdapterByCommandName, listAdapters } from "./integrations/registry.js";
+import { getAdapter, getAdapterByCommandName, hasAdapter, listAdapters } from "./integrations/registry.js";
 import {
   getPolymarketProposalTagFilterByChannelId,
   getPolymarketProposalStoredTagFilter,
@@ -81,6 +81,9 @@ const checkFailedTitleSuffix = " - Check failed";
 const maxAddressImportBytes = 256_000;
 const addressImportDownloadTimeoutMs = 10_000;
 const monitorCommandName = "monitor";
+const checkAllDefaultDelaySeconds = 5;
+const checkAllProgressEditIntervalMs = 30_000;
+const checkAllRuns = new Map<string, CheckAllRunState>();
 const perAdapterCommandAdapterIds = new Set([
   "polymarket-clarifications",
   "polymarket-disputes",
@@ -89,6 +92,7 @@ const perAdapterCommandAdapterIds = new Set([
   "uma-vote-reveals",
   "uma-voting-committee"
 ]);
+const umaAdapterIds = new Set(perAdapterCommandAdapterIds);
 
 export function buildAdapterCommands() {
   return listSlashCommandAdapters().map((adapter) => buildAdapterCommand(adapter));
@@ -534,6 +538,19 @@ export function buildBotCommands() {
       .setName("bot")
       .setDescription("Bot-level utility commands")
       .addSubcommand((subcommand) => subcommand.setName("summarize").setDescription("Summarize all integrations"))
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("checkall")
+          .setDescription("Queue fetch-only checks for all active non-UMA monitors")
+          .addIntegerOption((option) =>
+            option
+              .setName("delay-seconds")
+              .setDescription(`Delay between checks. Defaults to ${checkAllDefaultDelaySeconds}s.`)
+              .setRequired(false)
+              .setMinValue(1)
+              .setMaxValue(60)
+          )
+      )
       .addSubcommand((subcommand) => subcommand.setName("clear").setDescription("Clear messages from the current text channel"))
       .addSubcommand((subcommand) =>
         subcommand
@@ -596,6 +613,54 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
     for (const embed of remainingEmbeds) {
       await interaction.followUp({ embeds: [embed] });
     }
+    return;
+  }
+
+  if (subcommand === "checkall") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      await interaction.editReply("You need Manage Server permission to run all monitor checks.");
+      return;
+    }
+
+    if (!interaction.channel || interaction.channel.type !== ChannelType.GuildText) {
+      await interaction.editReply("Run `/bot checkall` from a text channel so I can post one editable progress message.");
+      return;
+    }
+
+    const guildId = interaction.guild.id;
+    const existingRun = checkAllRuns.get(guildId);
+    if (existingRun) {
+      await interaction.editReply(
+        `A check-all run is already active for this server (${existingRun.completed}/${existingRun.total} complete). Progress: ${existingRun.progressUrl}`
+      );
+      return;
+    }
+
+    const delaySeconds = interaction.options.getInteger("delay-seconds") ?? checkAllDefaultDelaySeconds;
+    const targets = selectCheckAllTargets(database.listActiveIntegrations(), guildId);
+    if (targets.length === 0) {
+      await interaction.editReply("No active non-UMA integrations were found to check.");
+      return;
+    }
+
+    const progressMessage = await interaction.channel.send(formatCheckAllProgressMessage({ total: targets.length, delaySeconds }));
+    const runState: CheckAllRunState = {
+      startedAt: new Date(),
+      total: targets.length,
+      completed: 0,
+      passed: 0,
+      failed: 0,
+      progressUrl: progressMessage.url
+    };
+    checkAllRuns.set(guildId, runState);
+    await interaction.editReply(
+      `Queued ${targets.length} active non-UMA monitor check(s), ${delaySeconds}s apart. This is fetch-only: it does not update stored values or send alerts. Progress: ${progressMessage.url}`
+    );
+    void runCheckAllQueue(targets, delaySeconds, progressMessage, runState).finally(() => {
+      checkAllRuns.delete(guildId);
+    });
     return;
   }
 
@@ -690,6 +755,149 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
 }
 
 type RolePruneMode = "preview" | "delete";
+
+type CheckAllRunState = {
+  startedAt: Date;
+  total: number;
+  completed: number;
+  passed: number;
+  failed: number;
+  progressUrl: string;
+};
+
+export type CheckAllTarget = Integration;
+
+type CheckAllResult = {
+  integration: Integration;
+  ok: boolean;
+  durationMs: number;
+  error?: string;
+};
+
+export function isUmaAdapterId(adapterId: string): boolean {
+  return umaAdapterIds.has(adapterId);
+}
+
+export function selectCheckAllTargets(integrations: Integration[], guildId: string): CheckAllTarget[] {
+  return integrations
+    .filter((integration) => integration.guildId === guildId)
+    .filter((integration) => integration.status === "active")
+    .filter((integration) => hasAdapter(integration.adapterId))
+    .filter((integration) => !isUmaAdapterId(integration.adapterId))
+    .sort((left, right) => left.displayName.localeCompare(right.displayName));
+}
+
+async function runCheckAllQueue(
+  targets: CheckAllTarget[],
+  delaySeconds: number,
+  progressMessage: Message,
+  state: CheckAllRunState
+): Promise<void> {
+  const results: CheckAllResult[] = [];
+  let lastProgressEditAt = 0;
+
+  for (const integration of targets) {
+    const startedAt = Date.now();
+    try {
+      const adapter = getAdapter(integration.adapterId);
+      await adapter.fetchCurrentValue(integration);
+      results.push({ integration, ok: true, durationMs: Date.now() - startedAt });
+      state.passed += 1;
+    } catch (error) {
+      results.push({
+        integration,
+        ok: false,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      state.failed += 1;
+    }
+
+    state.completed += 1;
+    const now = Date.now();
+    if (now - lastProgressEditAt >= checkAllProgressEditIntervalMs || state.completed === state.total) {
+      lastProgressEditAt = now;
+      await progressMessage
+        .edit(formatCheckAllProgressMessage({ total: state.total, delaySeconds, state, results }))
+        .catch(() => null);
+    }
+
+    if (state.completed < state.total) {
+      await sleep(delaySeconds * 1000);
+    }
+  }
+
+  await progressMessage
+    .edit(formatCheckAllProgressMessage({ total: state.total, delaySeconds, state, results, finished: true }))
+    .catch(() => null);
+}
+
+function formatCheckAllProgressMessage(input: {
+  total: number;
+  delaySeconds: number;
+  state?: CheckAllRunState;
+  results?: CheckAllResult[];
+  finished?: boolean;
+}): string {
+  if (!input.state) {
+    return [
+      "Bot check-all queued",
+      `Targets: ${input.total} active non-UMA monitor(s)`,
+      `Delay: ${input.delaySeconds}s between checks`,
+      "Mode: fetch-only; no stored values are updated and no alert messages are sent.",
+      `Progress: 0/${input.total}`
+    ].join("\n");
+  }
+
+  const failures = (input.results ?? []).filter((result) => !result.ok);
+  const failureLines = failures
+    .slice(0, 10)
+    .map((result) => `- ${result.integration.displayName}: ${truncateOneLine(result.error ?? "unknown error", 140)}`);
+  const remainingFailureLine =
+    failures.length > failureLines.length ? [`...and ${failures.length - failureLines.length} more failure(s).`] : [];
+
+  return [
+    input.finished ? "Bot check-all complete" : "Bot check-all running",
+    `Targets: ${input.total} active non-UMA monitor(s)`,
+    `Progress: ${input.state.completed}/${input.state.total}`,
+    `Passed: ${input.state.passed}`,
+    `Failed: ${input.state.failed}`,
+    `Delay: ${input.delaySeconds}s between checks`,
+    `Elapsed: ${formatElapsedTime(Date.now() - input.state.startedAt.getTime())}`,
+    "Mode: fetch-only; no stored values are updated and no alert messages are sent.",
+    ...(failures.length > 0 ? ["", "Failures:", ...failureLines, ...remainingFailureLine] : [])
+  ]
+    .join("\n")
+    .slice(0, 1900);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function formatElapsedTime(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
+function truncateOneLine(value: string, maxLength: number): string {
+  const oneLine = value.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= maxLength) {
+    return oneLine;
+  }
+  return `${oneLine.slice(0, maxLength - 1)}…`;
+}
 
 type RolePruneCandidate = {
   id: string;

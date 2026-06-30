@@ -129,7 +129,7 @@ No archived integrations currently.
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
 - Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
 - One adapter normally creates one monitor channel. Non-UMA integrations use the generic `/monitor` command inside that channel; UMA integrations keep individual UMA command groups, individual UMA alert roles, and reaction selectors. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts and `#bot-status` for runtime health/restart alerts.
-- Shared integration commands are generated in `src/commands.ts`: `/monitor status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `turbo`, `pause`, `archive`, `resume`; channel-specific capability commands such as `period`, `snapshot`, `strikes`, `search`, `tagsearch`, `tags`, `watchlist`, `threshold`, `setup`, and `watch` are visible under `/monitor` but only execute in channels whose adapter supports them. Channel cleanup is bot-level through `/bot clear`.
+- Shared integration commands are generated in `src/commands.ts`: `/monitor status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `turbo`, `pause`, `archive`, `resume`; channel-specific capability commands such as `period`, `snapshot`, `strikes`, `search`, `tagsearch`, `tags`, `watchlist`, `threshold`, `setup`, and `watch` are visible under `/monitor` but only execute in channels whose adapter supports them. Channel cleanup is bot-level through `/bot clear`; server-wide fetch-only smoke checks are queued through `/bot checkall`.
 - Discord allows 100 guild slash commands per app. `src/registerCommands.ts` enforces this cap; normal monitors share `/monitor` so new integrations do not consume one command each.
 - Channel names should identify the monitor topic, while the command is `/monitor` for non-UMA channels.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders.
@@ -231,6 +231,7 @@ Most integrations use the same generic command inside their own channel. Run `/m
 - `/monitor archive reason:market ended`
 - `/monitor resume`
 - `/bot summarize`
+- `/bot checkall delay-seconds:5`
 - `/bot clear`
 - `/bot clearerrors keep-latest:true`
 - `/bot clearroles`
@@ -258,6 +259,7 @@ Use `/monitor turbo seconds:<seconds> duration-minutes:<minutes>` to temporarily
 Use `/monitor archive` when a market is done but the adapter should remain available for future market restarts. Archive sets the integration to `paused`, stores `archivedAt` plus optional `archiveReason` in `settingsJson`, and leaves the channel, role, source code, Polymarket URL, last values, and update logs intact. `/monitor resume` clears archive metadata and resumes polling.
 Use `/monitor updates` in each channel to review recent detected update times and rough SGT/ET hour patterns. Update logs begin from deployment and are not backfilled.
 Use `/bot summarize` anywhere in the server to list all integrations with resolution source, Polymarket URL, parsed market end, and polling interval.
+Use `/bot checkall` to queue a fetch-only smoke check for every active non-UMA integration. It checks one monitor at a time with a configurable delay, posts one editable progress message, and does not update stored values or send normal alerts.
 Check-failure errors are posted to `#errorlogs` when that channel exists. The bot keeps one editable `Check failed` post per integration, updates repeated failures there, and falls back to the integration channel only if `#errorlogs` is unavailable. Use `/bot clearerrors` to scan integration channels plus `#errorlogs` and delete old bot `Check failed` messages; by default it keeps only the newest failure per channel. Use `keep-latest:false` to remove all existing failure messages.
 Use `/bot pruneroles mode:preview` to list stale Discord roles ending in `Alerts` that are no longer referenced by the current category-role or UMA-role mapping. Use `/bot pruneroles mode:delete` only after previewing; by default it skips stale roles that still have members unless `include-member-roles:true` is provided.
 Arbitrage replies are alert-only. `/monitor setup` in `#arb` asks for a shared outcome and YES/NO/BOTH side through dropdowns, then alerts only when the best route is positive after configured platform fees and the minimum edge. Alerts include the buy/sell platform, side, executable amount, fees, and expected profit. Predict and Opinion checks require their API keys in `.env`.
