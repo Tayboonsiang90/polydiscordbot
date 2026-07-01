@@ -5,10 +5,8 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 const sourceUrl = "https://claude-commits.polymarket.com/";
 const apiDataUrl = "https://claude-commits.polymarket.com/api/data";
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
-const githubCommitSearchUrl = "https://api.github.com/search/commits";
 const defaultPolymarketUrl = "https://polymarket.com/event/claude-code-commits-end-of-june";
 const rollingAverageDays = 7;
-const defaultGithubAlphaQuery = "\"Co-Authored-By: Claude\"";
 
 export type ClaudeAverageRow = {
   date: string;
@@ -23,27 +21,6 @@ export type ClaudeAverageBracket = {
   min: number | null;
   max: number | null;
 };
-
-export type ClaudeGithubAlpha = {
-  status: "available";
-  query: string;
-  dayStartUtc: string;
-  checkedAtUtc: string;
-  daySoFarCount: number;
-  previousHourStartUtc: string;
-  previousHourEndUtc: string;
-  previousHourCount: number;
-  dailyizedRunRate: number;
-  incompleteResults: boolean;
-};
-
-export type ClaudeGithubAlphaUnavailable = {
-  status: "unavailable";
-  query: string;
-  reason: string;
-};
-
-export type ClaudeGithubAlphaResult = ClaudeGithubAlpha | ClaudeGithubAlphaUnavailable;
 
 type GammaEvent = {
   endDate?: string;
@@ -72,18 +49,16 @@ export const claudeCodeCommitsAverageAdapter: WebsiteAdapter = {
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const observedAt = new Date();
     const polymarketUrl = integration?.polymarketUrl ?? defaultPolymarketUrl;
-    const [rows, market, githubAlpha] = await Promise.all([
+    const [rows, market] = await Promise.all([
       fetchClaudeAverageRows(),
-      fetchClaudeAverageMarket(polymarketUrl),
-      fetchClaudeGithubAlphaSafe(observedAt)
+      fetchClaudeAverageMarket(polymarketUrl)
     ]);
     const value = formatClaudeAverageValue({
       rows,
       brackets: market.brackets,
       sourceUrl,
       polymarketUrl,
-      resolutionDate: market.resolutionDate,
-      githubAlpha
+      resolutionDate: market.resolutionDate
     });
 
     return {
@@ -138,7 +113,6 @@ export function formatClaudeAverageValue(input: {
   sourceUrl: string;
   polymarketUrl: string;
   resolutionDate: string;
-  githubAlpha?: ClaudeGithubAlphaResult;
 }): string {
   const latest = input.rows.at(-1) ?? null;
   const previous = input.rows.length > 1 ? input.rows.at(-2) ?? null : null;
@@ -167,74 +141,9 @@ export function formatClaudeAverageValue(input: {
     `Worst-case final 7D avg if unknown final-window days are 0: ${formatCompact(worstCaseAverage)}`,
     "Remaining-day averages needed:",
     formatNeededAverages(input.brackets, knownFinalSum, remainingFinalDays),
-    ...formatClaudeGithubAlphaLines(input.githubAlpha),
     `Resolution: ${input.sourceUrl}`,
     `Polymarket: ${input.polymarketUrl}`
   ].join("\n");
-}
-
-export async function fetchClaudeGithubAlphaSafe(now = new Date()): Promise<ClaudeGithubAlphaResult> {
-  const query = getClaudeGithubAlphaQuery();
-  try {
-    return await fetchClaudeGithubAlpha(now, query);
-  } catch (error) {
-    return {
-      status: "unavailable",
-      query,
-      reason: error instanceof Error ? error.message : String(error)
-    };
-  }
-}
-
-export async function fetchClaudeGithubAlpha(now: Date, query = getClaudeGithubAlphaQuery()): Promise<ClaudeGithubAlpha> {
-  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
-  const currentHourStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), 0, 0));
-  const previousHourStart = new Date(currentHourStart.getTime() - 60 * 60_000);
-  const [daySoFar, previousHour] = await Promise.all([
-    fetchGithubCommitSearchCount(query, dayStart, now),
-    fetchGithubCommitSearchCount(query, previousHourStart, currentHourStart)
-  ]);
-  const elapsedHours = Math.max((now.getTime() - dayStart.getTime()) / (60 * 60_000), 1 / 60);
-
-  return {
-    status: "available",
-    query,
-    dayStartUtc: formatUtcMinute(dayStart),
-    checkedAtUtc: formatUtcMinute(now),
-    daySoFarCount: daySoFar.count,
-    previousHourStartUtc: formatUtcMinute(previousHourStart),
-    previousHourEndUtc: formatUtcMinute(currentHourStart),
-    previousHourCount: previousHour.count,
-    dailyizedRunRate: Math.round((daySoFar.count / elapsedHours) * 24),
-    incompleteResults: daySoFar.incompleteResults || previousHour.incompleteResults
-  };
-}
-
-export function formatClaudeGithubAlphaLines(alpha: ClaudeGithubAlphaResult | undefined): string[] {
-  if (!alpha) {
-    return [];
-  }
-
-  if (alpha.status === "unavailable") {
-    return [
-      "GitHub alpha (not resolution):",
-      `Query: ${alpha.query}`,
-      `Status: unavailable (${alpha.reason})`
-    ];
-  }
-
-  return [
-    "GitHub alpha (not resolution):",
-    `Query: ${alpha.query}`,
-    `UTC day so far: ${formatCompact(alpha.daySoFarCount)} commits (${alpha.dayStartUtc} to ${alpha.checkedAtUtc})`,
-    `Previous full hour: ${formatCompact(alpha.previousHourCount)} commits (${alpha.previousHourStartUtc} to ${alpha.previousHourEndUtc})`,
-    `Dailyized alpha run rate: ${formatCompact(alpha.dailyizedRunRate)}/day`,
-    `GitHub incomplete results: ${alpha.incompleteResults ? "yes" : "no"}`
-  ];
-}
-
-export function buildClaudeGithubCommitSearchQuery(baseQuery: string, start: Date, end: Date): string {
-  return `${baseQuery} committer-date:${formatGithubSearchDate(start)}..${formatGithubSearchDate(end)}`;
 }
 
 function buildClaudeAverageRawValue(rows: ClaudeAverageRow[]): string {
@@ -256,35 +165,6 @@ async function fetchClaudeAverageRows(): Promise<ClaudeAverageRow[]> {
     throw new Error("Could not find Claude Code Commit rows in tracker response");
   }
   return rows;
-}
-
-async function fetchGithubCommitSearchCount(query: string, start: Date, end: Date): Promise<{ count: number; incompleteResults: boolean }> {
-  const url = new URL(githubCommitSearchUrl);
-  url.searchParams.set("q", buildClaudeGithubCommitSearchQuery(query, start, end));
-  url.searchParams.set("per_page", "1");
-  const headers: Record<string, string> = {
-    accept: "application/vnd.github.cloak-preview+json",
-    "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-  };
-  const token = process.env.GITHUB_TOKEN?.trim();
-  if (token) {
-    headers.authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetchWithTimeout(url.toString(), { headers });
-  if (!response.ok) {
-    throw new Error(`GitHub commit search returned HTTP ${response.status}`);
-  }
-
-  const payload = (await response.json()) as unknown;
-  if (!isRecord(payload) || typeof payload.total_count !== "number") {
-    throw new Error("GitHub commit search did not return a total_count");
-  }
-
-  return {
-    count: payload.total_count,
-    incompleteResults: payload.incomplete_results === true
-  };
 }
 
 async function fetchClaudeAverageMarket(polymarketUrl: string): Promise<{ brackets: ClaudeAverageBracket[]; resolutionDate: string }> {
@@ -462,18 +342,6 @@ function formatSignedCompact(value: number): string {
 
 function formatSignedDecimal(value: number): string {
   return `${value >= 0 ? "+" : "-"}${Math.abs(value).toFixed(1)}%`;
-}
-
-function getClaudeGithubAlphaQuery(): string {
-  return process.env.CLAUDE_GITHUB_ALPHA_QUERY?.trim() || defaultGithubAlphaQuery;
-}
-
-function formatGithubSearchDate(value: Date): string {
-  return value.toISOString().replace(/\.\d{3}Z$/, "Z");
-}
-
-function formatUtcMinute(value: Date): string {
-  return value.toISOString().slice(0, 16).replace("T", " ") + " UTC";
 }
 
 function formatDecimal(value: number): string {
