@@ -187,7 +187,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("jobsadded").getPollIntervalMinutes?.({ polymarketUrl: "https://polymarket.com/event/how-many-jobs-added-in-may-945" } as never, new Date("2026-06-04T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("durablegoods").getPollIntervalMinutes?.({} as never, new Date("2026-06-25T13:00:00.000Z"))).toBe(1);
-    expect(getAdapterByCommandName("umichsentiment").getPollIntervalMinutes?.({} as never, new Date("2026-06-26T14:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("umichsentiment").getPollIntervalMinutes?.({} as never, new Date("2026-07-31T14:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("trumpschedule").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T13:00:00.000Z"))).toBe(15);
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
     expect(getAdapterByCommandName("pumpgo").getPollIntervalMinutes?.({} as never)).toBe(1);
