@@ -8,6 +8,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const gammaEventsUrl = "https://gamma-api.polymarket.com/events";
 const secondMarketRenderPrefix = "https://r.jina.ai/http://";
+const secondMarketPublicApiBaseUrl = "https://api-npm17-data-company-pricing-review-prod.k8s-prod-1.npmdev.net/api/public/companies";
 const userAgent = "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1";
 const burstPollIntervalMinutes = 10 / 60;
 const normalPollIntervalMinutes = 1;
@@ -54,6 +55,22 @@ type GammaSearchEvent = {
   creationDate?: unknown;
   createdAt?: unknown;
   endDate?: unknown;
+};
+
+type NpmPublicCompanyResponse = {
+  latest_npm_price?: {
+    price?: unknown;
+    date?: unknown;
+    implied_valuation?: unknown;
+  };
+  latest_tape_d?: {
+    price?: unknown;
+    date?: unknown;
+    implied_valuation?: unknown;
+  };
+  company?: {
+    dba_name?: unknown;
+  };
 };
 
 const configs: NpmValuationConfig[] = [
@@ -310,6 +327,25 @@ export function extractNpmValuationSnapshot(markdown: string, sourceUrl: string)
   };
 }
 
+export function extractNpmValuationSnapshotFromApi(payload: NpmPublicCompanyResponse, sourceUrl: string): NpmValuationSnapshot {
+  const latestPrice = payload.latest_npm_price ?? payload.latest_tape_d;
+  const companyName = typeof payload.company?.dba_name === "string" ? payload.company.dba_name.trim() : "";
+  const asOf = typeof latestPrice?.date === "string" ? formatNpmApiDate(latestPrice.date) : "";
+  const valuation = formatNpmDollarValue(latestPrice?.implied_valuation, 3);
+  const pricePerShare = formatNpmDollarValue(latestPrice?.price, 2);
+  if (!companyName || !asOf || !valuation || !pricePerShare) {
+    throw new Error("Could not parse NPM valuation snapshot from public API");
+  }
+
+  return {
+    companyName,
+    asOf,
+    valuation,
+    pricePerShare,
+    sourceUrl
+  };
+}
+
 export function formatNpmValuationValue(snapshot: NpmValuationSnapshot): string {
   return [
     "Metric: NPM private company valuation",
@@ -425,18 +461,43 @@ export function normalizeNpmValuationMarketSearchEvent(
 async function fetchNpmValuationSnapshot(config: NpmValuationConfig): Promise<NpmValuationSnapshot> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const markdown = await fetchNpmValuationMarkdown(config.sourceUrl);
     try {
-      return extractNpmValuationSnapshot(markdown, config.sourceUrl);
+      return await fetchNpmValuationSnapshotFromApi(config.sourceUrl);
     } catch (error) {
       lastError = error;
-      await delay(1_000);
+      try {
+        const markdown = await fetchNpmValuationMarkdown(config.sourceUrl);
+        return extractNpmValuationSnapshot(markdown, config.sourceUrl);
+      } catch (fallbackError) {
+        lastError = fallbackError;
+        await delay(1_000);
+      }
     }
   }
 
   throw new Error(
     `Could not parse NPM valuation data for ${config.companyName}: ${lastError instanceof Error ? lastError.message : String(lastError)}`
   );
+}
+
+async function fetchNpmValuationSnapshotFromApi(sourceUrl: string): Promise<NpmValuationSnapshot> {
+  const companyGuid = parseNpmCompanyGuid(sourceUrl);
+  if (!companyGuid) {
+    throw new Error(`Could not parse NPM company id from ${sourceUrl}`);
+  }
+
+  const response = await fetchWithTimeout(`${secondMarketPublicApiBaseUrl}/${encodeURIComponent(companyGuid)}`, {
+    headers: {
+      accept: "application/json",
+      "user-agent": userAgent
+    }
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`NPM public API returned HTTP ${response.status}: ${text.slice(0, 160)}`);
+  }
+
+  return extractNpmValuationSnapshotFromApi(JSON.parse(text) as NpmPublicCompanyResponse, sourceUrl);
 }
 
 async function fetchNpmValuationMarkdown(sourceUrl: string): Promise<string> {
@@ -618,6 +679,48 @@ function matchSingleLine(value: string, pattern: RegExp): string | null {
 function matchAfterHeading(markdown: string, heading: string): string | null {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return markdown.match(new RegExp(`^${escaped}\\s*\\n\\s*##\\s*([^\\n]+)`, "m"))?.[1]?.trim() ?? null;
+}
+
+function parseNpmCompanyGuid(sourceUrl: string): string | null {
+  const match = sourceUrl.match(/\/companies\/([^/?#]+)\/data/i);
+  return match?.[1] ?? null;
+}
+
+function formatNpmApiDate(value: string): string {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(date);
+}
+
+function formatNpmDollarValue(value: unknown, decimals: number): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  const absValue = Math.abs(value);
+  const units = [
+    { suffix: "T", divisor: 1_000_000_000_000 },
+    { suffix: "B", divisor: 1_000_000_000 },
+    { suffix: "M", divisor: 1_000_000 }
+  ];
+  const unit = units.find((candidate) => absValue >= candidate.divisor);
+  if (!unit) {
+    return `$${value.toFixed(decimals)}`;
+  }
+
+  return `$${trimTrailingZeros((value / unit.divisor).toFixed(decimals))}${unit.suffix}`;
+}
+
+function trimTrailingZeros(value: string): string {
+  return value.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
 }
 
 function getEasternTimeParts(date: Date): { hour: number; minute: number; second: number } {

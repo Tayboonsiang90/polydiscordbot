@@ -3,6 +3,7 @@ import type { Integration } from "../src/integrations/types.js";
 import {
   createNpmPrivateValuationAdapter,
   extractNpmValuationSnapshot,
+  extractNpmValuationSnapshotFromApi,
   formatNpmValuationValue,
   getNpmValuationPollIntervalMinutes,
   isNpmValuationBurstWindow,
@@ -53,6 +54,30 @@ describe("NPM private valuation adapters", () => {
       valuation: "$1.097T",
       pricePerShare: "$669.86",
       sourceUrl: "https://fe.secondmarket.com/companies/company-3e197763-4ff8-4d8c-bd1f-cc2792937757/data"
+    });
+  });
+
+  it("extracts the public NPM API valuation snapshot", () => {
+    const snapshot = extractNpmValuationSnapshotFromApi(
+      {
+        latest_npm_price: {
+          date: "2026-06-29",
+          price: 346.85941623,
+          implied_valuation: 12171580993.372587
+        },
+        company: {
+          dba_name: "Epic Games"
+        }
+      },
+      "https://fe.secondmarket.com/companies/company-625e5f47-7ff7-45c4-be95-0305665164bd/data"
+    );
+
+    expect(snapshot).toEqual({
+      companyName: "Epic Games",
+      asOf: "Jun 29, 2026",
+      valuation: "$12.172B",
+      pricePerShare: "$346.86",
+      sourceUrl: "https://fe.secondmarket.com/companies/company-625e5f47-7ff7-45c4-be95-0305665164bd/data"
     });
   });
 
