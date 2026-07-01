@@ -51,6 +51,20 @@ const expectedCommandIds = [
   ["gistemp", "nasa-gistemp-temperature"],
   ["tornadoes", "ncei-tornadoes"],
   ["nytfront", "nyt-front-page"],
+  ["anthropicvaluation", "npm-anthropic-valuation"],
+  ["andurilvaluation", "npm-anduril-valuation"],
+  ["bytedancevaluation", "npm-bytedance-valuation"],
+  ["canvavaluation", "npm-canva-valuation"],
+  ["databricksvaluation", "npm-databricks-valuation"],
+  ["epicgamesvaluation", "npm-epic-games-valuation"],
+  ["gleanvaluation", "npm-glean-valuation"],
+  ["krakenvaluation", "npm-kraken-valuation"],
+  ["lambdavaluation", "npm-lambda-valuation"],
+  ["neuralinkvaluation", "npm-neuralink-valuation"],
+  ["openaivaluation", "npm-openai-valuation"],
+  ["perplexityvaluation", "npm-perplexity-valuation"],
+  ["revolutvaluation", "npm-revolut-valuation"],
+  ["stripevaluation", "npm-stripe-valuation"],
   ["atlantarain", "noaa-atlanta-rain"],
   ["bostonrain", "noaa-boston-rain"],
   ["dallasrain", "noaa-dallas-rain"],
@@ -224,6 +238,9 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("nytfront").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("nytfront").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("nytfront").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("databricksvaluation").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("databricksvaluation").getPollIntervalMinutes?.({} as never, new Date("2026-07-01T17:00:00.000Z"))).toBe(10 / 60);
+    expect(getAdapterByCommandName("openaivaluation").getPollIntervalMinutes?.({} as never, new Date("2026-07-01T18:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("spotifyglobal").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();

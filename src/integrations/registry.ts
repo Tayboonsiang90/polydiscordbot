@@ -46,6 +46,7 @@ import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
 import { nceiTornadoesAdapter } from "./nceiTornadoes.js";
 import { nasaGistempAdapter } from "./nasaGistemp.js";
 import { nytFrontPageAdapter } from "./nytFrontPage.js";
+import { npmPrivateValuationAdapters } from "./npmPrivateValuations.js";
 import { noaaNycPrecipAdapter } from "./noaaNycPrecip.js";
 import {
   noaaAtlantaRainAdapter,
@@ -156,6 +157,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [nceiTornadoesAdapter.id, nceiTornadoesAdapter],
   [nasaGistempAdapter.id, nasaGistempAdapter],
   [nytFrontPageAdapter.id, nytFrontPageAdapter],
+  ...npmPrivateValuationAdapters.map((adapter) => [adapter.id, adapter] as [string, WebsiteAdapter]),
   [noaaAtlantaRainAdapter.id, noaaAtlantaRainAdapter],
   [noaaBostonRainAdapter.id, noaaBostonRainAdapter],
   [noaaDallasRainAdapter.id, noaaDallasRainAdapter],
