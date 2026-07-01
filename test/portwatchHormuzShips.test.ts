@@ -55,6 +55,109 @@ const rows = normalizePortwatchHormuzRows({
   ]
 });
 
+const finalizedPreviousWeekRows = normalizePortwatchHormuzRows({
+  features: [
+    {
+      attributes: {
+        date: "2026-06-22",
+        portid: "chokepoint6",
+        portname: "Strait of Hormuz",
+        n_container: 0,
+        n_dry_bulk: 4,
+        n_general_cargo: 1,
+        n_roro: 0,
+        n_tanker: 9,
+        n_total: 14,
+        ObjectId: 16851
+      }
+    },
+    {
+      attributes: {
+        date: "2026-06-23",
+        portid: "chokepoint6",
+        portname: "Strait of Hormuz",
+        n_container: 2,
+        n_dry_bulk: 5,
+        n_general_cargo: 3,
+        n_roro: 0,
+        n_tanker: 5,
+        n_total: 15,
+        ObjectId: 16852
+      }
+    },
+    {
+      attributes: {
+        date: "2026-06-24",
+        portid: "chokepoint6",
+        portname: "Strait of Hormuz",
+        n_container: 8,
+        n_dry_bulk: 20,
+        n_general_cargo: 2,
+        n_roro: 1,
+        n_tanker: 21,
+        n_total: 52,
+        ObjectId: 16853
+      }
+    },
+    {
+      attributes: {
+        date: "2026-06-25",
+        portid: "chokepoint6",
+        portname: "Strait of Hormuz",
+        n_container: 10,
+        n_dry_bulk: 14,
+        n_general_cargo: 4,
+        n_roro: 0,
+        n_tanker: 23,
+        n_total: 51,
+        ObjectId: 16854
+      }
+    },
+    {
+      attributes: {
+        date: "2026-06-26",
+        portid: "chokepoint6",
+        portname: "Strait of Hormuz",
+        n_container: 4,
+        n_dry_bulk: 10,
+        n_general_cargo: 5,
+        n_roro: 0,
+        n_tanker: 20,
+        n_total: 39,
+        ObjectId: 16855
+      }
+    },
+    {
+      attributes: {
+        date: "2026-06-27",
+        portid: "chokepoint6",
+        portname: "Strait of Hormuz",
+        n_container: 7,
+        n_dry_bulk: 7,
+        n_general_cargo: 6,
+        n_roro: 0,
+        n_tanker: 10,
+        n_total: 30,
+        ObjectId: 16856
+      }
+    },
+    {
+      attributes: {
+        date: "2026-06-28",
+        portid: "chokepoint6",
+        portname: "Strait of Hormuz",
+        n_container: 9,
+        n_dry_bulk: 3,
+        n_general_cargo: 3,
+        n_roro: 0,
+        n_tanker: 12,
+        n_total: 27,
+        ObjectId: 16857
+      }
+    }
+  ]
+});
+
 describe("IMF Portwatch Hormuz ships adapter", () => {
   it("normalizes only Strait of Hormuz daily rows", () => {
     expect(rows).toHaveLength(2);
@@ -72,6 +175,22 @@ describe("IMF Portwatch Hormuz ships adapter", () => {
         "Latest data date: 2026-06-02"
       ].join("\n")
     );
+  });
+
+  it("keeps the previous weekly market visible after rollover until it finalizes", () => {
+    const value = formatPortwatchHormuzValue(
+      finalizedPreviousWeekRows,
+      "2026-06-29",
+      "2026-07-05",
+      "https://polymarket.com/event/how-many-ships-transit-the-strait-of-hormuz-week-of-june-29"
+    );
+
+    expect(value).toContain("Window: 2026-06-29 to 2026-07-05");
+    expect(value).toContain("Reported days: 0/7");
+    expect(value).toContain("Previous finalized market window:");
+    expect(value).toContain("Previous window: 2026-06-22 to 2026-06-28");
+    expect(value).toContain("Previous total transit calls: 228");
+    expect(value).toContain("2026-06-28: 27");
   });
 
   it("appends MarineTraffic alpha context when configured", () => {

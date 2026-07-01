@@ -46,6 +46,18 @@ export type PortwatchHormuzRow = {
   ObjectId: number;
 };
 
+type HormuzWindowSummary = {
+  startDate: string;
+  endDate: string;
+  dates: string[];
+  reportedRows: PortwatchHormuzRow[];
+  missingDates: string[];
+  total: number;
+  average: number;
+  latestRow: PortwatchHormuzRow | undefined;
+  dailyValues: string;
+};
+
 export const portwatchHormuzShipsAdapter: WebsiteAdapter = {
   id: "portwatch-hormuz-ships",
   commandName: "hormuzships",
@@ -152,6 +164,35 @@ export function formatPortwatchHormuzValue(
   polymarketUrl = defaultPolymarketUrl,
   marineTrafficAlpha: MarineTrafficAlphaSnapshot | null = null
 ): string {
+  const currentWindow = summarizeHormuzWindow(rows, startDate, endDate, rows.at(-1));
+  const previousFinalizedWindow = getPreviousFinalizedHormuzWindow(rows, currentWindow);
+
+  return [
+    "Metric: IMF Portwatch Strait of Hormuz transit calls",
+    `Window: ${startDate} to ${endDate}`,
+    `Status: ${currentWindow.missingDates.length === 0 ? "complete" : "partial"}`,
+    `Reported days: ${currentWindow.reportedRows.length}/${currentWindow.dates.length}`,
+    `Total transit calls: ${formatInteger(currentWindow.total)}`,
+    `Average daily calls: ${formatDecimal(currentWindow.average)}`,
+    `Latest data date: ${currentWindow.latestRow?.date ?? "none"}`,
+    `Latest ObjectId: ${currentWindow.latestRow?.ObjectId ?? "none"}`,
+    `Missing dates: ${currentWindow.missingDates.length ? currentWindow.missingDates.join(", ") : "none"}`,
+    `Daily values: ${currentWindow.dailyValues || "none"}`,
+    ...formatPreviousFinalizedHormuzWindow(previousFinalizedWindow),
+    ...formatMarineTrafficAlphaSnapshot(marineTrafficAlpha),
+    `Categories: container, dry bulk, general cargo, roll-on/roll-off, tanker`,
+    `Resolution: ${sourceUrl}`,
+    `API: ${buildPortwatchHormuzApiUrl()}`,
+    `Polymarket: ${polymarketUrl}`
+  ].join("\n");
+}
+
+function summarizeHormuzWindow(
+  rows: PortwatchHormuzRow[],
+  startDate: string,
+  endDate: string,
+  fallbackLatestRow: PortwatchHormuzRow | undefined
+): HormuzWindowSummary {
   const dates = enumerateDates(startDate, endDate);
   const rowByDate = new Map(rows.map((row) => [row.date, row]));
   const reportedRows = dates.flatMap((date) => {
@@ -161,26 +202,43 @@ export function formatPortwatchHormuzValue(
   const missingDates = dates.filter((date) => !rowByDate.has(date));
   const total = reportedRows.reduce((sum, row) => sum + row.n_total, 0);
   const average = reportedRows.length > 0 ? total / reportedRows.length : 0;
-  const latestRow = reportedRows.at(-1) ?? rows.at(-1);
-  const dailyValues = reportedRows.map(formatDailyRow).join(" | ");
+  return {
+    startDate,
+    endDate,
+    dates,
+    reportedRows,
+    missingDates,
+    total,
+    average,
+    latestRow: reportedRows.at(-1) ?? fallbackLatestRow,
+    dailyValues: reportedRows.map(formatDailyRow).join(" | ")
+  };
+}
+
+function getPreviousFinalizedHormuzWindow(rows: PortwatchHormuzRow[], currentWindow: HormuzWindowSummary): HormuzWindowSummary | null {
+  if (currentWindow.missingDates.length === 0 || currentWindow.dates.length === 0) {
+    return null;
+  }
+
+  const previousStartDate = shiftDate(currentWindow.startDate, -currentWindow.dates.length);
+  const previousEndDate = shiftDate(currentWindow.startDate, -1);
+  const previousWindow = summarizeHormuzWindow(rows, previousStartDate, previousEndDate, undefined);
+  return previousWindow.missingDates.length === 0 ? previousWindow : null;
+}
+
+function formatPreviousFinalizedHormuzWindow(window: HormuzWindowSummary | null): string[] {
+  if (!window) {
+    return [];
+  }
 
   return [
-    "Metric: IMF Portwatch Strait of Hormuz transit calls",
-    `Window: ${startDate} to ${endDate}`,
-    `Status: ${missingDates.length === 0 ? "complete" : "partial"}`,
-    `Reported days: ${reportedRows.length}/${dates.length}`,
-    `Total transit calls: ${formatInteger(total)}`,
-    `Average daily calls: ${formatDecimal(average)}`,
-    `Latest data date: ${latestRow?.date ?? "none"}`,
-    `Latest ObjectId: ${latestRow?.ObjectId ?? "none"}`,
-    `Missing dates: ${missingDates.length ? missingDates.join(", ") : "none"}`,
-    `Daily values: ${dailyValues || "none"}`,
-    ...formatMarineTrafficAlphaSnapshot(marineTrafficAlpha),
-    `Categories: container, dry bulk, general cargo, roll-on/roll-off, tanker`,
-    `Resolution: ${sourceUrl}`,
-    `API: ${buildPortwatchHormuzApiUrl()}`,
-    `Polymarket: ${polymarketUrl}`
-  ].join("\n");
+    "Previous finalized market window:",
+    `Previous window: ${window.startDate} to ${window.endDate}`,
+    `Previous reported days: ${window.reportedRows.length}/${window.dates.length}`,
+    `Previous total transit calls: ${formatInteger(window.total)}`,
+    `Previous average daily calls: ${formatDecimal(window.average)}`,
+    `Previous daily values: ${window.dailyValues || "none"}`
+  ];
 }
 
 export async function refreshHormuzShipsPolymarketQueue(
@@ -355,6 +413,11 @@ function enumerateDates(startDate: string, endDate: string): string[] {
   }
 
   return dates;
+}
+
+function shiftDate(date: string, days: number): string {
+  const timestamp = Date.parse(`${date}T12:00:00.000Z`) + days * 24 * 60 * 60_000;
+  return new Date(timestamp).toISOString().slice(0, 10);
 }
 
 function formatDailyRow(row: PortwatchHormuzRow): string {
