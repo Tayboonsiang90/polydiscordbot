@@ -246,7 +246,9 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("databricksvaluation").getPollIntervalMinutes?.({} as never, new Date("2026-07-01T17:00:00.000Z"))).toBe(10 / 60);
     expect(getAdapterByCommandName("openaivaluation").getPollIntervalMinutes?.({} as never, new Date("2026-07-01T18:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("spotifyglobal").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("spotifyglobal").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("spotifyusa").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").getPollIntervalMinutes?.({} as never)).toBe(60);

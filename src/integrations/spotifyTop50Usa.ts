@@ -1,9 +1,11 @@
 ﻿import type { AdapterValue, WebsiteAdapter } from "./types.js";
+import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 import type { Integration } from "./types.js";
 
 const sourceUrl = "https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp";
+const kworbUsDailyUrl = "https://kworb.net/spotify/country/us_daily.html";
 const playlistUri = "spotify:playlist:37i9dQZEVXbLRQDuF5jeBp";
 const spotifyFetchAttempts = 3;
 const spotifyRetryDelaysMs = [1_000, 3_000];
@@ -46,6 +48,30 @@ type SpotifyArtist = {
     name?: string;
   };
   uri?: string;
+};
+
+export type KworbSpotifyDailyChart = {
+  chartName: string;
+  chartDate: string;
+  spotifyUrl: string;
+  kworbUrl: string;
+  tracks: KworbSpotifyChartTrack[];
+};
+
+export type KworbSpotifyChartTrack = {
+  position: number;
+  movement: string;
+  artist: string;
+  title: string;
+  artistAndTitle: string;
+  days: string;
+  peak: string;
+  peakCount: string;
+  streams: string;
+  streamsChange: string;
+  sevenDayStreams: string;
+  sevenDayStreamsChange: string;
+  totalStreams: string;
 };
 
 export function extractSpotifyTop50UsaNumberOne(html: string): string {
@@ -105,6 +131,105 @@ export async function fetchSpotifyTop50Value(
   throw new Error(`${chartName} temporarily unavailable after ${spotifyFetchAttempts} attempt(s)`);
 }
 
+export async function fetchKworbSpotifyTop10Value(
+  kworbUrl: string,
+  spotifyUrl: string,
+  chartName: string,
+  unit: string
+): Promise<AdapterValue> {
+  const response = await fetchWithTimeout(kworbUrl, {
+    headers: {
+      "user-agent": "Mozilla/5.0"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Kworb returned HTTP ${response.status}`);
+  }
+
+  const html = await response.text();
+  const chart = extractKworbSpotifyDailyChartTop10(html, chartName, spotifyUrl, kworbUrl);
+  const value = formatKworbSpotifyDailyChartValue(chart);
+  return {
+    value,
+    rawValue: JSON.stringify(chart),
+    unit,
+    observedAt: new Date()
+  };
+}
+
+export function extractKworbSpotifyDailyChartTop10(
+  html: string,
+  chartName: string,
+  spotifyUrl: string,
+  kworbUrl: string
+): KworbSpotifyDailyChart {
+  const $ = cheerio.load(html);
+  const pageTitle = normalizeText($(".pagetitle").first().text());
+  const chartDate = pageTitle.match(/-\s*(\d{4}\/\d{2}\/\d{2})(?:\s*\||$)/)?.[1];
+  if (!chartDate) {
+    throw new Error(`Could not find Kworb chart date for ${chartName}`);
+  }
+
+  const tracks: KworbSpotifyChartTrack[] = [];
+  $("#spotifydaily tbody tr")
+    .slice(0, 10)
+    .each((_, row) => {
+      const cells = $(row).find("td");
+      const artistTitleCell = cells.eq(2);
+      const links = artistTitleCell.find("a");
+      const artist = normalizeText(links.eq(0).text());
+      const title = normalizeText(links.eq(1).text());
+      const artistAndTitle = normalizeText(artistTitleCell.text()) || [artist, title].filter(Boolean).join(" - ");
+
+      tracks.push({
+        position: Number.parseInt(normalizeText(cells.eq(0).text()), 10),
+        movement: normalizeText(cells.eq(1).text()),
+        artist,
+        title,
+        artistAndTitle,
+        days: normalizeText(cells.eq(3).text()),
+        peak: normalizeText(cells.eq(4).text()),
+        peakCount: normalizeText(cells.eq(5).text()),
+        streams: normalizeText(cells.eq(6).text()),
+        streamsChange: normalizeText(cells.eq(7).text()),
+        sevenDayStreams: normalizeText(cells.eq(8).text()),
+        sevenDayStreamsChange: normalizeText(cells.eq(9).text()),
+        totalStreams: normalizeText(cells.eq(10).text())
+      });
+    });
+
+  if (tracks.length < 10 || tracks.some((track) => !Number.isInteger(track.position) || !track.artistAndTitle)) {
+    throw new Error(`Could not parse Kworb top 10 rows for ${chartName}`);
+  }
+
+  return {
+    chartName,
+    chartDate,
+    spotifyUrl,
+    kworbUrl,
+    tracks
+  };
+}
+
+export function formatKworbSpotifyDailyChartValue(chart: KworbSpotifyDailyChart): string {
+  const rows = chart.tracks.map((track) => {
+    const movement = track.movement ? ` ${track.movement}` : "";
+    const peak = track.peak ? `, peak #${track.peak}${track.peakCount ? ` ${track.peakCount}` : ""}` : "";
+    const days = track.days ? `, ${track.days}d` : "";
+    const streams = track.streams ? `${track.streams} streams` : "streams n/a";
+    return `#${track.position}${movement} ${track.artistAndTitle} — ${streams}${days}${peak}`;
+  });
+
+  return [
+    `Metric: ${chart.chartName} daily top 10`,
+    `Chart date: ${chart.chartDate} (Kworb daily chart)`,
+    "Top 10:",
+    ...rows,
+    `Spotify playlist: ${chart.spotifyUrl}`,
+    `Kworb details: ${chart.kworbUrl}`
+  ].join("\n");
+}
+
 export const spotifyTop50UsaAdapter: WebsiteAdapter = {
   id: "spotify-top-50-usa",
   commandName: "spotifyusa",
@@ -117,8 +242,19 @@ export const spotifyTop50UsaAdapter: WebsiteAdapter = {
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshSpotifyTop50UsaPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
+  getPollIntervalMinutes(): number {
+    return 60;
+  },
+  getPollIntervalReason(): string {
+    return "Kworb Spotify daily charts update once per day, so hourly polling is enough.";
+  },
   async fetchCurrentValue(): Promise<AdapterValue> {
-    return fetchSpotifyTop50Value(sourceUrl, playlistUri, "Spotify Top 50 - USA", "Spotify Top 50 - USA #1 track");
+    return fetchKworbSpotifyTop10Value(
+      kworbUsDailyUrl,
+      sourceUrl,
+      "Spotify Top 50 - USA",
+      "Spotify Top 50 - USA daily top 10"
+    );
   }
 };
 
@@ -153,6 +289,10 @@ function isRetryableSpotifyError(error: unknown): boolean {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function normalizeText(value: string): string {
+  return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function delay(ms: number): Promise<void> {

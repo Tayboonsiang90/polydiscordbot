@@ -1,8 +1,9 @@
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
-import { extractSpotifyTop50NumberOne, fetchSpotifyTop50Value } from "./spotifyTop50Usa.js";
+import { extractSpotifyTop50NumberOne, fetchKworbSpotifyTop10Value } from "./spotifyTop50Usa.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF";
+const kworbGlobalDailyUrl = "https://kworb.net/spotify/country/global_daily.html";
 const playlistUri = "spotify:playlist:37i9dQZEVXbMDoHDwVN2tF";
 const globalMonthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   searchQuery: "which artists will have 1 hits",
@@ -29,8 +30,19 @@ export const spotifyTop50GlobalAdapter: WebsiteAdapter = {
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshSpotifyTop50GlobalPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
+  getPollIntervalMinutes(): number {
+    return 60;
+  },
+  getPollIntervalReason(): string {
+    return "Kworb Spotify daily charts update once per day, so hourly polling is enough.";
+  },
   async fetchCurrentValue(): Promise<AdapterValue> {
-    return fetchSpotifyTop50Value(sourceUrl, playlistUri, "Spotify Top 50 - Global", "Spotify Top 50 - Global #1 track");
+    return fetchKworbSpotifyTop10Value(
+      kworbGlobalDailyUrl,
+      sourceUrl,
+      "Spotify Top 50 - Global",
+      "Spotify Top 50 - Global daily top 10"
+    );
   }
 };
 

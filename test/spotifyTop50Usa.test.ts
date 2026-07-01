@@ -4,8 +4,10 @@ import {
   refreshSpotifyTop50GlobalPolymarketQueue
 } from "../src/integrations/spotifyTop50Global.js";
 import {
+  extractKworbSpotifyDailyChartTop10,
   extractSpotifyTop50UsaNumberOne,
   fetchSpotifyTop50Value,
+  formatKworbSpotifyDailyChartValue,
   refreshSpotifyTop50UsaPolymarketQueue
 } from "../src/integrations/spotifyTop50Usa.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -37,12 +39,81 @@ function buildSpotifyHtml(playlistUri: string, trackName: string, artistNames: s
   return `<html><script id="initialState" type="text/plain">${encodedState}</script></html>`;
 }
 
+function buildKworbHtml(country: string = "United States"): string {
+  const rows = [
+    ["1", "+3", "Malcolm Todd", "Earrings", "177", "1", "(x1)", "1,751,197", "+695,401", "8,555,787", "+498,467", "137,765,212"],
+    ["2", "-1", "Alex Warren", "Ordinary", "147", "1", "(x5)", "1,466,912", "-9,182", "10,480,667", "-151,069", "203,592,217"],
+    ["3", "-1", "Sabrina Carpenter", "Manchild", "24", "1", "(x4)", "1,437,509", "-5,099", "11,908,759", "-1,020,540", "48,994,360"],
+    ["4", "-1", "Morgan Wallen", "What I Want", "46", "1", "(x1)", "1,236,397", "-77,357", "8,932,027", "-90,809", "72,853,659"],
+    ["5", "+1", "Ravyn Lenae", "Love Me Not", "114", "5", "", "1,070,609", "+11,382", "7,231,115", "+105,801", "89,814,192"],
+    ["6", "-1", "Lady Gaga", "Die With A Smile", "318", "1", "(x15)", "1,031,384", "-42,013", "7,612,009", "-155,899", "502,392,223"],
+    ["7", "=", "Drake", "NOKIA", "91", "2", "", "972,450", "+2,019", "6,872,401", "+40,132", "144,992,332"],
+    ["8", "+2", "Tate McRae", "Sports car", "156", "6", "", "901,332", "+25,871", "6,151,100", "+76,102", "122,418,900"],
+    ["9", "-1", "Kendrick Lamar", "luther", "215", "1", "(x10)", "884,001", "-7,412", "6,062,222", "-45,011", "310,000,001"],
+    ["10", "=", "Doechii", "Anxiety", "122", "4", "", "802,441", "+1,002", "5,778,921", "+28,111", "94,721,555"]
+  ];
+
+  const tableRows = rows
+    .map(
+      ([position, movement, artist, title, days, peak, peakCount, streams, streamsChange, sevenDay, sevenDayChange, total]) => `
+        <tr>
+          <td>${position}</td><td>${movement}</td>
+          <td><a href="/artist">${artist}</a> - <a href="/track">${title}</a></td>
+          <td>${days}</td><td>${peak}</td><td>${peakCount}</td><td>${streams}</td><td>${streamsChange}</td>
+          <td>${sevenDay}</td><td>${sevenDayChange}</td><td>${total}</td>
+        </tr>`
+    )
+    .join("");
+
+  return `
+    <html>
+      <span class="pagetitle">Spotify Daily Chart - ${country} - 2026/06/29 | <a href="us_daily_totals.html">Totals</a></span>
+      <table id="spotifydaily"><tbody>${tableRows}</tbody></table>
+    </html>`;
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("Spotify Top 50 USA adapter", () => {
+  it("extracts Kworb's daily chart date and top 10 details", () => {
+    const chart = extractKworbSpotifyDailyChartTop10(
+      buildKworbHtml(),
+      "Spotify Top 50 - USA",
+      "https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp",
+      "https://kworb.net/spotify/country/us_daily.html"
+    );
+
+    expect(chart.chartDate).toBe("2026/06/29");
+    expect(chart.tracks).toHaveLength(10);
+    expect(chart.tracks[0]).toMatchObject({
+      position: 1,
+      movement: "+3",
+      artist: "Malcolm Todd",
+      title: "Earrings",
+      days: "177",
+      streams: "1,751,197"
+    });
+  });
+
+  it("formats Kworb top 10 values with chart date, days, streams, and links", () => {
+    const chart = extractKworbSpotifyDailyChartTop10(
+      buildKworbHtml(),
+      "Spotify Top 50 - USA",
+      "https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp",
+      "https://kworb.net/spotify/country/us_daily.html"
+    );
+
+    const value = formatKworbSpotifyDailyChartValue(chart);
+
+    expect(value).toContain("Chart date: 2026/06/29 (Kworb daily chart)");
+    expect(value).toContain("#1 +3 Malcolm Todd - Earrings — 1,751,197 streams, 177d, peak #1 (x1)");
+    expect(value).toContain("Spotify playlist: https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp");
+    expect(value).toContain("Kworb details: https://kworb.net/spotify/country/us_daily.html");
+  });
+
   it("extracts the #1 track and primary artist profiles", () => {
     const value = extractSpotifyTop50UsaNumberOne(
       buildSpotifyHtml("spotify:playlist:37i9dQZEVXbLRQDuF5jeBp", "Test Song", ["Primary Artist", "Second Artist"])
