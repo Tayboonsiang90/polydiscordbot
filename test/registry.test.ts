@@ -77,6 +77,7 @@ const expectedCommandIds = [
   ["ornnh100", "ornn-h100-index"],
   ["ornnh200", "ornn-h200-index"],
   ["paidappstore", "paid-app-store"],
+  ["parisheat", "paris-heat-wave"],
   ["dchomevalue", "parcl-dc-home-value"],
   ["nychomevalue", "parcl-nyc-home-value"],
   ["pboc", "pboc-rate-change"],
@@ -214,6 +215,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("billboard200").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("billboardhot100").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("billboardhot100").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("parisheat").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("whitehousetweets").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("whbriefings").getPollIntervalMinutes?.({} as never)).toBe(15);

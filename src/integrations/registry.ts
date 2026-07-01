@@ -61,6 +61,7 @@ import { ornnB200IndexAdapter } from "./ornnB200Index.js";
 import { ornnH100IndexAdapter } from "./ornnH100Index.js";
 import { ornnH200IndexAdapter } from "./ornnH200Index.js";
 import { paidAppStoreAdapter } from "./paidAppStore.js";
+import { parisHeatWaveAdapter } from "./parisHeatWave.js";
 import { parclDcHomeValueAdapter } from "./parclDcHomeValue.js";
 import { parclNycHomeValueAdapter } from "./parclNycHomeValue.js";
 import { pbocRateChangeAdapter } from "./pbocRateChange.js";
@@ -170,6 +171,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [ornnH100IndexAdapter.id, ornnH100IndexAdapter],
   [ornnH200IndexAdapter.id, ornnH200IndexAdapter],
   [paidAppStoreAdapter.id, paidAppStoreAdapter],
+  [parisHeatWaveAdapter.id, parisHeatWaveAdapter],
   [parclDcHomeValueAdapter.id, parclDcHomeValueAdapter],
   [parclNycHomeValueAdapter.id, parclNycHomeValueAdapter],
   [pbocRateChangeAdapter.id, pbocRateChangeAdapter],
