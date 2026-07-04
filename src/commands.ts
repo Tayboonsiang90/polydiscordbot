@@ -61,7 +61,7 @@ import type {
 import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from "./marketEnd.js";
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
 import { buildCategoryAlertRoleName } from "./provisioner.js";
-import { mergeSettingsJson, parseSettingsJson, stringifySettingsJson } from "./settingsJson.js";
+import { deleteSettingsJsonKeys, mergeSettingsJson } from "./settingsJson.js";
 import {
   checkEventIntegration,
   checkIntegration,
@@ -1179,10 +1179,7 @@ export async function handleAdapterCommand(
     const refreshedSettingsJson = adapter.refreshSettings
       ? await adapter.refreshSettings(integration, { force: true })
       : integration.settingsJson;
-    const updated =
-      refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, refreshedSettingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, refreshedSettingsJson);
     const settings = adapter.getStrikeTerms?.(updated) ?? parseTrumpTruthSettings(updated.settingsJson);
     const activeUpdated =
       settings.parsedFromUrl && settings.parsedFromUrl !== updated.polymarketUrl
@@ -1203,9 +1200,7 @@ export async function handleAdapterCommand(
     await interaction.deferReply();
     let updated = integration;
     const refreshedSettingsJson = adapter.refreshSettings ? await adapter.refreshSettings(updated) : updated.settingsJson;
-    if (refreshedSettingsJson && refreshedSettingsJson !== updated.settingsJson) {
-      updated = database.setSettingsJson(updated.id, refreshedSettingsJson);
-    }
+    updated = database.setSettingsJsonIfChanged(updated, refreshedSettingsJson);
 
     const settings = adapter.getStrikeTerms?.(updated) ?? parseTrumpTruthSettings(updated.settingsJson);
     if (settings.parsedFromUrl && settings.parsedFromUrl !== updated.polymarketUrl) {
@@ -1248,10 +1243,7 @@ export async function handleAdapterCommand(
       result = await syncPolymarketProposalTagChannels(interaction.guild, integration, result);
     }
 
-    const updated =
-      result.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, result.settingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, result.settingsJson);
     await interaction.editReply({ embeds: [buildTagFiltersEmbed(updated, result)] });
     return;
   }
@@ -1279,10 +1271,7 @@ export async function handleAdapterCommand(
 
     await interaction.deferReply();
     const result = await adapter.updateTagBlocklist(integration, subscriptionTagQuery, action, blockedTagQuery);
-    const updated =
-      result.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, result.settingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, result.settingsJson);
     await interaction.editReply({ embeds: [buildTagBlocklistEmbed(updated, result)] });
     return;
   }
@@ -1304,10 +1293,7 @@ export async function handleAdapterCommand(
     }
 
     const result = updatePolymarketProposalTagPingMode(integration, subscriptionTagQuery, mode === "on");
-    const updated =
-      result.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, result.settingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, result.settingsJson);
     await interaction.reply({
       content: result.changed ? result.message : `${result.message} No setting change was needed.`,
       allowedMentions: { parse: [] }
@@ -1334,10 +1320,7 @@ export async function handleAdapterCommand(
 
     await interaction.deferReply();
     const result = await adapter.updateResolvableWatchlist(integration, action, marketQuery);
-    const updated =
-      result.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, result.settingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, result.settingsJson);
     await interaction.editReply({ embeds: [buildResolvableWatchlistEmbed(updated, result)] });
     return;
   }
@@ -1378,10 +1361,7 @@ export async function handleAdapterCommand(
         dryRun
       };
       const result = await adapter.updateAddressLabels(integration, action, undefined, undefined, updateOptions);
-      const updated =
-        !dryRun && result.settingsJson !== integration.settingsJson
-          ? database.setSettingsJson(integration.id, result.settingsJson)
-          : integration;
+      const updated = dryRun ? integration : database.setSettingsJsonIfChanged(integration, result.settingsJson);
       const syncedCount = dryRun
         ? 1
         : await syncUmaAddressLabels(database, interaction.guild.id, updated.id, action, undefined, undefined, updateOptions);
@@ -1407,10 +1387,7 @@ export async function handleAdapterCommand(
 
     await interaction.deferReply();
     const result = await adapter.updateAddressLabels(integration, action, addressQuery, labelQuery);
-    const updated =
-      result.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, result.settingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, result.settingsJson);
     const syncedCount =
       action === "list"
         ? 1
@@ -1433,10 +1410,7 @@ export async function handleAdapterCommand(
     }
 
     const result = await adapter.updateThreshold(integration, interaction.options.getString("value")?.trim());
-    const updated =
-      result.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, result.settingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, result.settingsJson);
     await interaction.reply({ embeds: [buildThresholdEmbed(updated, result)] });
     return;
   }
@@ -1449,10 +1423,7 @@ export async function handleAdapterCommand(
 
     await interaction.deferReply();
     const result = await adapter.prepareArbitrageSetup(integration, readArbitrageSetupInput(interaction));
-    const updated =
-      result.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, result.settingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, result.settingsJson);
     await interaction.editReply({
       embeds: [buildArbitrageSetupEmbed(updated, result)],
       components: buildArbitrageOutcomeSelectRow(updated, result)
@@ -1473,10 +1444,7 @@ export async function handleAdapterCommand(
       outcome: interaction.options.getString("outcome", true).trim(),
       side
     });
-    const updated =
-      result.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, result.settingsJson)
-        : integration;
+    const updated = database.setSettingsJsonIfChanged(integration, result.settingsJson);
     await interaction.editReply({ embeds: [buildArbitrageWatchEmbed(updated, result)] });
     return;
   }
@@ -1522,10 +1490,7 @@ export async function handleAdapterCommand(
     if (adapter.upsertPolymarketMarket) {
       await interaction.deferReply();
       const queue = await adapter.upsertPolymarketMarket(integration, polymarketUrl);
-      let updated =
-        queue.settingsJson && queue.settingsJson !== integration.settingsJson
-          ? database.setSettingsJson(integration.id, queue.settingsJson)
-          : integration;
+      let updated = database.setSettingsJsonIfChanged(integration, queue.settingsJson);
       if (queue.activeUrl !== updated.polymarketUrl) {
         updated = database.setPolymarketUrl(updated.id, queue.activeUrl);
       }
@@ -1535,10 +1500,7 @@ export async function handleAdapterCommand(
     }
 
     const queue = upsertPolymarketQueueUrl(integration, polymarketUrl);
-    let updated =
-      queue.settingsJson && queue.settingsJson !== integration.settingsJson
-        ? database.setSettingsJson(integration.id, queue.settingsJson)
-        : integration;
+    let updated = database.setSettingsJsonIfChanged(integration, queue.settingsJson);
     if (queue.activeUrl !== updated.polymarketUrl) {
       updated = database.setPolymarketUrl(updated.id, queue.activeUrl);
     }
@@ -1546,9 +1508,7 @@ export async function handleAdapterCommand(
     if (adapter.supportsStrikes && adapter.refreshSettings) {
       await interaction.deferReply();
       const refreshedSettingsJson = await adapter.refreshSettings(updated, { force: true });
-      if (refreshedSettingsJson && refreshedSettingsJson !== updated.settingsJson) {
-        updated = database.setSettingsJson(updated.id, refreshedSettingsJson);
-      }
+      updated = database.setSettingsJsonIfChanged(updated, refreshedSettingsJson);
       const settings = adapter.getStrikeTerms?.(updated);
       if (settings?.parsedFromUrl && settings.parsedFromUrl !== updated.polymarketUrl) {
         updated = database.setPolymarketUrl(updated.id, settings.parsedFromUrl);
@@ -1719,10 +1679,7 @@ function readArbitrageSetupInput(interaction: ChatInputCommandInteraction): Arbi
 }
 
 function clearArchiveSettings(settingsJson: string | null): string {
-  const settings = { ...parseSettingsJson(settingsJson) };
-  delete settings.archivedAt;
-  delete settings.archiveReason;
-  return stringifySettingsJson(settings);
+  return deleteSettingsJsonKeys(settingsJson, ["archivedAt", "archiveReason"]);
 }
 
 function readArbitrageWatchSide(value: string): ArbitrageWatchSide {

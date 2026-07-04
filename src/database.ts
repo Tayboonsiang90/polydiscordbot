@@ -150,6 +150,14 @@ export class BotDatabase {
     return this.getIntegrationById(id);
   }
 
+  setSettingsJsonIfChanged(integration: Integration, settingsJson: string | null | undefined): Integration {
+    if (!settingsJson || settingsJson === integration.settingsJson) {
+      return integration;
+    }
+
+    return this.setSettingsJson(integration.id, settingsJson);
+  }
+
   setAlertRoleMetadata(id: number, input: AlertRoleMetadataInput): Integration {
     this.db
       .prepare(

@@ -158,6 +158,7 @@ No archived integrations currently.
 - Daily snapshot integrations store snapshot value/date separately from regular interval `lastValue` checks so event-time captures are not overwritten.
 - Dated/monthly Polymarket URLs are queued in `settingsJson.polymarketMarkets` by `src/polymarketQueue.ts`; the active URL changes automatically by ET window, expired queued URLs are pruned after rollover, and the stored current URL remains as fallback even after expiry so source monitoring keeps running.
 - Market URL rollover sends a dedicated `Market rollover` alert and stores the newly fetched source value as the baseline, so the bot does not mislabel window-only changes as normal `Value changed` alerts.
+- Shared settings helpers live in `src/settingsJson.ts`; use them for cross-adapter `settingsJson` reads, merges, and key deletion. Optional refresh writes should use `BotDatabase.setSettingsJsonIfChanged()` so unchanged settings do not bump `updatedAt`.
 - Trump Truth, Elon X, All-In Podcast, Joe Rogan Podcast, Lemonade Stand Podcast, App Store daily charts, NYT Front Page, NPM monthly private valuations, monthly precipitation, ChatGPT Outage, Claude Downtime, Discord Critical, TSA, Tesla Deliveries, Strategy Bitcoin Purchases, USGS 5.5/6.5 Earthquakes, Portwatch Hormuz Ships, White House Full Lid, White House X Posts, NCEI Tornadoes, BLS Jobs Added, CDC Flu Hospitalization, Spotify monthly artist #1 markets, and Pyth price-strike bots have adapter-specific auto-discovery for upcoming recurring markets; keep this inside the adapter unless the behavior becomes clearly reusable.
 
 ## Setup
@@ -497,7 +498,7 @@ Old per-integration alert roles from before the category-role model are not reus
 ## Maintenance Review Notes
 
 - Overall structure is healthy: adapters stay isolated, while `commands.ts`, `poller.ts`, `embeds.ts`, `database.ts`, and `provisioner.ts` form the shared core.
-- Shared settings helpers live in `src/settingsJson.ts`; use them when reading or merging cross-adapter `settingsJson` keys.
+- Shared settings helpers live in `src/settingsJson.ts`; use them when reading, merging, or deleting cross-adapter `settingsJson` keys. Use `BotDatabase.setSettingsJsonIfChanged()` instead of open-coded optional `setSettingsJson` blocks.
 - `commands.ts`, `embeds.ts`, and `poller.ts` are still the main growth hotspots; split only when changing them for real features, not as a standalone rewrite.
 - Poller error suppression/formatting lives in `src/errorNotices.ts`; keep retry/noise-control behavior there instead of adding local copies.
 - Integration check failures should route through the shared poller error path into `#errorlogs`; do not send adapter-local error messages to monitor channels.

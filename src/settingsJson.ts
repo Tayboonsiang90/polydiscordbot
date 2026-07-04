@@ -23,3 +23,12 @@ export function mergeSettingsJson(settingsJson: string | null | undefined, patch
     ...patch
   });
 }
+
+export function deleteSettingsJsonKeys(settingsJson: string | null | undefined, keys: string[]): string {
+  const settings = { ...parseSettingsJson(settingsJson) };
+  for (const key of keys) {
+    delete settings[key];
+  }
+
+  return stringifySettingsJson(settings);
+}

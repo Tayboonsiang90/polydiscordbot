@@ -25,7 +25,7 @@ import { isPolymarketProposalChannelPingEnabled } from "./integrations/polymarke
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "./integrations/types.js";
 import { getDueMarketEndReminders, getStoredOrFetchPolymarketEndDate, type MarketEndReminder } from "./marketEnd.js";
 import { resolveIntegrationPolymarketQueue } from "./polymarketQueue.js";
-import { mergeSettingsJson, parseSettingsJson } from "./settingsJson.js";
+import { deleteSettingsJsonKeys, mergeSettingsJson, parseSettingsJson } from "./settingsJson.js";
 import { formatSingaporeDateTime } from "./time.js";
 import { getTurboPollingSettings } from "./turboPolling.js";
 
@@ -127,9 +127,9 @@ export async function checkIntegration(database: BotDatabase, integration: Integ
   const adapter = getAdapter(integration.adapterId);
   if (adapter.refreshSettings) {
     const refreshedSettingsJson = await adapter.refreshSettings(integration);
-    if (refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson) {
-      integration = database.setSettingsJson(integration.id, refreshedSettingsJson);
-      activation = activateQueuedPolymarket(database, integration);
+    const refreshedIntegration = database.setSettingsJsonIfChanged(integration, refreshedSettingsJson);
+    if (refreshedIntegration !== integration) {
+      activation = activateQueuedPolymarket(database, refreshedIntegration);
       integration = activation.integration;
       marketRollover = marketRollover ?? activation.rollover;
     }
@@ -189,10 +189,7 @@ export async function checkEventIntegration(
   }
 
   const refreshedSettingsJson = adapter.refreshSettings ? await adapter.refreshSettings(integration) : integration.settingsJson;
-  let settingsIntegration =
-    refreshedSettingsJson && refreshedSettingsJson !== integration.settingsJson
-      ? database.setSettingsJson(integration.id, refreshedSettingsJson)
-      : integration;
+  let settingsIntegration = database.setSettingsJsonIfChanged(integration, refreshedSettingsJson);
   activation = activateQueuedPolymarket(database, settingsIntegration);
   settingsIntegration = activation.integration;
   marketRollover = marketRollover ?? activation.rollover;
@@ -223,10 +220,7 @@ export async function checkEventIntegration(
     ? claimEventAlertPosts(database, activeIntegration.id, freshAlertPosts, result.observedAt)
     : freshAlertPosts;
   const eventSettingsJson = updateEventSeenPostIds(baseSettingsJson, eventSelection.nextSeenPostIds);
-  const eventStateIntegration =
-    eventSettingsJson !== activeIntegration.settingsJson
-      ? database.setSettingsJson(activeIntegration.id, eventSettingsJson)
-      : activeIntegration;
+  const eventStateIntegration = database.setSettingsJsonIfChanged(activeIntegration, eventSettingsJson);
   const updatedIntegration = latestSeenId
     ? database.recordCheck(eventStateIntegration.id, latestSeenId, result.observedAt)
     : database.recordCheck(eventStateIntegration.id, "no-posts", result.observedAt);
@@ -558,7 +552,7 @@ export class PollScheduler {
   private recordErrorNoticeState(integrationId: number, state: ErrorNoticeState): Integration {
     const integration = this.database.getIntegrationById(integrationId);
     const settingsJson = setLatestErrorNoticeState(integration.settingsJson, state);
-    return settingsJson === integration.settingsJson ? integration : this.database.setSettingsJson(integration.id, settingsJson);
+    return this.database.setSettingsJsonIfChanged(integration, settingsJson);
   }
 
   private clearErrorNoticeState(integrationId: number): void {
@@ -608,9 +602,7 @@ export class PollScheduler {
     }
 
     const updatedSettingsJson = setLatestErrorMessageId(currentIntegration.settingsJson, sentMessageId);
-    if (updatedSettingsJson !== currentIntegration.settingsJson) {
-      this.database.setSettingsJson(integration.id, updatedSettingsJson);
-    }
+    this.database.setSettingsJsonIfChanged(currentIntegration, updatedSettingsJson);
     if (isFetchableMessageChannel(channel)) {
       await cleanupStaleErrorMessages(channel, currentIntegration, sentMessageId);
     }
@@ -679,7 +671,7 @@ export class PollScheduler {
     }
 
     const settingsJson = updateEventSeenPostIds(integration.settingsJson, [post.id, ...getEventSeenPostIds(integration.settingsJson)]);
-    const updated = this.database.setSettingsJson(integration.id, settingsJson);
+    const updated = this.database.setSettingsJsonIfChanged(integration, settingsJson);
     this.database.recordCheck(updated.id, post.id, post.postedAt);
   }
 
@@ -739,9 +731,7 @@ export class PollScheduler {
         if (queue.activeUrl !== integration.polymarketUrl) {
           continue;
         }
-        if (queue.settingsJson && queue.settingsJson !== integration.settingsJson) {
-          activeIntegration = this.database.setSettingsJson(integration.id, queue.settingsJson);
-        }
+        activeIntegration = this.database.setSettingsJsonIfChanged(integration, queue.settingsJson);
         if (!activeIntegration.polymarketUrl) {
           continue;
         }
@@ -996,8 +986,7 @@ export function clearLatestErrorNoticeState(settingsJson: string | null): string
     return settingsJson;
   }
 
-  const { latestErrorNoticeState: _latestErrorNoticeState, ...nextSettings } = settings;
-  return JSON.stringify(nextSettings);
+  return deleteSettingsJsonKeys(settingsJson, ["latestErrorNoticeState"]);
 }
 
 export function activateQueuedPolymarket(
@@ -1007,9 +996,7 @@ export function activateQueuedPolymarket(
 ): { integration: Integration; rollover: MarketRollover | null } {
   const queue = resolveIntegrationPolymarketQueue(integration, now);
   let updated = integration;
-  if (queue.settingsJson && queue.settingsJson !== updated.settingsJson) {
-    updated = database.setSettingsJson(updated.id, queue.settingsJson);
-  }
+  updated = database.setSettingsJsonIfChanged(updated, queue.settingsJson);
   const previousPolymarketUrl = updated.polymarketUrl;
   if (queue.activeUrl !== updated.polymarketUrl) {
     updated = database.setPolymarketUrl(updated.id, queue.activeUrl);

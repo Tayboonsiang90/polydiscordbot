@@ -68,6 +68,27 @@ describe("BotDatabase alert role metadata", () => {
     database.close();
   });
 
+  it("skips settings JSON writes when the payload is unchanged or absent", () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "kma-channel",
+      adapterId: "kma-seoul-precip",
+      displayName: "KMA Seoul Precipitation",
+      sourceUrl: "https://data.kma.go.kr/climate/RankState/selectRankStatisticsDivisionList.do",
+      settingsJson: JSON.stringify({ year: 2026, month: 5 }),
+      pollIntervalMinutes: 5
+    });
+
+    expect(database.setSettingsJsonIfChanged(integration, undefined)).toBe(integration);
+    expect(database.setSettingsJsonIfChanged(integration, integration.settingsJson)).toBe(integration);
+    expect(database.setSettingsJsonIfChanged(integration, JSON.stringify({ year: 2026, month: 6 })).settingsJson).toBe(
+      JSON.stringify({ year: 2026, month: 6 })
+    );
+
+    database.close();
+  });
+
   it("syncs adapter-owned integration metadata without changing runtime state", () => {
     const database = createTestDatabase();
     const integration = database.createIntegration({
