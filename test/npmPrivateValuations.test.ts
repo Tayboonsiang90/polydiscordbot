@@ -8,6 +8,8 @@ import {
   getNpmValuationPollIntervalMinutes,
   isNpmValuationBurstWindow,
   normalizeNpmValuationMarketSearchEvent,
+  normalizeNpmValuationValueForComparison,
+  shouldAlertOnNpmValuationChange,
   type NpmValuationConfig
 } from "../src/integrations/npmPrivateValuations.js";
 
@@ -91,6 +93,29 @@ describe("NPM private valuation adapters", () => {
         sourceUrl: "https://fe.secondmarket.com/companies/company-30839e0b-2730-4495-839f-1bf638fa9cca/data"
       })
     ).toContain("Expected update: 1:00 PM ET on NPM business days");
+  });
+
+  it("normalizes rendered and API valuation precision so trailing zeroes do not alert", () => {
+    const renderedValue = formatNpmValuationValue({
+      companyName: "Perplexity",
+      asOf: "Jul 1, 2026",
+      valuation: "$16.730B",
+      pricePerShare: "$58.170",
+      sourceUrl: "https://fe.secondmarket.com/companies/company-802a7f97-3625-4614-a13d-d999cf139330/data"
+    });
+    const apiValue = formatNpmValuationValue({
+      companyName: "Perplexity",
+      asOf: "Jul 1, 2026",
+      valuation: "$16.73B",
+      pricePerShare: "$58.17",
+      sourceUrl: "https://fe.secondmarket.com/companies/company-802a7f97-3625-4614-a13d-d999cf139330/data"
+    });
+
+    expect(renderedValue).toContain("Valuation: $16.73B");
+    expect(renderedValue).toContain("Price per share: $58.17");
+    expect(normalizeNpmValuationValueForComparison(renderedValue)).toBe(normalizeNpmValuationValueForComparison(apiValue));
+    expect(shouldAlertOnNpmValuationChange(renderedValue, apiValue)).toBe(false);
+    expect(shouldAlertOnNpmValuationChange(apiValue, renderedValue.replace("$16.73B", "$16.74B"))).toBe(true);
   });
 
   it("uses 10-second polling during the 1 PM ET release window", () => {

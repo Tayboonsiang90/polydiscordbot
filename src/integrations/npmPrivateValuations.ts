@@ -268,6 +268,7 @@ export function createNpmPrivateValuationAdapter(config: NpmValuationConfig): We
     alertRoleEmoji: config.alertRoleEmoji,
     getPollIntervalMinutes: getNpmValuationPollIntervalMinutes,
     getPollIntervalReason: getNpmValuationPollIntervalReason,
+    shouldAlertOnChange: shouldAlertOnNpmValuationChange,
     ...(config.autoDiscoverMonthlyMarkets
       ? {
           async refreshSettings(integration: Integration): Promise<string> {
@@ -321,8 +322,8 @@ export function extractNpmValuationSnapshot(markdown: string, sourceUrl: string)
   return {
     companyName,
     asOf,
-    valuation,
-    pricePerShare,
+    valuation: normalizeNpmDollarString(valuation),
+    pricePerShare: normalizeNpmDollarString(pricePerShare),
     sourceUrl
   };
 }
@@ -351,11 +352,19 @@ export function formatNpmValuationValue(snapshot: NpmValuationSnapshot): string 
     "Metric: NPM private company valuation",
     `Company: ${snapshot.companyName}`,
     `As of: ${snapshot.asOf}`,
-    `Valuation: ${snapshot.valuation}`,
-    `Price per share: ${snapshot.pricePerShare}`,
+    `Valuation: ${normalizeNpmDollarString(snapshot.valuation)}`,
+    `Price per share: ${normalizeNpmDollarString(snapshot.pricePerShare)}`,
     "Expected update: 1:00 PM ET on NPM business days",
     `Resolution: ${snapshot.sourceUrl}`
   ].join("\n");
+}
+
+export function shouldAlertOnNpmValuationChange(previousValue: string | null, currentValue: string): boolean {
+  return previousValue !== null && normalizeNpmValuationValueForComparison(previousValue) !== normalizeNpmValuationValueForComparison(currentValue);
+}
+
+export function normalizeNpmValuationValueForComparison(value: string): string {
+  return value.replace(/\$-?\d+(?:,\d{3})*(?:\.\d+)?[TBM]?/g, (match) => normalizeNpmDollarString(match));
 }
 
 export async function refreshNpmValuationPolymarketQueue(
@@ -721,6 +730,12 @@ function formatNpmDollarValue(value: unknown, decimals: number): string | null {
 
 function trimTrailingZeros(value: string): string {
   return value.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+}
+
+function normalizeNpmDollarString(value: string): string {
+  return value.replace(/\$-?\d+(?:,\d{3})*(?:\.\d+)?[TBM]?/g, (match) =>
+    match.replace(/(\.\d*?[1-9])0+([TBM]?)$/, "$1$2").replace(/\.0+([TBM]?)$/, "$1")
+  );
 }
 
 function getEasternTimeParts(date: Date): { hour: number; minute: number; second: number } {
