@@ -554,10 +554,11 @@ describe("adapter commands", () => {
     expect(payload.allowedMentions).toEqual({ roles: ["role"] });
   });
 
-  it("does not mention alert roles for non-strike Trump Truth or Elon X alerts", () => {
+  it("shows non-strike Trump Truth or Elon X alerts without mentioning alert roles", () => {
     const post: EventMonitorPost = {
       id: "123",
       type: "Truth",
+      alertTitle: "Trump Truth Social - New post",
       text: "Hello world",
       qualifyingText: "Hello world",
       postedAt: new Date("2026-05-06T00:00:00.000Z"),
@@ -570,7 +571,7 @@ describe("adapter commands", () => {
 
     for (const adapterId of ["trump-truth", "elon-x-strikes"]) {
       const payload = buildEventPostMessagePayload({ ...checkedIntegration, adapterId }, post);
-      expect(payload.content).toBeUndefined();
+      expect(payload.content).toBe("**Trump Truth Social - New post**");
       expect(payload.allowedMentions).toEqual({ parse: [] });
     }
   });

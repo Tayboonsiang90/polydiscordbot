@@ -569,6 +569,7 @@ export function buildEventPostEmbed(integration: Integration, post: EventMonitor
 
 export function buildEventPostMessagePayload(integration: Integration, post: EventMonitorPost) {
   const content = formatEventPostMessageContent(integration, post);
+  const mentionsAlertRole = Boolean(content && integration.alertRoleId && content.includes(`<@&${integration.alertRoleId}>`));
   return {
     content,
     embeds: buildEventPostEmbed(integration, post),
@@ -578,7 +579,7 @@ export function buildEventPostMessagePayload(integration: Integration, post: Eve
       description: attachment.description
     })),
     components: buildEventPostComponents(integration, post),
-    allowedMentions: content && integration.alertRoleId ? { roles: [integration.alertRoleId] } : { parse: [] }
+    allowedMentions: mentionsAlertRole ? { roles: [integration.alertRoleId!] } : { parse: [] }
   };
 }
 
@@ -978,12 +979,12 @@ function formatEventPostMessageContent(integration: Integration, post: EventMoni
     return undefined;
   }
 
-  if (!post.matchedTerms.length && (integration.adapterId === "trump-truth" || integration.adapterId === "elon-x-strikes")) {
-    return undefined;
-  }
-
   if (!post.matchedTerms.length) {
     const title = post.alertTitle ?? "New post";
+    if (integration.adapterId === "trump-truth" || integration.adapterId === "elon-x-strikes") {
+      return `**${title}**`;
+    }
+
     return roleMention ? `${roleMention}\n**${title}**` : `**${title}**`;
   }
 

@@ -560,6 +560,7 @@ export function normalizeTruthSocialStatus(status: TruthSocialStatus, strikeTerm
   return {
     id,
     type,
+    alertTitle: "Trump Truth Social - New post",
     text,
     qualifyingText,
     postedAt: new Date(postedAtValue),
@@ -582,6 +583,7 @@ export function normalizeTrumpTruthArchiveItem(item: TrumpTruthArchiveItem, stri
   return {
     id: item.originalId || item.id,
     type: isReTruth ? "ReTruth" : "Truth",
+    alertTitle: "Trump Truth Social - New post",
     text,
     qualifyingText,
     postedAt: item.postedAt,
