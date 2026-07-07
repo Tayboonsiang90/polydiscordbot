@@ -109,6 +109,8 @@ export const umaVoteRevealsAdapter: WebsiteAdapter = {
   defaultChannelName: "uma-reveals",
   alertRoleName: "UMA Reveal Alerts",
   alertRoleEmoji: "\uD83D\uDC41\uFE0F",
+  alertRoleChannelName: "uma-alert-roles",
+  alertRoleGroupTitle: "UMA Alert Roles",
   defaultSettings: {
     umaRevealThresholdWei: defaultUmaRevealThresholdWei
   },

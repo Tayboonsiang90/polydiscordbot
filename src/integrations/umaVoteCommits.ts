@@ -136,6 +136,8 @@ export const umaVoteCommitsAdapter: WebsiteAdapter = {
   defaultChannelName: "uma-commits",
   alertRoleName: "UMA Commit Alerts",
   alertRoleEmoji: "\uD83D\uDD12",
+  alertRoleChannelName: "uma-alert-roles",
+  alertRoleGroupTitle: "UMA Alert Roles",
   defaultSettings: {
     umaCommitThresholdWei: defaultUmaCommitThresholdWei
   },

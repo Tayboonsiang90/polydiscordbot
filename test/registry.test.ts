@@ -227,9 +227,17 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("umacommits").updateThreshold).toBeDefined();
     expect(getAdapterByCommandName("umacommits").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("umacommits").maxEventPostAgeMinutes).toBe(10);
+    expect(getAdapterByCommandName("umacommits")).toMatchObject({
+      alertRoleChannelName: "uma-alert-roles",
+      alertRoleGroupTitle: "UMA Alert Roles"
+    });
     expect(getAdapterByCommandName("umareveals").updateThreshold).toBeDefined();
     expect(getAdapterByCommandName("umareveals").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("umareveals").maxEventPostAgeMinutes).toBe(10);
+    expect(getAdapterByCommandName("umareveals")).toMatchObject({
+      alertRoleChannelName: "uma-alert-roles",
+      alertRoleGroupTitle: "UMA Alert Roles"
+    });
     expect(getAdapterByCommandName("umarocks").getPollIntervalMinutes?.({} as never)).toBe(10);
     expect(getAdapterByCommandName("bviv").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("bviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
