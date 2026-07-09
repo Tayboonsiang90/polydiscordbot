@@ -94,4 +94,39 @@ describe("monthly Polymarket discovery", () => {
     expect(result.activeUrl).toBe("https://polymarket.com/event/precipitation-in-london-in-june");
     expect(settings).toMatchObject({ year: 2026, month: 6 });
   });
+
+  it("falls back to current month for expired markets when enabled", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ events: [] })
+      })
+    );
+
+    const result = await refreshMonthlyPolymarketQueue(
+      integration,
+      { ...config, fallbackToCurrentMonthWhenExpired: true },
+      new Date("2026-07-09T12:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as { year: number; month: number };
+
+    expect(result.activeUrl).toBe("https://polymarket.com/event/precipitation-in-london-in-may");
+    expect(settings).toMatchObject({ year: 2026, month: 7 });
+  });
+
+  it("preserves expired market month by default", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ events: [] })
+      })
+    );
+
+    const result = await refreshMonthlyPolymarketQueue(integration, config, new Date("2026-07-09T12:00:00.000Z"));
+    const settings = JSON.parse(result.settingsJson ?? "{}") as { year: number; month: number };
+
+    expect(settings).toMatchObject({ year: 2026, month: 5 });
+  });
 });

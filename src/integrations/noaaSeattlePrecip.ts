@@ -19,7 +19,8 @@ const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   slugPrefix: "precipitation-in-seattle-in-",
   titlePrefix: "Precipitation in Seattle in",
   lastDiscoveryAtKey: "lastNoaaSeattlePrecipDiscoveryAt",
-  requiredTagSlugs: ["precipitation"]
+  requiredTagSlugs: ["precipitation"],
+  fallbackToCurrentMonthWhenExpired: true
 };
 
 export function getNoaaSeattlePrecipSettings(integration?: Integration): NoaaMonthlyPrecipSettings {

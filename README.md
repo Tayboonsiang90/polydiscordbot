@@ -264,7 +264,7 @@ Month/year integrations also support:
 - `/monitor period year:2026 month:5` inside `#nycprecip`
 - `/monitor period year:2026 month:5` inside `#seattleprecip`
 
-Monthly precipitation, ChatGPT Outage, and Claude Downtime adapters auto-discover active next-month Polymarket URLs through Gamma public search and keep `year`/`month` settings synchronized with the active queued market.
+Monthly precipitation, ChatGPT Outage, and Claude Downtime adapters auto-discover active next-month Polymarket URLs through Gamma public search and keep `year`/`month` settings synchronized with the active queued market. Monthly precipitation adapters also fall back to the current ET month when no active next market exists, so source updates continue after an old Polymarket expires.
 
 Commands are intentionally channel-scoped. `/monitor` detects the adapter from the current channel and rejects unsupported subcommands for that channel. UMA commands remain adapter-specific.
 Command replies and alerts display timestamps in Singapore local time.
@@ -472,9 +472,9 @@ Old per-integration alert roles from before the category-role model are not reus
 - NCEI tornadoes monitors monthly U.S. tornado counts from the NCEI Tornadoes Time Series JSON endpoint plus chart config metadata, treats preliminary counts as resolution-relevant, shows NCEI's uncertainty range, and alerts when the target value/status/uncertainty changes.
 - NPM private valuation monitors normalize dollar formatting from the public API and rendered fallback before comparing values, so `$16.730B` and `$16.73B` do not create false value-change alerts.
 - USGS earthquakes monitors the official USGS event API count for 5.5+ and 6.5+ earthquakes in active weekly Polymarket date windows, alerts on any count change, and treats decreases as USGS revision alerts for events moved below the cutoff. USGS 7.0+ earthquakes uses the same count-change alert behavior with separate fixed windows for the Jun 30 market and full-year 2026 market. Earthquake value blocks always show separate market start/end UTC timestamps for auditability.
-- HKO Hong Kong precipitation uses Daily Extract as the official total, then adds the text-only Yesterday's Weather rainfall only when that report is newer than the latest Daily Extract day.
+- HKO Hong Kong precipitation uses Daily Extract as the official total, then adds the text-only Yesterday's Weather rainfall only when that report is newer than the latest Daily Extract day; if Gamma has no active next market, it still tracks the current ET month.
 - NOAA NYC and Seattle monthly precipitation use RCC ACIS daily rows instead of only the monthly sum, so newly posted `0.00` or `T` days still change `lastValue` and alert.
-- Met Office London precipitation uses Heathrow stationdata as the official monthly row and Infoclimat Heathrow climatology as cumulative alpha; daily alpha rainfall is estimated from the change versus the previous stored cumulative, including 0.0 mm updates.
+- Met Office London precipitation uses Heathrow stationdata as the official monthly row and Infoclimat Heathrow climatology as cumulative alpha; daily alpha rainfall is estimated from the change versus the previous stored cumulative, including 0.0 mm updates. KMA Seoul, NOAA NYC, NOAA Seattle, HKO Hong Kong, and Met Office London all continue checking the current ET month even before a new Polymarket URL is discovered.
 - Paris Heat Wave uses Wunderground's public Weather.com historical observations for station `LFPB`, groups highs by Paris station-local calendar date, and alerts only when the >=35°C qualifying-day set or 3-day streak status changes.
 - White House Alien Arrests NYC reads the embedded Flourish table on `whitehouse.gov/aliens` and exact-matches the `New York, NY` row's `Total Arrests` counter.
 - White House Full Lid monitors Roll Call's Factba.se calendar and Forth's WH pool page for today's ET full lid; it polls every minute during 8:00 AM-8:30 PM ET and hourly off-hours.

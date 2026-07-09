@@ -24,6 +24,7 @@ export type MonthlyPolymarketDiscoveryConfig = {
   activeIntervalMs?: number;
   noActiveIntervalMs?: number;
   lookaheadMs?: number;
+  fallbackToCurrentMonthWhenExpired?: boolean;
 };
 
 type MonthlyDiscoverySettings = {
@@ -51,7 +52,8 @@ export async function refreshMonthlyPolymarketQueue(
   let resolved = syncMonthlyPeriod(
     resolveIntegrationPolymarketQueue(integration, now),
     integration.polymarketUrl,
-    now
+    now,
+    config
   );
   let settings = parseMonthlyDiscoverySettings(resolved.settingsJson, config.lastDiscoveryAtKey);
   if (!shouldDiscoverMonthlyMarkets(settings, config, now)) {
@@ -83,7 +85,7 @@ export async function refreshMonthlyPolymarketQueue(
       existingSlugs.add(candidate.slug);
     }
 
-    return syncMonthlyPeriod(resolved, integration.polymarketUrl, now);
+    return syncMonthlyPeriod(resolved, integration.polymarketUrl, now, config);
   } catch {
     return resolved;
   }
@@ -92,12 +94,20 @@ export async function refreshMonthlyPolymarketQueue(
 function syncMonthlyPeriod(
   resolved: { settingsJson: string | null; activeUrl: string | null },
   fallbackUrl: string | null,
-  now: Date
+  now: Date,
+  config: MonthlyPolymarketDiscoveryConfig
 ): { settingsJson: string | null; activeUrl: string | null } {
   const activeUrl = resolved.activeUrl ?? fallbackUrl;
   const window = activeUrl ? parsePolymarketMonthWindow(activeUrl, now) : null;
   if (!window) {
+    if (config.fallbackToCurrentMonthWhenExpired) {
+      return withCurrentMonthSettings(resolved, now);
+    }
     return resolved;
+  }
+
+  if (config.fallbackToCurrentMonthWhenExpired && Date.parse(window.endAt) < now.getTime()) {
+    return withCurrentMonthSettings(resolved, now);
   }
 
   return {
@@ -107,6 +117,34 @@ function syncMonthlyPeriod(
       year: window.year,
       month: window.month
     })
+  };
+}
+
+function withCurrentMonthSettings(
+  resolved: { settingsJson: string | null; activeUrl: string | null },
+  now: Date
+): { settingsJson: string | null; activeUrl: string | null } {
+  const month = getEasternYearMonth(now);
+  return {
+    ...resolved,
+    settingsJson: JSON.stringify({
+      ...parseSettingsJson(resolved.settingsJson),
+      year: month.year,
+      month: month.month
+    })
+  };
+}
+
+function getEasternYearMonth(now: Date): { year: number; month: number } {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit"
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(now).map((part) => [part.type, part.value]));
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month)
   };
 }
 

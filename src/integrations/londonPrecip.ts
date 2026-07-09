@@ -12,7 +12,8 @@ const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   slugPrefix: "precipitation-in-london-in-",
   titlePrefix: "Precipitation in London in",
   lastDiscoveryAtKey: "lastLondonPrecipDiscoveryAt",
-  requiredTagSlugs: ["precipitation"]
+  requiredTagSlugs: ["precipitation"],
+  fallbackToCurrentMonthWhenExpired: true
 };
 
 type LondonPrecipSettings = {

@@ -14,7 +14,8 @@ const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   slugPrefix: "precipitation-in-hong-kong-in-",
   titlePrefix: "Precipitation in Hong Kong in",
   lastDiscoveryAtKey: "lastHkPrecipDiscoveryAt",
-  requiredTagSlugs: ["precipitation"]
+  requiredTagSlugs: ["precipitation"],
+  fallbackToCurrentMonthWhenExpired: true
 };
 
 type HkPrecipSettings = {

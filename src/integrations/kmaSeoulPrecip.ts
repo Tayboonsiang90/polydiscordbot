@@ -15,7 +15,8 @@ const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   slugPrefix: "precipitation-in-seoul-in-",
   titlePrefix: "Precipitation in Seoul in",
   lastDiscoveryAtKey: "lastKmaSeoulPrecipDiscoveryAt",
-  requiredTagSlugs: ["precipitation"]
+  requiredTagSlugs: ["precipitation"],
+  fallbackToCurrentMonthWhenExpired: true
 };
 
 type KmaSettings = {
