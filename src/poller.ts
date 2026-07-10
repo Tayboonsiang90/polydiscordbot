@@ -208,7 +208,9 @@ export async function checkEventIntegration(
       ? [...result.posts].reverse()
       : currentIntegration.lastValue === null && adapter.shouldAlertOnEventPost
         ? result.posts.slice(0, 1)
-        : eventSelection.newPosts;
+        : adapter.recheckLatestEventPostUntilAlerted && eventSelection.newPosts.length === 0 && result.posts[0]
+          ? [result.posts[0]]
+          : eventSelection.newPosts;
   const enrichedNewPosts = adapter.enrichEventPost && !result.postsAreEnriched
     ? await enrichEventPosts(adapter, candidatePosts, result.strikeTerms)
     : candidatePosts;

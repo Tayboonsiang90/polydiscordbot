@@ -104,6 +104,7 @@ export const nytFrontPageAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\uD83D\uDCF0",
   manualCheckMode: "historical",
   supportsStrikes: true,
+  recheckLatestEventPostUntilAlerted: true,
   getPollIntervalMinutes: () => 60,
   getPollIntervalReason: () => "Fixed hourly check for the latest NYT New York print front page",
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BotDatabase } from "../src/database.js";
 import {
   activateQueuedPolymarket,
+  checkEventIntegration,
   clearLatestErrorNoticeState,
   captureDailySnapshot,
   formatErrorNoticeDiscordMessage,
@@ -25,6 +26,7 @@ import {
   selectNewEventPosts
 } from "../src/poller.js";
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "../src/integrations/types.js";
+import { nytFrontPageAdapter } from "../src/integrations/nytFrontPage.js";
 
 let tempDir: string | null = null;
 
@@ -424,6 +426,59 @@ describe("selectNewEventPosts", () => {
 
     expect(result.newPosts).toEqual([]);
     expect(result.nextSeenPostIds).toEqual(["newest", "older"]);
+  });
+});
+
+describe("checkEventIntegration", () => {
+  it("rechecks a seen NYT front page until a matched alert is claimed", async () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "nytfront",
+      adapterId: "nyt-front-page",
+      displayName: "NYT Front Page",
+      sourceUrl: "https://nytimes.pressreader.com/the-new-york-times/",
+      polymarketUrl: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-6-july-12-20260703145630749",
+      settingsJson: JSON.stringify({
+        nytStrikeTerms: ["China"],
+        nytParsedFromUrl:
+          "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-6-july-12-20260703145630749",
+        nytLastParsedAt: "2026-07-10T00:00:00.000Z",
+        eventSeenPostIds: ["nyt-front-page-2026-07-10"]
+      }),
+      pollIntervalMinutes: 60
+    });
+    database.recordCheck(integration.id, "nyt-front-page-2026-07-10", new Date("2026-07-10T04:20:00.000Z"));
+    const originalFetchEventUpdates = nytFrontPageAdapter.fetchEventUpdates;
+    const originalEnrichEventPost = nytFrontPageAdapter.enrichEventPost;
+    const originalRefreshSettings = nytFrontPageAdapter.refreshSettings;
+    const post = buildEventPost("nyt-front-page-2026-07-10");
+    post.type = "NYT front page";
+    post.matchedTerms = [];
+    post.strikeTerms = ["China"];
+
+    try {
+      nytFrontPageAdapter.refreshSettings = vi.fn(async (currentIntegration) => currentIntegration.settingsJson ?? "{}");
+      nytFrontPageAdapter.fetchEventUpdates = vi.fn(async () => ({
+        posts: [post],
+        strikeTerms: ["China"],
+        observedAt: new Date("2026-07-10T05:00:00.000Z")
+      }));
+      nytFrontPageAdapter.enrichEventPost = vi.fn(async (currentPost) => ({
+        ...currentPost,
+        matchedTerms: ["China"]
+      }));
+
+      const result = await checkEventIntegration(database, database.getIntegrationById(integration.id), { queueAlerts: true });
+
+      expect(result.newPosts.map((candidate) => candidate.id)).toEqual(["nyt-front-page-2026-07-10"]);
+      expect(database.claimEventAlert(integration.id, "nyt-front-page-2026-07-10", post)).toBe(false);
+    } finally {
+      nytFrontPageAdapter.fetchEventUpdates = originalFetchEventUpdates;
+      nytFrontPageAdapter.enrichEventPost = originalEnrichEventPost;
+      nytFrontPageAdapter.refreshSettings = originalRefreshSettings;
+      database.close();
+    }
   });
 });
 
