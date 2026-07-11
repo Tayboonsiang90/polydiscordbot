@@ -4,6 +4,7 @@ import { allInPodcastAdapter } from "./allInPodcast.js";
 import { artistAlbumReleasesAdapter, artistSongReleasesAdapter, kpopSongReleasesAdapter } from "./appleSongReleases.js";
 import { arenaAiLeaderboardAdapter } from "./arenaAiLeaderboard.js";
 import { awsDisruptedAdapter } from "./awsDisrupted.js";
+import { bankOfIsraelDecisionAdapter } from "./bankOfIsraelDecision.js";
 import { basedRevenueAdapter } from "./basedRevenue.js";
 import { beaCurrentReleasesAdapter } from "./beaCurrentReleases.js";
 import { biJisdorAdapter } from "./biJisdor.js";
@@ -119,6 +120,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [artistSongReleasesAdapter.id, artistSongReleasesAdapter],
   [arenaAiLeaderboardAdapter.id, arenaAiLeaderboardAdapter],
   [awsDisruptedAdapter.id, awsDisruptedAdapter],
+  [bankOfIsraelDecisionAdapter.id, bankOfIsraelDecisionAdapter],
   [basedRevenueAdapter.id, basedRevenueAdapter],
   [beaCurrentReleasesAdapter.id, beaCurrentReleasesAdapter],
   [biJisdorAdapter.id, biJisdorAdapter],

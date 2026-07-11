@@ -11,6 +11,7 @@ const expectedCommandIds = [
   ["songreleases", "apple-artist-song-releases"],
   ["arenaai", "arena-ai-no-style-control"],
   ["aws", "aws-disrupted-events"],
+  ["boidecision", "bank-of-israel-decision"],
   ["basedrevenue", "based-revenue"],
   ["bea", "bea-current-releases"],
   ["jisdor", "bi-jisdor-usd-idr"],
