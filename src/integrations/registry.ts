@@ -81,6 +81,7 @@ import { pythXagUsdAdapter } from "./pythXagUsd.js";
 import { pythXauUsdAdapter } from "./pythXauUsd.js";
 import { rwaTotalValueAdapter } from "./rwaTotalValue.js";
 import { silverTrumpApprovalAdapter } from "./silverTrumpApproval.js";
+import { spotifyBieberMonthlyListenersAdapter } from "./spotifyMonthlyListeners.js";
 import { spiderManTrailerAdapter } from "./spiderManTrailer.js";
 import { spotifyTop50GlobalAdapter } from "./spotifyTop50Global.js";
 import { spotifyTop50UsaAdapter } from "./spotifyTop50Usa.js";
@@ -193,6 +194,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [pythXauUsdAdapter.id, pythXauUsdAdapter],
   [rwaTotalValueAdapter.id, rwaTotalValueAdapter],
   [silverTrumpApprovalAdapter.id, silverTrumpApprovalAdapter],
+  [spotifyBieberMonthlyListenersAdapter.id, spotifyBieberMonthlyListenersAdapter],
   [spiderManTrailerAdapter.id, spiderManTrailerAdapter],
   [spotifyTop50GlobalAdapter.id, spotifyTop50GlobalAdapter],
   [spotifyTop50UsaAdapter.id, spotifyTop50UsaAdapter],

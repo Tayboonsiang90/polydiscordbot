@@ -101,6 +101,7 @@ const expectedCommandIds = [
   ["xauusd", "pyth-xauusd-strikes"],
   ["rwatotal", "rwa-total-value"],
   ["trumpapproval", "silver-trump-approval"],
+  ["bieberlisteners", "spotify-bieber-monthly-listeners"],
   ["spiderman", "spider-man-trailer"],
   ["spotifyglobal", "spotify-top-50-global"],
   ["spotifyusa", "spotify-top-50-usa"],
