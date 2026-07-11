@@ -183,13 +183,15 @@ function buildQueueMarket(url: string, now: Date): PolymarketQueueMarket {
 function getActiveMarket(markets: PolymarketQueueMarket[], now: Date): PolymarketQueueMarket | null {
   const nowMs = now.getTime();
   return (
-    markets.find((market) => {
-      if (!market.startAt || !market.endAt) {
-        return false;
-      }
+    markets
+      .filter((market) => {
+        if (!market.startAt || !market.endAt) {
+          return false;
+        }
 
-      return nowMs >= Date.parse(market.startAt) && nowMs <= Date.parse(market.endAt);
-    }) ?? null
+        return nowMs >= Date.parse(market.startAt) && nowMs <= Date.parse(market.endAt);
+      })
+      .sort((left, right) => Date.parse(left.endAt!) - Date.parse(right.endAt!))[0] ?? null
   );
 }
 

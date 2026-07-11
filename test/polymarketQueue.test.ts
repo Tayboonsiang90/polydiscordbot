@@ -152,6 +152,36 @@ describe("Polymarket URL queue", () => {
     expect(settings.polymarketMarkets).toHaveLength(1);
   });
 
+  it("chooses the nearest-expiring active market when active windows overlap", () => {
+    const resolved = resolveIntegrationPolymarketQueue(
+      {
+        ...integration,
+        polymarketUrl: "https://polymarket.com/event/measles-cases-in-us-in-2026",
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: "https://polymarket.com/event/measles-cases-in-us-in-2026",
+              slug: "measles-cases-in-us-in-2026",
+              startAt: "2025-12-01T17:57:05.432Z",
+              endAt: "2026-12-31T00:00:00.000Z",
+              addedAt: "2026-07-11T00:00:00.000Z"
+            },
+            {
+              url: "https://polymarket.com/event/measles-cases-in-uptspt-by-july-31-20260630182033696",
+              slug: "measles-cases-in-uptspt-by-july-31-20260630182033696",
+              startAt: "2026-07-01T05:43:50.874Z",
+              endAt: "2026-07-31T23:59:00.000Z",
+              addedAt: "2026-07-11T00:00:00.000Z"
+            }
+          ]
+        })
+      },
+      new Date("2026-07-11T12:00:00.000Z")
+    );
+
+    expect(resolved.activeUrl).toBe("https://polymarket.com/event/measles-cases-in-uptspt-by-july-31-20260630182033696");
+  });
+
   it("keeps an expired dated current market as fallback when no queued market is active", () => {
     const first = upsertPolymarketQueueUrl(
       integration,

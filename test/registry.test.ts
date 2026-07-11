@@ -202,6 +202,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("arb").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("fluhosp").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("measles").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("measles").upsertPolymarketMarket).toBeDefined();
     expect(getAdapterByCommandName("mrbeastgaming").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("mrbeastsubs").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("mrbeastviews").getPollIntervalMinutes?.({} as never)).toBe(1);
