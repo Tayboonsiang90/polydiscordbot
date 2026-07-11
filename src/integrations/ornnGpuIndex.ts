@@ -79,6 +79,7 @@ export function createOrnnGpuIndexAdapter(config: OrnnGpuIndexConfig): WebsiteAd
     async upsertPolymarketMarket(integration: Integration, url: string): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
       return upsertOrnnGpuPolymarketMarket(integration, config, url);
     },
+    shouldAlertOnChange: shouldAlertOnOrnnGpuValueChange,
     async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
       const response = await fetchWithTimeout(buildOrnnGpuApiUrl(config.gpuName), {
         headers: {
@@ -91,7 +92,11 @@ export function createOrnnGpuIndexAdapter(config: OrnnGpuIndexConfig): WebsiteAd
         throw new Error(`ORNN ${config.gpuName} index endpoint returned HTTP ${response.status}`);
       }
 
-      const value = extractLatestFinalizedOrnnGpuValue(await response.json(), config.gpuName);
+      const value = extractLatestFinalizedOrnnGpuValue(
+        await response.json(),
+        config.gpuName,
+        integration ? getActiveOrnnGpuMarkets(integration, new Date()) : []
+      );
       return {
         value,
         rawValue: value,
@@ -195,16 +200,33 @@ function toOrnnApiGpuName(gpuName: string): string {
   return gpuName.toUpperCase() === "H100" ? "H100 SXM" : gpuName;
 }
 
-export function extractLatestFinalizedOrnnGpuValue(data: unknown, gpuName: string): string {
+export function extractLatestFinalizedOrnnGpuValue(
+  data: unknown,
+  gpuName: string,
+  activeMarkets: PolymarketQueueMarket[] = []
+): string {
   const point = extractLatestFinalizedOrnnGpuPoint(data);
-  return [
+  const lines = [
     `Metric: ORNN ${gpuName} Index`,
     `Date: ${point.date}`,
     `Index Value: ${formatIndexValue(point.indexValue)}`,
     `Finalized by: ${point.finalizedByDate}`,
     `Published at: ${point.publishedAt}`,
     `Resolution: ${ornnSourceUrl}`
-  ].join("\n");
+  ];
+
+  if (activeMarkets.length > 1) {
+    lines.push(
+      "Active Polymarket markets:",
+      ...activeMarkets.map((market, index) => `${index + 1}. ${formatOrnnGpuMarketLabel(market)} - ${market.url}`)
+    );
+  }
+
+  return lines.join("\n");
+}
+
+export function shouldAlertOnOrnnGpuValueChange(previousValue: string | null, currentValue: string): boolean {
+  return extractOrnnGpuComparableValue(previousValue) !== extractOrnnGpuComparableValue(currentValue);
 }
 
 export function extractLatestFinalizedOrnnGpuPoint(data: unknown): OrnnGpuFinalizedPoint {
@@ -397,6 +419,20 @@ function parseOrnnGpuDiscoverySettings(settingsJson: string | null): OrnnGpuDisc
   };
 }
 
+function getActiveOrnnGpuMarkets(integration: Integration, now: Date): PolymarketQueueMarket[] {
+  const settings = parseOrnnGpuDiscoverySettings(integration.settingsJson);
+  const nowMs = now.getTime();
+  return (settings.polymarketMarkets ?? []).filter((market) => {
+    if (!market.endAt) {
+      return false;
+    }
+
+    const startMs = market.startAt ? Date.parse(market.startAt) : Number.NEGATIVE_INFINITY;
+    const endMs = Date.parse(market.endAt);
+    return !Number.isNaN(startMs) && !Number.isNaN(endMs) && startMs <= nowMs && nowMs <= endMs;
+  });
+}
+
 function normalizeOrnnGpuMarkets(value: unknown): PolymarketQueueMarket[] {
   if (!Array.isArray(value)) {
     return [];
@@ -455,6 +491,35 @@ function isDiscoveryDue(lastDiscoveryAt: string | undefined, now: Date): boolean
 
   const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
   return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= marketDiscoveryIntervalMs;
+}
+
+function formatOrnnGpuMarketLabel(market: PolymarketQueueMarket): string {
+  return `${market.slug} (ends ${formatEasternDate(market.endAt)})`;
+}
+
+function formatEasternDate(value: string | null): string {
+  if (!value) {
+    return "unknown";
+  }
+
+  return `${new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(new Date(value))} ET`;
+}
+
+function extractOrnnGpuComparableValue(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return [
+    value.match(/^Date:\s*(.+)$/m)?.[1] ?? "",
+    value.match(/^Index Value:\s*(.+)$/m)?.[1] ?? "",
+    value.match(/^Finalized by:\s*(.+)$/m)?.[1] ?? ""
+  ].join("|");
 }
 
 function parseGammaDate(value: unknown): Date | null {

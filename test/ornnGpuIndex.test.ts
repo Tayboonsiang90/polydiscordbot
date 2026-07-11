@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildOrnnGpuApiUrl,
+  extractLatestFinalizedOrnnGpuValue,
   normalizeOrnnGpuMarketSearchEvent,
   refreshOrnnGpuPolymarketQueue,
+  shouldAlertOnOrnnGpuValueChange,
   type OrnnGpuIndexConfig
 } from "../src/integrations/ornnGpuIndex.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -51,6 +53,46 @@ describe("ORNN GPU Polymarket discovery", () => {
       url: "https://polymarket.com/event/gpu-rental-prices-h200-end-of-june",
       startAt: "2026-05-29T15:31:26.000Z",
       endAt: "2026-06-30T00:00:00.000Z"
+    });
+  });
+
+  it("normalizes July up/down and 2026 GPU rental market shapes", () => {
+    const now = new Date("2026-07-11T00:00:00.000Z");
+    expect(
+      normalizeOrnnGpuMarketSearchEvent(
+        {
+          slug: "gpu-rental-prices-h200-up-or-down-in-july-20260709173352389",
+          title: "GPU rental prices (H200) Up or Down in July?",
+          active: true,
+          closed: false,
+          archived: false,
+          startDate: "2026-07-10T14:27:49.414297Z",
+          endDate: "2026-07-31T23:59:00Z"
+        },
+        "H200",
+        now
+      )
+    ).toMatchObject({
+      slug: "gpu-rental-prices-h200-up-or-down-in-july-20260709173352389",
+      endAt: "2026-07-31T23:59:00.000Z"
+    });
+    expect(
+      normalizeOrnnGpuMarketSearchEvent(
+        {
+          slug: "gpu-rental-prices-h200-hit-in-2026-20260709171105503",
+          title: "GPU rental prices (H200) hit___ in 2026?",
+          active: true,
+          closed: false,
+          archived: false,
+          startDate: "2026-07-10T22:35:51.531515Z",
+          endDate: "2026-12-31T00:00:00Z"
+        },
+        "H200",
+        now
+      )
+    ).toMatchObject({
+      slug: "gpu-rental-prices-h200-hit-in-2026-20260709171105503",
+      endAt: "2026-12-31T00:00:00.000Z"
     });
   });
 
@@ -116,5 +158,108 @@ describe("ORNN GPU Polymarket discovery", () => {
       "gpu-rental-prices-h200-hit-by-may-31",
       "gpu-rental-prices-h200-end-of-june"
     ]);
+  });
+
+  it("queues multiple concurrent active GPU rental markets", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "gpu-rental-prices-h200-end-of-july-20260626215340357",
+              title: "GPU rental prices (H200) end of July?",
+              active: true,
+              closed: false,
+              archived: false,
+              endDate: "2026-07-31T23:59:00Z",
+              startDate: "2026-06-26T21:53:40.000Z"
+            },
+            {
+              slug: "gpu-rental-prices-h200-up-or-down-in-july-20260709173352389",
+              title: "GPU rental prices (H200) Up or Down in July?",
+              active: true,
+              closed: false,
+              archived: false,
+              endDate: "2026-07-31T23:59:00Z",
+              startDate: "2026-07-10T14:27:49.414Z"
+            },
+            {
+              slug: "gpu-rental-prices-h200-hit-in-2026-20260709171105503",
+              title: "GPU rental prices (H200) hit___ in 2026?",
+              active: true,
+              closed: false,
+              archived: false,
+              endDate: "2026-12-31T00:00:00Z",
+              startDate: "2026-07-10T22:35:51.531Z"
+            },
+            {
+              slug: "gpu-rental-prices-h200-end-of-2026-20260709164949059",
+              title: "GPU rental prices (H200) end of 2026?",
+              active: true,
+              closed: false,
+              archived: false,
+              endDate: "2026-12-31T23:59:00Z",
+              startDate: "2026-07-10T14:15:37.832Z"
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshOrnnGpuPolymarketQueue(
+      {
+        settingsJson: null,
+        polymarketUrl: h200Config.defaultPolymarketUrl
+      } as Integration,
+      h200Config,
+      new Date("2026-07-11T00:00:00.000Z"),
+      { force: true }
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      polymarketMarkets?: Array<{ slug: string }>;
+    };
+
+    expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual(
+      expect.arrayContaining([
+        "gpu-rental-prices-h200-end-of-july-20260626215340357",
+        "gpu-rental-prices-h200-up-or-down-in-july-20260709173352389",
+        "gpu-rental-prices-h200-hit-in-2026-20260709171105503",
+        "gpu-rental-prices-h200-end-of-2026-20260709164949059"
+      ])
+    );
+    expect(settings.polymarketMarkets).toHaveLength(4);
+  });
+
+  it("shows active markets but ignores market-list-only changes for alerts", () => {
+    const data = {
+      data: [
+        { timestamp: "2026-07-08T20:00:00.000Z", index_value: 2.41 },
+        { timestamp: "2026-07-09T20:00:00.000Z", index_value: "2.55" },
+        { timestamp: "2026-07-10T20:00:00.000Z", index_value: 2.62 }
+      ]
+    };
+    const base = extractLatestFinalizedOrnnGpuValue(data, "H200");
+    const withMarkets = extractLatestFinalizedOrnnGpuValue(data, "H200", [
+      {
+        url: "https://polymarket.com/event/gpu-rental-prices-h200-up-or-down-in-july-20260709173352389",
+        slug: "gpu-rental-prices-h200-up-or-down-in-july-20260709173352389",
+        startAt: "2026-07-10T14:27:49.414Z",
+        endAt: "2026-07-31T23:59:00.000Z",
+        addedAt: "2026-07-11T00:00:00.000Z"
+      },
+      {
+        url: "https://polymarket.com/event/gpu-rental-prices-h200-hit-in-2026-20260709171105503",
+        slug: "gpu-rental-prices-h200-hit-in-2026-20260709171105503",
+        startAt: "2026-07-10T22:35:51.531Z",
+        endAt: "2026-12-31T00:00:00.000Z",
+        addedAt: "2026-07-11T00:00:00.000Z"
+      }
+    ]);
+
+    expect(withMarkets).toContain("Active Polymarket markets:");
+    expect(shouldAlertOnOrnnGpuValueChange(base, withMarkets)).toBe(false);
+    expect(shouldAlertOnOrnnGpuValueChange(base, withMarkets.replace("Index Value: 2.55", "Index Value: 2.56"))).toBe(true);
   });
 });
