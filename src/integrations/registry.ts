@@ -1,7 +1,7 @@
 import { aaaRegularGasAdapter } from "./aaaGas.js";
 import { alignedLayerSaleAdapter } from "./alignedLayerSale.js";
 import { allInPodcastAdapter } from "./allInPodcast.js";
-import { artistSongReleasesAdapter, kpopSongReleasesAdapter } from "./appleSongReleases.js";
+import { artistAlbumReleasesAdapter, artistSongReleasesAdapter, kpopSongReleasesAdapter } from "./appleSongReleases.js";
 import { arenaAiLeaderboardAdapter } from "./arenaAiLeaderboard.js";
 import { awsDisruptedAdapter } from "./awsDisrupted.js";
 import { basedRevenueAdapter } from "./basedRevenue.js";
@@ -113,6 +113,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [aaaRegularGasAdapter.id, aaaRegularGasAdapter],
   [alignedLayerSaleAdapter.id, alignedLayerSaleAdapter],
   [allInPodcastAdapter.id, allInPodcastAdapter],
+  [artistAlbumReleasesAdapter.id, artistAlbumReleasesAdapter],
   [artistSongReleasesAdapter.id, artistSongReleasesAdapter],
   [arenaAiLeaderboardAdapter.id, arenaAiLeaderboardAdapter],
   [awsDisruptedAdapter.id, awsDisruptedAdapter],

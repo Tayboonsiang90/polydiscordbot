@@ -18,7 +18,8 @@ type SongReleaseAdapterConfig = {
   defaultChannelName: string;
   alertRoleName: string;
   alertRoleEmoji: string;
-  releasePhrase: "new song" | "song";
+  releasePhrase: "new song" | "song" | "album";
+  releaseKind: "song" | "album";
 };
 
 export type ArtistReleaseMarket = {
@@ -71,6 +72,10 @@ type AppleLookupResult = {
   artistViewUrl?: unknown;
   collectionArtistName?: unknown;
   collectionName?: unknown;
+  collectionId?: unknown;
+  collectionType?: unknown;
+  collectionViewUrl?: unknown;
+  trackCount?: unknown;
   trackId?: unknown;
   trackName?: unknown;
   trackViewUrl?: unknown;
@@ -94,7 +99,8 @@ export const artistSongReleasesAdapter = createSongReleaseAdapter({
   defaultChannelName: "songreleases",
   alertRoleName: "Artist Song Release Alerts",
   alertRoleEmoji: "\uD83C\uDFB6",
-  releasePhrase: "new song"
+  releasePhrase: "new song",
+  releaseKind: "song"
 });
 
 export const kpopSongReleasesAdapter = createSongReleaseAdapter({
@@ -105,7 +111,20 @@ export const kpopSongReleasesAdapter = createSongReleaseAdapter({
   defaultChannelName: "kpopreleases",
   alertRoleName: "KPop Song Release Alerts",
   alertRoleEmoji: "\uD83C\uDFA4",
-  releasePhrase: "song"
+  releasePhrase: "song",
+  releaseKind: "song"
+});
+
+export const artistAlbumReleasesAdapter = createSongReleaseAdapter({
+  id: "apple-artist-album-releases",
+  commandName: "albumreleases",
+  displayName: "Artist Album Releases",
+  defaultPolymarketUrl: "https://polymarket.com/event/which-artists-will-release-new-albums-in-2026",
+  defaultChannelName: "albumreleases",
+  alertRoleName: "Artist Album Release Alerts",
+  alertRoleEmoji: "\uD83D\uDCBF",
+  releasePhrase: "album",
+  releaseKind: "album"
 });
 
 export function createSongReleaseAdapter(config: SongReleaseAdapterConfig): WebsiteAdapter {
@@ -128,15 +147,16 @@ export function createSongReleaseAdapter(config: SongReleaseAdapterConfig): Webs
       const settingsIntegration = await ensureSongReleaseSettings(integration, config);
       const settings = parseSongReleaseSettings(settingsIntegration.settingsJson);
       const value = formatSongReleaseValue(
-        await fetchArtistSongReleases(settings.artistReleaseMarkets ?? []),
+        await fetchArtistReleases(settings.artistReleaseMarkets ?? [], config.releaseKind),
         settings.artistReleaseMarkets ?? [],
         settings.parsedFromUrl ?? settingsIntegration.polymarketUrl ?? config.defaultPolymarketUrl,
-        settings.lastParsedAt
+        settings.lastParsedAt,
+        config.releaseKind
       );
       return {
         value,
         rawValue: value,
-        unit: "Apple Music/iTunes song releases",
+        unit: `Apple Music/iTunes ${config.releaseKind} releases`,
         observedAt: new Date()
       };
     }
@@ -179,7 +199,7 @@ export async function refreshSongReleaseSettings(
 
 export async function parseArtistReleaseMarketsFromPolymarket(
   polymarketUrl: string,
-  releasePhrase: "new song" | "song"
+  releasePhrase: "new song" | "song" | "album"
 ): Promise<ArtistReleaseMarket[]> {
   const slug = getPolymarketSlug(polymarketUrl);
   if (!slug) {
@@ -211,9 +231,9 @@ export async function parseArtistReleaseMarketsFromPolymarket(
   });
 }
 
-export function parseArtistFromQuestion(question: string, releasePhrase: "new song" | "song"): string | null {
+export function parseArtistFromQuestion(question: string, releasePhrase: "new song" | "song" | "album"): string | null {
   const escapedPhrase = releasePhrase.replace(/\s+/g, "\\s+");
-  const match = question.match(new RegExp(`^Will\\s+(.+?)\\s+release\\s+a\\s+${escapedPhrase}\\s+in\\s+2026\\??$`, "i"));
+  const match = question.match(new RegExp(`^Will\\s+(.+?)\\s+release\\s+(?:a|an)\\s+${escapedPhrase}\\s+in\\s+2026\\??\\s*$`, "i"));
   return normalizeDisplayName(match?.[1] ?? "");
 }
 
@@ -221,20 +241,23 @@ export function formatSongReleaseValue(
   releases: ArtistSongRelease[],
   artistMarkets: ArtistReleaseMarket[],
   parsedFromUrl: string,
-  lastParsedAt?: string
+  lastParsedAt?: string,
+  releaseKind: "song" | "album" = "song"
 ): string {
   const sortedReleases = sortReleases(releases);
+  const releaseLabel = releaseKind === "album" ? "album" : "song";
+  const releaseLabelPlural = releaseKind === "album" ? "albums" : "songs";
   const lines = [
-    "Metric: Apple Music/iTunes 2026 song releases",
+    `Metric: Apple Music/iTunes 2026 ${releaseLabel} releases`,
     `Tracked unresolved artists: ${artistMarkets.length ? artistMarkets.map((market) => market.artistName).join(", ") : "none"}`,
-    `New songs found: ${sortedReleases.length ? String(sortedReleases.length) : "none"}`,
+    `New ${releaseLabelPlural} found: ${sortedReleases.length ? String(sortedReleases.length) : "none"}`,
     `Parsed from: ${parsedFromUrl}`,
     `Artists parsed at: ${lastParsedAt ?? "not parsed yet"}`
   ];
 
   if (sortedReleases.length) {
     lines.push(
-      "Latest songs:",
+      `Latest ${releaseLabelPlural}:`,
       ...sortedReleases
         .slice(0, 10)
         .map((release) => `- ${release.artistName} — ${release.trackName} — ${release.releaseDate.slice(0, 10)} — ${release.trackUrl}`)
@@ -272,13 +295,20 @@ async function ensureSongReleaseSettings(
 }
 
 async function fetchArtistSongReleases(artistMarkets: ArtistReleaseMarket[]): Promise<ArtistSongRelease[]> {
+  return fetchArtistReleases(artistMarkets, "song");
+}
+
+async function fetchArtistReleases(
+  artistMarkets: ArtistReleaseMarket[],
+  releaseKind: "song" | "album"
+): Promise<ArtistSongRelease[]> {
   const releases: ArtistSongRelease[] = [];
   for (const artistMarket of artistMarkets) {
     if (!artistMarket.artistId) {
       continue;
     }
 
-    releases.push(...(await fetchAppleArtistSongs(artistMarket)));
+    releases.push(...(await (releaseKind === "album" ? fetchAppleArtistAlbums(artistMarket) : fetchAppleArtistSongs(artistMarket))));
   }
 
   return uniqueReleases(releases);
@@ -328,6 +358,24 @@ async function fetchAppleArtistSongs(artistMarket: ArtistReleaseMarket): Promise
   return (payload.results ?? []).flatMap((result) => normalizeAppleSongRelease(result, artistMarket));
 }
 
+async function fetchAppleArtistAlbums(artistMarket: ArtistReleaseMarket): Promise<ArtistSongRelease[]> {
+  const lookupUrl = new URL(appleLookupUrl);
+  lookupUrl.searchParams.set("id", String(artistMarket.artistId));
+  lookupUrl.searchParams.set("entity", "album");
+  lookupUrl.searchParams.set("limit", "200");
+  lookupUrl.searchParams.set("sort", "recent");
+
+  const response = await fetchWithTimeout(lookupUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Apple album lookup returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as AppleLookupResponse;
+  return (payload.results ?? []).flatMap((result) => normalizeAppleAlbumRelease(result, artistMarket));
+}
+
 function normalizeAppleSongRelease(result: AppleLookupResult, artistMarket: ArtistReleaseMarket): ArtistSongRelease[] {
   if (!isQualifyingAppleSongResult(result, artistMarket)) {
     return [];
@@ -340,6 +388,22 @@ function normalizeAppleSongRelease(result: AppleLookupResult, artistMarket: Arti
       releaseDate: String(result.releaseDate),
       trackUrl: String(result.trackViewUrl),
       trackId: Number(result.trackId)
+    }
+  ];
+}
+
+function normalizeAppleAlbumRelease(result: AppleLookupResult, artistMarket: ArtistReleaseMarket): ArtistSongRelease[] {
+  if (!isQualifyingAppleAlbumResult(result, artistMarket)) {
+    return [];
+  }
+
+  return [
+    {
+      artistName: artistMarket.artistName,
+      trackName: String(result.collectionName),
+      releaseDate: String(result.releaseDate),
+      trackUrl: String(result.collectionViewUrl),
+      trackId: Number(result.collectionId)
     }
   ];
 }
@@ -365,6 +429,29 @@ function isQualifyingAppleSongResult(result: AppleLookupResult, artistMarket: Ar
     normalizeName(collectionArtistName) === normalizeName(artistMarket.artistName) &&
     !/\bDJ Mix\b/i.test(collectionName) &&
     !/\(Mixed\)|\[Mixed\]|\bTrack by Track\b|\bCommentary\b/i.test(trackName)
+  );
+}
+
+function isQualifyingAppleAlbumResult(result: AppleLookupResult, artistMarket: ArtistReleaseMarket): boolean {
+  if (
+    result.wrapperType !== "collection" ||
+    result.collectionType !== "Album" ||
+    result.artistId !== artistMarket.artistId ||
+    !isNonEmptyString(result.collectionName) ||
+    !isNonEmptyString(result.collectionViewUrl) ||
+    !isNonEmptyString(result.releaseDate) ||
+    typeof result.collectionId !== "number" ||
+    new Date(result.releaseDate).getUTCFullYear() !== releaseYear
+  ) {
+    return false;
+  }
+
+  const collectionArtistName = isNonEmptyString(result.collectionArtistName) ? result.collectionArtistName : String(result.artistName ?? "");
+  const collectionName = String(result.collectionName);
+  return (
+    normalizeName(collectionArtistName) === normalizeName(artistMarket.artistName) &&
+    !/\bSingle\b|\bEP\b|\bDJ Mix\b/i.test(collectionName) &&
+    !/\(Single\)|\[Single\]|\(EP\)|\[EP\]/i.test(collectionName)
   );
 }
 

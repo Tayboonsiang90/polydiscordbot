@@ -5,6 +5,7 @@ const expectedCommandIds = [
   ["aaa", "aaa-regular-gas"],
   ["alignedsale", "aligned-layer-sale"],
   ["allin", "all-in-podcast"],
+  ["albumreleases", "apple-artist-album-releases"],
   ["joerogan", "joe-rogan-podcast"],
   ["lemonade", "lemonade-stand-podcast"],
   ["songreleases", "apple-artist-song-releases"],
