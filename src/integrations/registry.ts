@@ -94,6 +94,7 @@ import { tsaPassengersAdapter } from "./tsaPassengers.js";
 import { treasuryMtsDeficitAdapter } from "./treasuryMtsDeficit.js";
 import { umichConsumerSentimentAdapter } from "./umichConsumerSentiment.js";
 import type { WebsiteAdapter } from "./types.js";
+import { ufoFilesAdapter } from "./ufoFiles.js";
 import { umaVoteCommitsAdapter } from "./umaVoteCommits.js";
 import { umaVoteRevealsAdapter } from "./umaVoteReveals.js";
 import { umaVotingCommitteeAdapter } from "./umaVotingCommittee.js";
@@ -206,6 +207,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [tsaPassengersAdapter.id, tsaPassengersAdapter],
   [treasuryMtsDeficitAdapter.id, treasuryMtsDeficitAdapter],
   [umichConsumerSentimentAdapter.id, umichConsumerSentimentAdapter],
+  [ufoFilesAdapter.id, ufoFilesAdapter],
   [umaVoteCommitsAdapter.id, umaVoteCommitsAdapter],
   [umaVoteRevealsAdapter.id, umaVoteRevealsAdapter],
   [umaVotingCommitteeAdapter.id, umaVotingCommitteeAdapter],

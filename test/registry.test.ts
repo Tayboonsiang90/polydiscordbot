@@ -113,6 +113,7 @@ const expectedCommandIds = [
   ["tsa", "tsa-passengers"],
   ["treasurymts", "treasury-mts-deficit"],
   ["umichsentiment", "umich-consumer-sentiment"],
+  ["ufofiles", "ufo-files"],
   ["earthquake", "usgs-earthquakes"],
   ["earthquake65", "usgs-earthquakes-6-5"],
   ["earthquake7", "usgs-earthquakes-7-plus"],
