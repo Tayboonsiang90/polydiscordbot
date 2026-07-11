@@ -106,6 +106,7 @@ const expectedCommandIds = [
   ["rottentomatoes", "rotten-tomatoes-scores"],
   ["trumpapproval", "silver-trump-approval"],
   ["bieberlisteners", "spotify-bieber-monthly-listeners"],
+  ["spotifytopartist", "spotify-top-artist-monthly"],
   ["spiderman", "spider-man-trailer"],
   ["spotifyglobal", "spotify-top-50-global"],
   ["spotifyusa", "spotify-top-50-usa"],
@@ -268,6 +269,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("openaivaluation").getPollIntervalMinutes?.({} as never, new Date("2026-07-01T18:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("spotifyglobal").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyglobal").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("spotifytopartist").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("spotifytopartist").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyusa").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();

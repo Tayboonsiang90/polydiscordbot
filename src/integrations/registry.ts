@@ -86,6 +86,7 @@ import { rottenTomatoesScoresAdapter } from "./rottenTomatoesScores.js";
 import { rwaTotalValueAdapter } from "./rwaTotalValue.js";
 import { silverTrumpApprovalAdapter } from "./silverTrumpApproval.js";
 import { spotifyBieberMonthlyListenersAdapter } from "./spotifyMonthlyListeners.js";
+import { spotifyTopArtistMonthlyAdapter } from "./spotifyTopArtistMonthly.js";
 import { spiderManTrailerAdapter } from "./spiderManTrailer.js";
 import { spotifyTop50GlobalAdapter } from "./spotifyTop50Global.js";
 import { spotifyTop50UsaAdapter } from "./spotifyTop50Usa.js";
@@ -204,6 +205,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [rwaTotalValueAdapter.id, rwaTotalValueAdapter],
   [silverTrumpApprovalAdapter.id, silverTrumpApprovalAdapter],
   [spotifyBieberMonthlyListenersAdapter.id, spotifyBieberMonthlyListenersAdapter],
+  [spotifyTopArtistMonthlyAdapter.id, spotifyTopArtistMonthlyAdapter],
   [spiderManTrailerAdapter.id, spiderManTrailerAdapter],
   [spotifyTop50GlobalAdapter.id, spotifyTop50GlobalAdapter],
   [spotifyTop50UsaAdapter.id, spotifyTop50UsaAdapter],
