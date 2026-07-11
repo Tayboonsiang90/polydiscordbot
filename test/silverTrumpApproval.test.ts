@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractSilverApprovalSingleTargetDate,
   extractSilverApprovalUpDownReferenceDates,
   extractSilverTrumpApprovalValue,
   getSilverTrumpApprovalPollIntervalMinutes,
@@ -132,6 +133,14 @@ describe("Silver Bulletin Trump approval adapter", () => {
     ).toEqual({ firstDate: "2026-06-05", secondDate: "2026-06-12" });
   });
 
+  it("extracts a single-date approval target from Polymarket rules", () => {
+    expect(
+      extractSilverApprovalSingleTargetDate(
+        "This market will resolve according to Silver Bulletin's approval rating for Donald Trump on July 17, 2026."
+      )
+    ).toBe("2026-07-17");
+  });
+
   it("normalizes active Up/Down markets from Gamma search", () => {
     expect(
       normalizeSilverApprovalSearchEvent(
@@ -155,6 +164,47 @@ describe("Silver Bulletin Trump approval adapter", () => {
       secondDate: "2026-06-12",
       endAt: "2026-06-15T16:00:00.000Z"
     });
+  });
+
+  it("normalizes active single-date approval markets from Gamma search", () => {
+    expect(
+      normalizeSilverApprovalSearchEvent(
+        {
+          slug: "trump-approval-rating-on-july-17-20260710154118611",
+          title: "Trump approval rating on July 17?",
+          description:
+            "This market will resolve according to Silver Bulletin's approval rating for Donald Trump on July 17, 2026.",
+          active: true,
+          closed: false,
+          archived: false,
+          startDate: "2026-07-10T22:36:49.523932Z"
+        },
+        new Date("2026-07-11T00:00:00.000Z")
+      )
+    ).toMatchObject({
+      slug: "trump-approval-rating-on-july-17-20260710154118611",
+      url: "https://polymarket.com/event/trump-approval-rating-on-july-17-20260710154118611",
+      kind: "single-date",
+      targetDate: "2026-07-17",
+      endAt: "2026-07-22T16:00:00.000Z"
+    });
+  });
+
+  it("checks the configured single-date approval market target instead of the old default", () => {
+    const value = extractSilverTrumpApprovalValue(
+      [
+        "modeldate,approve,disapprove",
+        "6/5/2026,38.567,57.4",
+        "7/17/2026,40.123,56.9",
+        "7/18/2026,40.2,56.8"
+      ].join("\n"),
+      datasetUrl,
+      buildSingleDateMarket("2026-07-17")
+    );
+
+    expect(value).toContain("Target date: 2026-07-17");
+    expect(value).toContain("Approval: 40.1%");
+    expect(value).toContain("Finalized by next data point: 2026-07-18");
   });
 
   it("returns a tentative Up result until the second reference date is finalized", () => {
@@ -247,5 +297,18 @@ function buildUpDownMarket(firstDate: string, secondDate: string): SilverApprova
     startAt: "2026-06-05T19:56:28.556Z",
     endAt: "2026-06-08T16:00:00.000Z",
     addedAt: "2026-06-05T19:56:28.556Z"
+  };
+}
+
+function buildSingleDateMarket(targetDate: string): SilverApprovalMarketMetadata {
+  return {
+    slug: "trump-approval-rating-on-july-17-20260710154118611",
+    url: "https://polymarket.com/event/trump-approval-rating-on-july-17-20260710154118611",
+    kind: "single-date",
+    title: "Trump approval rating on July 17?",
+    targetDate,
+    startAt: "2026-07-10T22:36:49.523Z",
+    endAt: "2026-07-22T16:00:00.000Z",
+    addedAt: "2026-07-10T22:36:49.523Z"
   };
 }

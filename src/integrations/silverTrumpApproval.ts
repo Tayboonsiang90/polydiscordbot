@@ -24,10 +24,11 @@ export type SilverApprovalRow = {
 export type SilverApprovalMarketMetadata = {
   slug: string;
   url: string;
-  kind: "up-down";
+  kind: "single-date" | "up-down";
   title: string;
-  firstDate: string;
-  secondDate: string;
+  targetDate?: string;
+  firstDate?: string;
+  secondDate?: string;
   startAt: string | null;
   endAt: string | null;
   addedAt: string;
@@ -80,8 +81,8 @@ export const silverTrumpApprovalAdapter: WebsiteAdapter = {
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const { csv, datasetUrl } = await fetchSilverApprovalCsv();
     const market = getActiveSilverApprovalMarket(integration);
-    if (!market && isSilverApprovalUpDownUrl(integration?.polymarketUrl)) {
-      throw new Error("Could not parse Silver Approval Up/Down reference dates from Polymarket Gamma yet");
+    if (!market && isSilverApprovalTrackedUrl(integration?.polymarketUrl)) {
+      throw new Error("Could not parse Silver Approval Polymarket metadata from Gamma yet");
     }
 
     const value = extractSilverTrumpApprovalValue(csv, datasetUrl, market, new Date());
@@ -105,19 +106,21 @@ export function extractSilverTrumpApprovalValue(
     return buildSilverUpDownValue(rows, datasetUrl, market, now);
   }
 
-  return buildSingleDateApprovalValue(rows, datasetUrl);
+  return buildSingleDateApprovalValue(rows, datasetUrl, market);
 }
 
-function buildSingleDateApprovalValue(rows: SilverApprovalRow[], datasetUrl: string): string {
-  const target = rows.find((row) => row.date === targetDate) ?? null;
+function buildSingleDateApprovalValue(rows: SilverApprovalRow[], datasetUrl: string, market: SilverApprovalMarketMetadata | null = null): string {
+  const activeTargetDate = market?.kind === "single-date" && market.targetDate ? market.targetDate : targetDate;
+  const target = rows.find((row) => row.date === activeTargetDate) ?? null;
   const latest = rows.at(-1) ?? null;
-  const nextAfterTarget = rows.find((row) => row.date > targetDate) ?? null;
+  const nextAfterTarget = rows.find((row) => row.date > activeTargetDate) ?? null;
   const finalized = Boolean(target && nextAfterTarget);
 
   if (target && finalized) {
     return [
       "Metric: Silver Bulletin Trump approval rating",
-      `Target date: ${targetDate}`,
+      `Market: ${market?.title ?? "Trump approval rating"}`,
+      `Target date: ${activeTargetDate}`,
       "Target status: finalized",
       `Approval: ${formatPercent(target.approve)}`,
       `Disapproval: ${formatNullablePercent(target.disapprove)}`,
@@ -130,7 +133,8 @@ function buildSingleDateApprovalValue(rows: SilverApprovalRow[], datasetUrl: str
 
   return [
     "Metric: Silver Bulletin Trump approval rating",
-    `Target date: ${targetDate}`,
+    `Market: ${market?.title ?? "Trump approval rating"}`,
+    `Target date: ${activeTargetDate}`,
     `Target status: ${target ? "published; waiting for next data point to finalize" : "not published yet"}`,
     `Approval: ${target ? formatPercent(target.approve) : "not published yet"}`,
     `Disapproval: ${target ? formatNullablePercent(target.disapprove) : "not published yet"}`,
@@ -147,10 +151,12 @@ function buildSilverUpDownValue(
   market: SilverApprovalMarketMetadata,
   now: Date
 ): string {
-  const firstReference = resolveFirstReference(rows, market.firstDate);
-  const secondReference = resolveSecondReference(rows, market.secondDate, now);
+  const firstDate = market.firstDate ?? targetDate;
+  const secondDate = market.secondDate ?? targetDate;
+  const firstReference = resolveFirstReference(rows, firstDate);
+  const secondReference = resolveSecondReference(rows, secondDate, now);
   const latest = rows.at(-1) ?? null;
-  const deadlineAt = getSecondReferenceFallbackDeadline(market.secondDate);
+  const deadlineAt = getSecondReferenceFallbackDeadline(secondDate);
   const result = firstReference.row && secondReference.row ? compareApprovalRows(firstReference.row, secondReference.row) : "Pending";
   const status = getUpDownStatus(firstReference, secondReference);
   const resultPrefix = status === "finalized" ? "Final" : status === "pending" ? "Pending" : "Tentative";
@@ -158,11 +164,11 @@ function buildSilverUpDownValue(
   return [
     "Metric: Silver Bulletin Trump approval Up/Down",
     `Market: ${market.title}`,
-    `Reference dates: ${market.firstDate} vs ${market.secondDate}`,
-    `Status: ${formatUpDownStatus(status, market.secondDate, deadlineAt, secondReference)}`,
+    `Reference dates: ${firstDate} vs ${secondDate}`,
+    `Status: ${formatUpDownStatus(status, secondDate, deadlineAt, secondReference)}`,
     `Result: ${result === "Pending" ? "Pending" : `${resultPrefix} ${result}`}`,
-    `First reference: ${formatReference(firstReference, market.firstDate)}`,
-    `Second reference: ${formatReference(secondReference, market.secondDate)}`,
+    `First reference: ${formatReference(firstReference, firstDate)}`,
+    `Second reference: ${formatReference(secondReference, secondDate)}`,
     `Comparison: ${formatComparison(firstReference.row, secondReference.row)}`,
     `Fallback deadline: ${deadlineAt.toISOString()} (12:00 PM ET on third calendar day after second date)`,
     `Latest available: ${formatRow(latest)}`,
@@ -216,13 +222,22 @@ export function getSilverTrumpApprovalPollIntervalMinutes(integration: Integrati
   }
 
   const market = getActiveSilverApprovalMarket(integration);
-  if (market?.kind === "up-down") {
+  if (market?.kind === "up-down" && market.secondDate) {
     const easternDate = getEasternDate(now);
     if (easternDate < market.secondDate) {
       return 1_440;
     }
 
     return now.getTime() <= getSecondReferenceFallbackDeadline(market.secondDate).getTime() ? 1 : 60;
+  }
+
+  if (market?.kind === "single-date" && market.targetDate) {
+    const easternDate = getEasternDate(now);
+    if (easternDate < market.targetDate) {
+      return 1_440;
+    }
+
+    return now.getTime() <= getSingleDateFallbackDeadline(market.targetDate).getTime() ? 1 : 60;
   }
 
   const easternDate = getEasternDate(now);
@@ -239,7 +254,7 @@ export function getSilverTrumpApprovalPollIntervalReason(integration: Integratio
   }
 
   const market = getActiveSilverApprovalMarket(integration);
-  if (market?.kind === "up-down") {
+  if (market?.kind === "up-down" && market.secondDate) {
     const easternDate = getEasternDate(now);
     if (easternDate < market.secondDate) {
       return `Silver Bulletin Up/Down market before ${market.secondDate} ET; daily check only`;
@@ -248,6 +263,17 @@ export function getSilverTrumpApprovalPollIntervalReason(integration: Integratio
     return now.getTime() <= getSecondReferenceFallbackDeadline(market.secondDate).getTime()
       ? `Silver Bulletin Up/Down finalization watch until ${market.secondDate} is finalized by a subsequent data point`
       : "Silver Bulletin Up/Down fallback hourly mode; second reference date still not finalized";
+  }
+
+  if (market?.kind === "single-date" && market.targetDate) {
+    const easternDate = getEasternDate(now);
+    if (easternDate < market.targetDate) {
+      return `Silver Bulletin approval market before ${market.targetDate} ET; daily check only`;
+    }
+
+    return now.getTime() <= getSingleDateFallbackDeadline(market.targetDate).getTime()
+      ? `Silver Bulletin release watch until the ${market.targetDate} value is finalized by the next data point`
+      : "Silver Bulletin fallback hourly mode; target value still not finalized";
   }
 
   const easternDate = getEasternDate(now);
@@ -376,7 +402,7 @@ async function fetchMissingSilverApprovalMetadata(
   now: Date
 ): Promise<SilverApprovalMarketMetadata | null> {
   const slug = getPolymarketSlug(url);
-  if (!slug || !isSilverApprovalUpDownSlug(slug) || settings.silverApprovalMarkets?.some((market) => market.slug === slug)) {
+  if (!slug || !isSilverApprovalTrackedSlug(slug) || settings.silverApprovalMarkets?.some((market) => market.slug === slug)) {
     return null;
   }
 
@@ -403,8 +429,21 @@ async function fetchSilverApprovalMarketByUrl(url: string, now: Date): Promise<S
 }
 
 async function fetchSilverApprovalMarketSearchCandidates(now: Date): Promise<SilverApprovalMarketMetadata[]> {
+  const searches = await Promise.all([
+    fetchSilverApprovalMarketSearch("trump approval up or down", now),
+    fetchSilverApprovalMarketSearch("trump approval rating on", now)
+  ]);
+  const bySlug = new Map<string, SilverApprovalMarketMetadata>();
+  for (const market of searches.flat()) {
+    bySlug.set(market.slug, market);
+  }
+
+  return sortSilverApprovalMarkets([...bySlug.values()]);
+}
+
+async function fetchSilverApprovalMarketSearch(query: string, now: Date): Promise<SilverApprovalMarketMetadata[]> {
   const searchUrl = new URL(gammaSearchUrl);
-  searchUrl.searchParams.set("q", "trump approval up or down");
+  searchUrl.searchParams.set("q", query);
   searchUrl.searchParams.set("events_status", "active");
   searchUrl.searchParams.set("limit_per_type", "10");
 
@@ -435,17 +474,41 @@ export function normalizeSilverApprovalSearchEvent(event: GammaSearchEvent, now:
 
   const slug = event.slug.trim();
   const title = event.title.trim();
-  if (!isSilverApprovalUpDownSlug(slug) || !title.toLowerCase().includes("trump approval")) {
+  if (!isSilverApprovalTrackedSlug(slug) || !title.toLowerCase().includes("trump approval")) {
     return null;
   }
 
-  const referenceDates = extractSilverApprovalUpDownReferenceDates(event.description);
-  if (!referenceDates) {
-    return null;
-  }
-
-  const fallbackDeadlineAt = getSecondReferenceFallbackDeadline(referenceDates.secondDate).toISOString();
   const startAt = parseGammaDate(event.startDate) ?? parseGammaDate(event.creationDate) ?? parseGammaDate(event.createdAt);
+  if (isSilverApprovalUpDownSlug(slug)) {
+    const referenceDates = extractSilverApprovalUpDownReferenceDates(event.description);
+    if (!referenceDates) {
+      return null;
+    }
+
+    const fallbackDeadlineAt = getSecondReferenceFallbackDeadline(referenceDates.secondDate).toISOString();
+    if (Date.parse(fallbackDeadlineAt) < now.getTime()) {
+      return null;
+    }
+
+    return {
+      slug,
+      url: `https://polymarket.com/event/${slug}`,
+      kind: "up-down",
+      title,
+      firstDate: referenceDates.firstDate,
+      secondDate: referenceDates.secondDate,
+      startAt,
+      endAt: fallbackDeadlineAt,
+      addedAt: now.toISOString()
+    };
+  }
+
+  const target = extractSilverApprovalSingleTargetDate(event.description) ?? extractSilverApprovalSingleTargetDate(title);
+  if (!target) {
+    return null;
+  }
+
+  const fallbackDeadlineAt = getSingleDateFallbackDeadline(target).toISOString();
   if (Date.parse(fallbackDeadlineAt) < now.getTime()) {
     return null;
   }
@@ -453,10 +516,9 @@ export function normalizeSilverApprovalSearchEvent(event: GammaSearchEvent, now:
   return {
     slug,
     url: `https://polymarket.com/event/${slug}`,
-    kind: "up-down",
+    kind: "single-date",
     title,
-    firstDate: referenceDates.firstDate,
-    secondDate: referenceDates.secondDate,
+    targetDate: target,
     startAt,
     endAt: fallbackDeadlineAt,
     addedAt: now.toISOString()
@@ -472,6 +534,11 @@ export function extractSilverApprovalUpDownReferenceDates(description: string): 
   const secondDate = parseWrittenDate(match[1]);
   const firstDate = parseWrittenDate(match[2]);
   return firstDate && secondDate ? { firstDate, secondDate } : null;
+}
+
+export function extractSilverApprovalSingleTargetDate(description: string): string | null {
+  const match = description.match(/approval rating (?:for Donald Trump )?on ([A-Za-z]+ \d{1,2}, 20\d{2})/i);
+  return match ? parseWrittenDate(match[1]) : null;
 }
 
 function upsertSilverApprovalMetadata(
@@ -556,36 +623,48 @@ function normalizeSilverApprovalMarketMetadata(value: unknown): SilverApprovalMa
   }
 
   return sortSilverApprovalMarkets(
-    value.flatMap((item) => {
+    value.flatMap((item): SilverApprovalMarketMetadata[] => {
       if (!item || typeof item !== "object") {
         return [];
       }
 
       const market = item as Partial<SilverApprovalMarketMetadata>;
-      if (
-        market.kind !== "up-down" ||
-        !isNonEmptyString(market.slug) ||
-        !isNonEmptyString(market.url) ||
-        !isNonEmptyString(market.title) ||
-        !isIsoDate(market.firstDate) ||
-        !isIsoDate(market.secondDate)
-      ) {
+      if (!isNonEmptyString(market.slug) || !isNonEmptyString(market.url) || !isNonEmptyString(market.title)) {
         return [];
       }
 
-      return [
-        {
-          slug: market.slug,
-          url: market.url,
-          kind: "up-down" as const,
-          title: market.title,
-          firstDate: market.firstDate,
-          secondDate: market.secondDate,
-          startAt: typeof market.startAt === "string" ? market.startAt : null,
-          endAt: typeof market.endAt === "string" ? market.endAt : getSecondReferenceFallbackDeadline(market.secondDate).toISOString(),
-          addedAt: typeof market.addedAt === "string" ? market.addedAt : new Date(0).toISOString()
-        }
-      ];
+      if (market.kind === "up-down" && isIsoDate(market.firstDate) && isIsoDate(market.secondDate)) {
+        return [
+          {
+            slug: market.slug,
+            url: market.url,
+            kind: "up-down" as const,
+            title: market.title,
+            firstDate: market.firstDate,
+            secondDate: market.secondDate,
+            startAt: typeof market.startAt === "string" ? market.startAt : null,
+            endAt: typeof market.endAt === "string" ? market.endAt : getSecondReferenceFallbackDeadline(market.secondDate).toISOString(),
+            addedAt: typeof market.addedAt === "string" ? market.addedAt : new Date(0).toISOString()
+          }
+        ];
+      }
+
+      if (market.kind === "single-date" && isIsoDate(market.targetDate)) {
+        return [
+          {
+            slug: market.slug,
+            url: market.url,
+            kind: "single-date" as const,
+            title: market.title,
+            targetDate: market.targetDate,
+            startAt: typeof market.startAt === "string" ? market.startAt : null,
+            endAt: typeof market.endAt === "string" ? market.endAt : getSingleDateFallbackDeadline(market.targetDate).toISOString(),
+            addedAt: typeof market.addedAt === "string" ? market.addedAt : new Date(0).toISOString()
+          }
+        ];
+      }
+
+      return [];
     })
   );
 }
@@ -625,7 +704,11 @@ function normalizeSilverApprovalQueueMarkets(value: unknown): PolymarketQueueMar
 }
 
 function sortSilverApprovalMarkets(markets: SilverApprovalMarketMetadata[]): SilverApprovalMarketMetadata[] {
-  return [...markets].sort((left, right) => left.secondDate.localeCompare(right.secondDate) || left.slug.localeCompare(right.slug));
+  return [...markets].sort((left, right) => getSilverApprovalSortDate(left).localeCompare(getSilverApprovalSortDate(right)) || left.slug.localeCompare(right.slug));
+}
+
+function getSilverApprovalSortDate(market: SilverApprovalMarketMetadata): string {
+  return market.kind === "single-date" ? (market.targetDate ?? "") : (market.secondDate ?? "");
 }
 
 function sortQueueMarkets(markets: PolymarketQueueMarket[]): PolymarketQueueMarket[] {
@@ -747,6 +830,11 @@ function getSecondReferenceFallbackDeadline(secondDate: string): Date {
   return parseManualEasternDateTime(`${deadlineDate} 12:00`) ?? new Date(`${deadlineDate}T16:00:00.000Z`);
 }
 
+function getSingleDateFallbackDeadline(date: string): Date {
+  const deadlineDate = addIsoDays(date, 5);
+  return parseManualEasternDateTime(`${deadlineDate} 12:00`) ?? new Date(`${deadlineDate}T16:00:00.000Z`);
+}
+
 function addIsoDays(date: string, days: number): string {
   const parsed = new Date(`${date}T00:00:00.000Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
@@ -800,13 +888,21 @@ function isDiscoveryIntervalDue(value: string | undefined, now: Date, intervalMs
   return Number.isNaN(lastCheckedAt) || now.getTime() - lastCheckedAt >= intervalMs;
 }
 
-function isSilverApprovalUpDownUrl(url: string | null | undefined): boolean {
+function isSilverApprovalTrackedUrl(url: string | null | undefined): boolean {
   const slug = url ? getPolymarketSlug(url) : null;
-  return Boolean(slug && isSilverApprovalUpDownSlug(slug));
+  return Boolean(slug && isSilverApprovalTrackedSlug(slug));
+}
+
+function isSilverApprovalTrackedSlug(slug: string): boolean {
+  return isSilverApprovalUpDownSlug(slug) || isSilverApprovalSingleDateSlug(slug);
 }
 
 function isSilverApprovalUpDownSlug(slug: string): boolean {
   return slug.startsWith("trump-approval-up-or-down-this-week");
+}
+
+function isSilverApprovalSingleDateSlug(slug: string): boolean {
+  return slug.startsWith("trump-approval-rating-on-");
 }
 
 function isNonEmptyString(value: unknown): value is string {
