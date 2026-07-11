@@ -118,6 +118,28 @@ describe("NPM private valuation adapters", () => {
     expect(shouldAlertOnNpmValuationChange(apiValue, renderedValue.replace("$16.73B", "$16.74B"))).toBe(true);
   });
 
+  it("normalizes PPS thousands separators so rendered and API values do not flap", () => {
+    const ungroupedValue = formatNpmValuationValue({
+      companyName: "Canva",
+      asOf: "Jul 9, 2026",
+      valuation: "$41.139B",
+      pricePerShare: "$1686.7",
+      sourceUrl: "https://fe.secondmarket.com/companies/company-5e0e75a3-96d6-4893-8f23-9d9bac0ec1db/data"
+    });
+    const groupedValue = formatNpmValuationValue({
+      companyName: "Canva",
+      asOf: "Jul 9, 2026",
+      valuation: "$41.139B",
+      pricePerShare: "$1,686.70",
+      sourceUrl: "https://fe.secondmarket.com/companies/company-5e0e75a3-96d6-4893-8f23-9d9bac0ec1db/data"
+    });
+
+    expect(ungroupedValue).toContain("Price per share: $1,686.7");
+    expect(groupedValue).toContain("Price per share: $1,686.7");
+    expect(normalizeNpmValuationValueForComparison(ungroupedValue)).toBe(normalizeNpmValuationValueForComparison(groupedValue));
+    expect(shouldAlertOnNpmValuationChange(ungroupedValue, groupedValue)).toBe(false);
+  });
+
   it("uses 10-second polling during the 1 PM ET release window", () => {
     expect(isNpmValuationBurstWindow(new Date("2026-07-01T16:49:59.000Z"))).toBe(false);
     expect(isNpmValuationBurstWindow(new Date("2026-07-01T16:50:00.000Z"))).toBe(true);

@@ -733,9 +733,28 @@ function trimTrailingZeros(value: string): string {
 }
 
 function normalizeNpmDollarString(value: string): string {
-  return value.replace(/\$-?\d+(?:,\d{3})*(?:\.\d+)?[TBM]?/g, (match) =>
-    match.replace(/(\.\d*?[1-9])0+([TBM]?)$/, "$1$2").replace(/\.0+([TBM]?)$/, "$1")
-  );
+  return value.replace(/\$-?\d+(?:,\d{3})*(?:\.\d+)?[TBM]?/g, normalizeNpmDollarMatch);
+}
+
+function normalizeNpmDollarMatch(match: string): string {
+  const parsed = match.match(/^\$(-?\d+(?:,\d{3})*(?:\.\d+)?)([TBM]?)$/);
+  if (!parsed) {
+    return match;
+  }
+
+  const suffix = parsed[2];
+  const numeric = parsed[1].replace(/,/g, "");
+  const sign = numeric.startsWith("-") ? "-" : "";
+  const absolute = sign ? numeric.slice(1) : numeric;
+  const [integerPart, fractionPart = ""] = absolute.split(".");
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, "") || "0";
+  const normalizedFraction = fractionPart.replace(/0+$/, "");
+  const fraction = normalizedFraction ? `.${normalizedFraction}` : "";
+  return `$${sign}${addThousandsSeparators(normalizedInteger)}${fraction}${suffix}`;
+}
+
+function addThousandsSeparators(value: string): string {
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 function getEasternTimeParts(date: Date): { hour: number; minute: number; second: number } {
