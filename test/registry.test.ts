@@ -8,6 +8,7 @@ const expectedCommandIds = [
   ["albumreleases", "apple-artist-album-releases"],
   ["joerogan", "joe-rogan-podcast"],
   ["lemonade", "lemonade-stand-podcast"],
+  ["metadao", "metadao-credible-fundraise"],
   ["songreleases", "apple-artist-song-releases"],
   ["arenaai", "arena-ai-no-style-control"],
   ["aws", "aws-disrupted-events"],
@@ -183,6 +184,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("joerogan").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("lemonade").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("lemonade").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("metadao").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("claudeavg").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);

@@ -40,6 +40,7 @@ import { kmaSeoulPrecipAdapter } from "./kmaSeoulPrecip.js";
 import { londonPrecipAdapter } from "./londonPrecip.js";
 import { joeRoganPodcastAdapter } from "./joeRoganPodcast.js";
 import { lemonadeStandPodcastAdapter } from "./lemonadeStandPodcast.js";
+import { metadaoCredibleFundraiseAdapter } from "./metadaoCredibleFundraise.js";
 import { mtWashingtonWindAdapter } from "./mtWashingtonWind.js";
 import { mrBeastGamingVideosAdapter } from "./mrBeastGamingVideos.js";
 import { mrBeastSubscribersAdapter } from "./mrBeastSubscribers.js";
@@ -161,6 +162,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [londonPrecipAdapter.id, londonPrecipAdapter],
   [joeRoganPodcastAdapter.id, joeRoganPodcastAdapter],
   [lemonadeStandPodcastAdapter.id, lemonadeStandPodcastAdapter],
+  [metadaoCredibleFundraiseAdapter.id, metadaoCredibleFundraiseAdapter],
   [mtWashingtonWindAdapter.id, mtWashingtonWindAdapter],
   [mrBeastGamingVideosAdapter.id, mrBeastGamingVideosAdapter],
   [mrBeastSubscribersAdapter.id, mrBeastSubscribersAdapter],
