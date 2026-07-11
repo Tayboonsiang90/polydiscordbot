@@ -12,6 +12,7 @@ const expectedCommandIds = [
   ["arenaai", "arena-ai-no-style-control"],
   ["aws", "aws-disrupted-events"],
   ["boidecision", "bank-of-israel-decision"],
+  ["rbnzdecision", "reserve-bank-new-zealand-decision"],
   ["basedrevenue", "based-revenue"],
   ["bea", "bea-current-releases"],
   ["jisdor", "bi-jisdor-usd-idr"],
@@ -267,5 +268,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("trumpgetty").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("fulllid").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("rbnzdecision").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("rbnzdecision").getPollIntervalMinutes?.({ lastValue: "Next OCR update: 2026-09-01 22:00 ET" } as never, new Date("2026-09-01T16:00:00.000Z"))).toBe(1);
   });
 });
