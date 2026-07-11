@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractSilverApprovalSingleTargetDate,
   extractSilverApprovalUpDownReferenceDates,
+  extractSilverTrumpApprovalMultiMarketValue,
   extractSilverTrumpApprovalValue,
   getSilverTrumpApprovalPollIntervalMinutes,
   normalizeSilverApprovalSearchEvent,
@@ -205,6 +206,53 @@ describe("Silver Bulletin Trump approval adapter", () => {
     expect(value).toContain("Target date: 2026-07-17");
     expect(value).toContain("Approval: 40.1%");
     expect(value).toContain("Finalized by next data point: 2026-07-18");
+  });
+
+  it("checks overlapping single-date and Up/Down markets together", () => {
+    const value = extractSilverTrumpApprovalMultiMarketValue(
+      [
+        "modeldate,approve,disapprove",
+        "7/10/2026,39.6,56.6",
+        "7/17/2026,40.123,56.9",
+        "7/18/2026,40.2,56.8"
+      ].join("\n"),
+      datasetUrl,
+      [buildUpDownMarket("2026-07-10", "2026-07-17"), buildSingleDateMarket("2026-07-17")],
+      new Date("2026-07-18T20:00:00.000Z")
+    );
+
+    expect(value).toContain("Active markets: 2");
+    expect(value).toContain("Reference dates: 2026-07-10 vs 2026-07-17");
+    expect(value).toContain("Result: Final Up");
+    expect(value).toContain("Target date: 2026-07-17");
+    expect(value).toContain("Approval: 40.1%");
+  });
+
+  it("alerts for new actionable states inside overlapping market output", () => {
+    const pending = [
+      "Metric: Silver Bulletin Trump approval markets",
+      "Active markets: 2",
+      "",
+      "Tracked market 1: Trump approval Up or Down this week?",
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-07-10 vs 2026-07-17",
+      "Status: pending; waiting for 2026-07-17 data or fallback deadline 2026-07-20T16:00:00.000Z",
+      "Result: Pending",
+      "",
+      "Tracked market 2: Trump approval rating on July 17?",
+      "Metric: Silver Bulletin Trump approval rating",
+      "Target date: 2026-07-17",
+      "Target status: not published yet",
+      "Approval: not published yet"
+    ].join("\n");
+    const actionable = pending
+      .replace("Status: pending; waiting for 2026-07-17 data or fallback deadline 2026-07-20T16:00:00.000Z", "Status: finalized")
+      .replace("Result: Pending", "Result: Final Up")
+      .replace("Target status: not published yet", "Target status: finalized")
+      .replace("Approval: not published yet", "Approval: 40.1%");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(pending, actionable)).toBe(true);
+    expect(silverTrumpApprovalShouldAlertOnChange(actionable, actionable)).toBe(false);
   });
 
   it("returns a tentative Up result until the second reference date is finalized", () => {
