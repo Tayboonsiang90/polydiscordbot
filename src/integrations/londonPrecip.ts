@@ -5,6 +5,8 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.metoffice.gov.uk/pub/data/weather/uk/climate/stationdata/heathrowdata.txt";
 const infoclimatStationPath = "london-heathrow-londres/valeurs/03772.html";
+const weatherComApiKey = "e1f10a1e78da46f5b10a1e78da96f525";
+const weatherComPwsStationId = "ILONDON513";
 const defaultYear = 2026;
 const defaultMonth = 5;
 const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
@@ -40,6 +42,9 @@ export type InfoclimatLondonMonthlyPrecipitation = {
   total: number;
   updatedAt: string | null;
   sourceUrl: string;
+  sourceName?: string;
+  latestDate?: string | null;
+  dailyValues?: Array<{ date: string; precipitation: number }>;
 };
 
 type InfoclimatAlphaSnapshot = {
@@ -110,7 +115,7 @@ export function buildLondonPrecipitationAlphaValue(
       `Current total: ${official.totalText} mm`,
       "Data status: official Met Office station data",
       `Official Met Office row: ${official.totalText} mm (${official.provisional ? "Provisional" : "Final"})`,
-      `Alpha Infoclimat cumulative: ${formatAlphaValue(alpha)}`
+      `${formatAlphaLabel(alpha)}: ${formatAlphaValue(alpha)}`
     ].join("\n");
   }
 
@@ -118,12 +123,12 @@ export function buildLondonPrecipitationAlphaValue(
     "Metric: Met Office Heathrow precipitation",
     `Period: ${period}`,
     `Current total: ${alpha ? `${alpha.totalText} mm` : "not published yet"}`,
-    `Data status: ${alpha ? "alpha Infoclimat daily climatology" : "not published yet"}`,
+    `Data status: ${alpha ? `alpha ${alpha.sourceName ?? "Infoclimat"}` : "not published yet"}`,
     "Official Met Office row: not published yet",
     `Latest official Met Office row: ${official.latestPeriodText ?? "none"}`,
-    `Alpha Infoclimat cumulative: ${formatAlphaValue(alpha)}`,
+    `${formatAlphaLabel(alpha)}: ${formatAlphaValue(alpha)}`,
     ...formatInfoclimatDailyAlphaLines(alpha, previousValue, period),
-    `Alpha source: ${buildInfoclimatLondonPrecipitationUrl(settings.year)}`
+    `Alpha source: ${alpha?.sourceUrl ?? buildInfoclimatLondonPrecipitationUrl(settings.year)}`
   ].join("\n");
 }
 
@@ -158,8 +163,28 @@ export function extractInfoclimatLondonMonthlyPrecipitation(
     totalText,
     total: Number(totalText),
     updatedAt,
-    sourceUrl: source
+    sourceUrl: source,
+    sourceName: "Infoclimat"
   };
+}
+
+export function extractWeatherComPwsDailyPrecipitation(payload: unknown, date: string): { date: string; precipitation: number } | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const observations = Array.isArray((payload as { observations?: unknown }).observations)
+    ? ((payload as { observations: unknown[] }).observations)
+    : [];
+  const observation = observations.find((candidate) => candidate && typeof candidate === "object") as
+    | { metric?: { precipTotal?: unknown }; obsTimeLocal?: unknown }
+    | undefined;
+  const precipTotal = observation?.metric?.precipTotal;
+  if (typeof precipTotal !== "number" || !Number.isFinite(precipTotal) || precipTotal < 0) {
+    return null;
+  }
+
+  return { date, precipitation: precipTotal };
 }
 
 export function extractHeathrowClimateRows(text: string): HeathrowClimateRow[] {
@@ -260,13 +285,56 @@ async function fetchInfoclimatLondonPrecipitation(
       }
     });
     if (!response.ok) {
-      return null;
+      return fetchWeatherComLondonPrecipitationAlpha(settings);
     }
 
     return extractInfoclimatLondonMonthlyPrecipitation(await response.text(), settings, source);
   } catch {
+    return fetchWeatherComLondonPrecipitationAlpha(settings);
+  }
+}
+
+async function fetchWeatherComLondonPrecipitationAlpha(
+  settings: LondonPrecipSettings,
+  now = new Date()
+): Promise<InfoclimatLondonMonthlyPrecipitation | null> {
+  const dates = buildWeatherComAlphaDates(settings, now);
+  const dailyValues: Array<{ date: string; precipitation: number }> = [];
+  for (const date of dates) {
+    const value = await fetchWeatherComPwsDailyPrecipitation(date).catch(() => null);
+    if (value) {
+      dailyValues.push(value);
+    }
+  }
+
+  if (dailyValues.length === 0) {
     return null;
   }
+
+  const total = dailyValues.reduce((sum, value) => sum + value.precipitation, 0);
+  const latestDate = dailyValues.at(-1)?.date ?? null;
+  return {
+    total,
+    totalText: total.toFixed(1),
+    updatedAt: latestDate,
+    latestDate,
+    dailyValues,
+    sourceName: "Weather.com PWS near Heathrow",
+    sourceUrl: buildWeatherComPwsHistoryUrl(latestDate ?? dates.at(-1) ?? formatDate(settings.year, settings.month, 1))
+  };
+}
+
+async function fetchWeatherComPwsDailyPrecipitation(date: string): Promise<{ date: string; precipitation: number } | null> {
+  const response = await fetchWithTimeout(buildWeatherComPwsApiUrl(date), {
+    headers: {
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+  if (!response.ok) {
+    return null;
+  }
+
+  return extractWeatherComPwsDailyPrecipitation(await response.json(), date);
 }
 
 function normalizeRainfallValue(value: string): string | null {
@@ -289,6 +357,10 @@ function formatAlphaValue(alpha: InfoclimatLondonMonthlyPrecipitation | null): s
   }
 
   return `${alpha.totalText} mm${alpha.updatedAt ? ` (updated ${alpha.updatedAt})` : ""}`;
+}
+
+function formatAlphaLabel(alpha: InfoclimatLondonMonthlyPrecipitation | null): string {
+  return `Alpha ${alpha?.sourceName ?? "Infoclimat"} cumulative`;
 }
 
 function formatInfoclimatDailyAlphaLines(
@@ -317,7 +389,7 @@ function formatInfoclimatDailyAlphaLines(
 
   const dailyEstimate = (alpha.total - previous.total).toFixed(1);
   return [
-    `Alpha daily estimate: ${dailyEstimate} mm since previous Infoclimat update`,
+    `Alpha daily estimate: ${dailyEstimate} mm since previous alpha update`,
     `Alpha previous cumulative: ${previous.totalText} mm${previous.updatedAt ? ` (updated ${previous.updatedAt})` : ""}`
   ];
 }
@@ -327,7 +399,7 @@ function extractCurrentTotalLine(value: string | null): string | null {
 }
 
 function extractAlphaCumulativeLine(value: string | null): string | null {
-  return value?.match(/^Alpha Infoclimat cumulative:\s*(.+)$/m)?.[1] ?? null;
+  return value?.match(/^Alpha .* cumulative:\s*(.+)$/m)?.[1] ?? null;
 }
 
 function extractInfoclimatAlphaSnapshot(value: string | null): InfoclimatAlphaSnapshot | null {
@@ -364,4 +436,47 @@ function normalizeAscii(value: string): string {
 
 function padMonth(month: number): string {
   return String(month).padStart(2, "0");
+}
+
+function buildWeatherComAlphaDates(settings: LondonPrecipSettings, now: Date): string[] {
+  const nowParts = getLondonDateParts(now);
+  const isCurrentMonth = settings.year === nowParts.year && settings.month === nowParts.month;
+  const lastDay = isCurrentMonth ? nowParts.day : daysInMonth(settings.year, settings.month);
+  const dates: string[] = [];
+  for (let day = 1; day <= lastDay; day += 1) {
+    dates.push(formatDate(settings.year, settings.month, day));
+  }
+
+  return dates;
+}
+
+function buildWeatherComPwsApiUrl(date: string): string {
+  return `https://api.weather.com/v2/pws/history/daily?stationId=${weatherComPwsStationId}&format=json&units=m&date=${date.replace(/-/g, "")}&apiKey=${weatherComApiKey}`;
+}
+
+function buildWeatherComPwsHistoryUrl(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return `https://www.wunderground.com/history/daily/gb/hounslow/${weatherComPwsStationId}/date/${year}-${month}-${day}`;
+}
+
+function formatDate(year: number, month: number, day: number): string {
+  return `${year}-${padMonth(month)}-${String(day).padStart(2, "0")}`;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function getLondonDateParts(date: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value),
+    month: Number(parts.find((part) => part.type === "month")?.value),
+    day: Number(parts.find((part) => part.type === "day")?.value)
+  };
 }

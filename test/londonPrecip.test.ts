@@ -5,6 +5,7 @@ import {
   extractInfoclimatLondonMonthlyPrecipitation,
   extractLondonPrecipitationOfficialValue,
   extractLondonPrecipitationValue,
+  extractWeatherComPwsDailyPrecipitation,
   getLondonPrecipSettings,
   isValidLondonPrecipPeriod,
   londonPrecipShouldAlertOnChange
@@ -88,13 +89,14 @@ describe("Met Office London precipitation adapter", () => {
       totalText: "12.4",
       total: 12.4,
       updatedAt: "2026-05-29 10:37:13",
+      sourceName: "Infoclimat",
       sourceUrl: "https://example.com"
     });
     expect(buildLondonPrecipitationAlphaValue(official, alpha, { year: 2026, month: 5 })).toContain(
       "Current total: 12.4 mm"
     );
     expect(buildLondonPrecipitationAlphaValue(official, alpha, { year: 2026, month: 5 })).toContain(
-      "Data status: alpha Infoclimat daily climatology"
+      "Data status: alpha Infoclimat"
     );
   });
 
@@ -113,8 +115,27 @@ describe("Met Office London precipitation adapter", () => {
 
     const value = buildLondonPrecipitationAlphaValue(official, alpha, { year: 2026, month: 5 }, previousValue);
 
-    expect(value).toContain("Alpha daily estimate: 2.4 mm since previous Infoclimat update");
+    expect(value).toContain("Alpha daily estimate: 2.4 mm since previous alpha update");
     expect(value).toContain("Alpha previous cumulative: 10.0 mm (updated 2026-05-28 10:00:00)");
+  });
+
+  it("extracts Weather.com PWS daily precipitation fallback values", () => {
+    expect(
+      extractWeatherComPwsDailyPrecipitation(
+        {
+          observations: [
+            {
+              stationID: "ILONDON513",
+              obsTimeLocal: "2026-07-10 23:59:49",
+              metric: {
+                precipTotal: 2.4
+              }
+            }
+          ]
+        },
+        "2026-07-10"
+      )
+    ).toEqual({ date: "2026-07-10", precipitation: 2.4 });
   });
 
   it("alerts when Infoclimat publishes a zero-rainfall daily update", () => {
@@ -130,8 +151,8 @@ describe("Met Office London precipitation adapter", () => {
           "Metric: Met Office Heathrow precipitation",
           "Period: 2026-05",
           "Current total: 12.4 mm",
-          "Alpha Infoclimat cumulative: 12.4 mm (updated 2026-05-29 10:37:13)",
-          "Alpha daily estimate: 0.0 mm since previous Infoclimat update"
+          "Alpha Weather.com PWS near Heathrow cumulative: 12.4 mm (updated 2026-05-29)",
+          "Alpha daily estimate: 0.0 mm since previous alpha update"
         ].join("\n")
       )
     ).toBe(true);
