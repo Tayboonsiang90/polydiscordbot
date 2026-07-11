@@ -81,6 +81,7 @@ import { pythWtiAdapter } from "./pythWti.js";
 import { pythXagUsdAdapter } from "./pythXagUsd.js";
 import { pythXauUsdAdapter } from "./pythXauUsd.js";
 import { reserveBankNewZealandDecisionAdapter } from "./reserveBankNewZealandDecision.js";
+import { rottenTomatoesScoresAdapter } from "./rottenTomatoesScores.js";
 import { rwaTotalValueAdapter } from "./rwaTotalValue.js";
 import { silverTrumpApprovalAdapter } from "./silverTrumpApproval.js";
 import { spotifyBieberMonthlyListenersAdapter } from "./spotifyMonthlyListeners.js";
@@ -197,6 +198,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [pythXagUsdAdapter.id, pythXagUsdAdapter],
   [pythXauUsdAdapter.id, pythXauUsdAdapter],
   [reserveBankNewZealandDecisionAdapter.id, reserveBankNewZealandDecisionAdapter],
+  [rottenTomatoesScoresAdapter.id, rottenTomatoesScoresAdapter],
   [rwaTotalValueAdapter.id, rwaTotalValueAdapter],
   [silverTrumpApprovalAdapter.id, silverTrumpApprovalAdapter],
   [spotifyBieberMonthlyListenersAdapter.id, spotifyBieberMonthlyListenersAdapter],

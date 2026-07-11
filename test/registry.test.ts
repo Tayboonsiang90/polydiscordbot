@@ -102,6 +102,7 @@ const expectedCommandIds = [
   ["xagusd", "pyth-xagusd-strikes"],
   ["xauusd", "pyth-xauusd-strikes"],
   ["rwatotal", "rwa-total-value"],
+  ["rottentomatoes", "rotten-tomatoes-scores"],
   ["trumpapproval", "silver-trump-approval"],
   ["bieberlisteners", "spotify-bieber-monthly-listeners"],
   ["spiderman", "spider-man-trailer"],
@@ -251,6 +252,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("eviv").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("eviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("rwatotal").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("rottentomatoes").getPollIntervalMinutes?.({} as never)).toBe(5);
+    expect(getAdapterByCommandName("rottentomatoes").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpapproval").getPollIntervalMinutes?.({} as never, new Date("2026-06-05T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("spiderman").fetchEventUpdates).toBeDefined();
     expect(getAdapterByCommandName("spiderman").getPollIntervalMinutes?.({} as never)).toBe(1);
