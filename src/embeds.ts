@@ -1215,27 +1215,49 @@ function formatPolymarketLinks(integration: Integration): string[] {
     return [`Polymarket: ${markets[0].url}`];
   }
 
-  return ["Polymarkets:", ...markets.map((market, index) => `${index + 1}. ${market.url}`)];
+  const groupedMarkets = groupPolymarketLinks(markets);
+  const lines = ["Polymarkets:"];
+  for (const group of groupedMarkets) {
+    if (group.markets.length === 0) {
+      continue;
+    }
+    lines.push(`${group.label}:`);
+    lines.push(...group.markets.map((market, index) => `${index + 1}. ${market.url}`));
+  }
+  return lines;
 }
 
-function extractPolymarketLinkEntries(integration: Integration): Array<{ url: string }> {
+type PolymarketLinkStatus = "active" | "upcoming" | "undated" | "expired";
+
+type PolymarketLinkEntry = {
+  url: string;
+  label: string;
+  status: PolymarketLinkStatus;
+  sortTime: number;
+};
+
+function extractPolymarketLinkEntries(integration: Integration, now: Date = new Date()): PolymarketLinkEntry[] {
   const settings = parseSettingsJson(integration.settingsJson);
   const candidates = [
     ...extractMarketEntriesFromSettings(settings.markets),
-    ...extractMarketEntriesFromSettings(settings.polymarketMarkets)
+    ...extractMarketEntriesFromSettings(settings.polymarketMarkets),
+    ...(integration.polymarketUrl ? [buildFallbackPolymarketLinkEntry(integration.polymarketUrl)] : [])
   ];
-  const entries = candidates.length ? candidates : integration.polymarketUrl ? [{ url: integration.polymarketUrl }] : [];
   const seen = new Set<string>();
-  return entries.filter((entry) => {
+  return candidates.filter((entry) => {
     if (!isPolymarketUrl(entry.url) || seen.has(entry.url)) {
       return false;
     }
     seen.add(entry.url);
     return true;
-  });
+  }).map((entry) => ({
+    ...entry,
+    status: resolvePolymarketLinkStatus(entry.startAt, entry.endAt, now),
+    sortTime: entry.startAt?.getTime() ?? entry.endAt?.getTime() ?? Number.MAX_SAFE_INTEGER
+  })).sort(comparePolymarketLinkEntries);
 }
 
-function extractMarketEntriesFromSettings(value: unknown): Array<{ url: string }> {
+function extractMarketEntriesFromSettings(value: unknown): Array<{ url: string; label: string; startAt: Date | null; endAt: Date | null }> {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -1250,8 +1272,94 @@ function extractMarketEntriesFromSettings(value: unknown): Array<{ url: string }
       return [];
     }
 
-    return [{ url: record.url }];
+    return [
+      {
+        url: record.url,
+        label: compactPolymarketLinkLabel(record),
+        startAt: parseMarketDate(record.startAt) ?? parseMarketStartDate(record.startDate),
+        endAt: parseMarketDate(record.endAt) ?? parseMarketEndDate(record.endDate)
+      }
+    ];
   });
+}
+
+function buildFallbackPolymarketLinkEntry(url: string): { url: string; label: string; startAt: Date | null; endAt: Date | null } {
+  return {
+    url,
+    label: compactPolymarketLinkLabel({ url }),
+    startAt: null,
+    endAt: null
+  };
+}
+
+function groupPolymarketLinks(markets: PolymarketLinkEntry[]): Array<{ label: string; markets: PolymarketLinkEntry[] }> {
+  return [
+    { label: "Active window", markets: markets.filter((market) => market.status === "active") },
+    { label: "Upcoming", markets: markets.filter((market) => market.status === "upcoming") },
+    { label: "No dated window", markets: markets.filter((market) => market.status === "undated") },
+    { label: "Expired", markets: markets.filter((market) => market.status === "expired") }
+  ];
+}
+
+function resolvePolymarketLinkStatus(startAt: Date | null, endAt: Date | null, now: Date): PolymarketLinkStatus {
+  const nowMs = now.getTime();
+  if (startAt && nowMs < startAt.getTime()) {
+    return "upcoming";
+  }
+  if (endAt && nowMs > endAt.getTime()) {
+    return "expired";
+  }
+  if (startAt || endAt) {
+    return "active";
+  }
+  return "undated";
+}
+
+function comparePolymarketLinkEntries(left: PolymarketLinkEntry, right: PolymarketLinkEntry): number {
+  const statusRank: Record<PolymarketLinkStatus, number> = {
+    active: 0,
+    upcoming: 1,
+    undated: 2,
+    expired: 3
+  };
+  return statusRank[left.status] - statusRank[right.status] || left.sortTime - right.sortTime || left.label.localeCompare(right.label);
+}
+
+function compactPolymarketLinkLabel(record: Record<string, unknown>): string {
+  const title = typeof record.title === "string" ? record.title.trim() : "";
+  const slug = typeof record.slug === "string" ? record.slug.trim() : "";
+  const urlSlug = typeof record.url === "string" ? record.url.split("/").filter(Boolean).at(-1) ?? "" : "";
+  const label = title || slug || urlSlug || "Polymarket";
+  return truncateLinkLabel(label.replace(/[\[\]]/g, ""), 58);
+}
+
+function truncateLinkLabel(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+}
+
+function parseMarketDate(value: unknown): Date | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseMarketStartDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function parseMarketEndDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  return new Date(`${value}T23:59:59.999Z`);
 }
 
 function isPolymarketUrl(value: string): boolean {

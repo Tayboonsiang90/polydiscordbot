@@ -373,9 +373,21 @@ describe("adapter commands", () => {
         polymarketUrl: "https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962",
         settingsJson: JSON.stringify({
           markets: [
-            { url: "https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962" },
-            { url: "https://polymarket.com/event/moana-2026-opening-weekend-box-office-20260706135043555" },
-            { url: "https://polymarket.com/event/evil-dead-burn-opening-weekend-box-office-20260706163531731" }
+            {
+              url: "https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962",
+              startAt: "2020-01-01T00:00:00.000Z",
+              endAt: "2099-01-01T00:00:00.000Z"
+            },
+            {
+              url: "https://polymarket.com/event/moana-2026-opening-weekend-box-office-20260706135043555",
+              startAt: "2099-01-02T00:00:00.000Z",
+              endAt: "2099-01-03T00:00:00.000Z"
+            },
+            {
+              url: "https://polymarket.com/event/evil-dead-burn-opening-weekend-box-office-20260706163531731",
+              startAt: "2000-01-01T00:00:00.000Z",
+              endAt: "2000-01-02T00:00:00.000Z"
+            }
           ]
         })
       },
@@ -389,9 +401,12 @@ describe("adapter commands", () => {
     const links = embed.fields?.find((field) => field.name === "Links")?.value;
     expect(links).toContain("Resolution: https://www.the-numbers.com/");
     expect(links).toContain("Polymarkets:");
+    expect(links).toContain("Active window:");
     expect(links).toContain("1. https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962");
-    expect(links).toContain("2. https://polymarket.com/event/moana-2026-opening-weekend-box-office-20260706135043555");
-    expect(links).toContain("3. https://polymarket.com/event/evil-dead-burn-opening-weekend-box-office-20260706163531731");
+    expect(links).toContain("Upcoming:");
+    expect(links).toContain("1. https://polymarket.com/event/moana-2026-opening-weekend-box-office-20260706135043555");
+    expect(links).toContain("Expired:");
+    expect(links).toContain("1. https://polymarket.com/event/evil-dead-burn-opening-weekend-box-office-20260706163531731");
     expect(links).not.toContain("Polymarket: https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962");
   });
 
