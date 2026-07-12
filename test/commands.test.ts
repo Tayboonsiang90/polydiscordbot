@@ -363,6 +363,38 @@ describe("adapter commands", () => {
     );
   });
 
+  it("formats multiple tracked Polymarket links from integration settings", () => {
+    const embed = buildCheckEmbed({
+      integration: {
+        ...checkedIntegration,
+        adapterId: "box-office-weekends",
+        displayName: "Box Office Weekends",
+        sourceUrl: "https://www.the-numbers.com/",
+        polymarketUrl: "https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962",
+        settingsJson: JSON.stringify({
+          markets: [
+            { url: "https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962" },
+            { url: "https://polymarket.com/event/moana-2026-opening-weekend-box-office-20260706135043555" },
+            { url: "https://polymarket.com/event/evil-dead-burn-opening-weekend-box-office-20260706163531731" }
+          ]
+        })
+      },
+      previousValue: "old",
+      previousCheckedAt: "2026-07-12T00:00:00.000Z",
+      currentValue: "new",
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const links = embed.fields?.find((field) => field.name === "Links")?.value;
+    expect(links).toContain("Resolution: https://www.the-numbers.com/");
+    expect(links).toContain("Polymarkets:");
+    expect(links).toContain("1. https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962");
+    expect(links).toContain("2. https://polymarket.com/event/moana-2026-opening-weekend-box-office-20260706135043555");
+    expect(links).toContain("3. https://polymarket.com/event/evil-dead-burn-opening-weekend-box-office-20260706163531731");
+    expect(links).not.toContain("Polymarket: https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962");
+  });
+
   it("formats check-all channel smoke-check results", () => {
     const embed = buildCheckAllChannelEmbed({
       integration: checkedIntegration,

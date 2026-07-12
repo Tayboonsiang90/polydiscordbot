@@ -1190,10 +1190,11 @@ function normalizeTagText(value: string): string {
 }
 
 function formatLinks(integration: Integration): string {
-  return [
+  const polymarketLines = formatPolymarketLinks(integration);
+  return truncateEmbedValue([
     `Resolution: ${integration.sourceUrl}`,
-    ...(integration.polymarketUrl ? [`Polymarket: ${integration.polymarketUrl}`] : [])
-  ].join("\n");
+    ...polymarketLines
+  ].join("\n"));
 }
 
 function formatEventLinks(integration: Integration, post: EventMonitorPost): string {
@@ -1202,6 +1203,59 @@ function formatEventLinks(integration: Integration, post: EventMonitorPost): str
     `Original: ${post.url}`,
     ...(polymarketUrl ? [`Polymarket: ${polymarketUrl}`] : [])
   ].join("\n");
+}
+
+function formatPolymarketLinks(integration: Integration): string[] {
+  const markets = extractPolymarketLinkEntries(integration);
+  if (markets.length === 0) {
+    return integration.polymarketUrl ? [`Polymarket: ${integration.polymarketUrl}`] : [];
+  }
+
+  if (markets.length === 1) {
+    return [`Polymarket: ${markets[0].url}`];
+  }
+
+  return ["Polymarkets:", ...markets.map((market, index) => `${index + 1}. ${market.url}`)];
+}
+
+function extractPolymarketLinkEntries(integration: Integration): Array<{ url: string }> {
+  const settings = parseSettingsJson(integration.settingsJson);
+  const candidates = [
+    ...extractMarketEntriesFromSettings(settings.markets),
+    ...extractMarketEntriesFromSettings(settings.polymarketMarkets)
+  ];
+  const entries = candidates.length ? candidates : integration.polymarketUrl ? [{ url: integration.polymarketUrl }] : [];
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    if (!isPolymarketUrl(entry.url) || seen.has(entry.url)) {
+      return false;
+    }
+    seen.add(entry.url);
+    return true;
+  });
+}
+
+function extractMarketEntriesFromSettings(value: unknown): Array<{ url: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const record = item as Record<string, unknown>;
+    if (typeof record.url !== "string") {
+      return [];
+    }
+
+    return [{ url: record.url }];
+  });
+}
+
+function isPolymarketUrl(value: string): boolean {
+  return /^https:\/\/polymarket\.com\/(?:event|market)\//.test(value);
 }
 
 function formatOptionalPolymarketField(integration: Integration): Array<{ name: string; value: string; inline: false }> {
