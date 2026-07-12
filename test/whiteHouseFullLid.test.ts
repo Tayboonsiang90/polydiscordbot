@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Integration } from "../src/integrations/types.js";
 import {
+  extractBnoFullLid,
   extractForthFullLid,
   extractRollCallFullLid,
   formatFullLidValue,
@@ -43,6 +44,41 @@ describe("White House full lid monitor", () => {
     });
   });
 
+  it("extracts BNO White House Press Pool full-lid alpha reports", () => {
+    const html = `
+      <article class="full-report">
+        <h1>In-town pool report #6 -- lid</h1>
+        <time datetime="2026-07-11T22:03:37.000Z">July 11, 2026 at 06:03 PM EDT</time>
+        <div class="report-body-html">
+          <strong>Sent:</strong> Saturday, July 11, 2026 5:22 PM<br>
+          <strong>Subject:</strong> In-town pool report #6 -- lid<br>
+          Concluding times:<br>
+          Lid declared at 5:14.
+        </div>
+      </article>`;
+
+    expect(extractBnoFullLid(html, "2026-07-11", "https://bnonews.com/whpool/10WdScg5")).toMatchObject({
+      source: "BNO",
+      dateEt: "2026-07-11",
+      timeEt: "5:14 PM",
+      minutesEt: 17 * 60 + 14,
+      url: "https://bnonews.com/whpool/10WdScg5"
+    });
+  });
+
+  it("ignores BNO lunch lids", () => {
+    const html = `
+      <div class="report-list">
+        <article class="report-card">
+          <h2><a href="/whpool/TyZxbXwf">In-town pool report #2 - lunch lid</a></h2>
+          <time datetime="2026-07-10T16:18:48.000Z">Jul 10, 2026, 12:18 PM EDT</time>
+          <p class="excerpt">Lunch lid until 1:15pm</p>
+        </article>
+      </div>`;
+
+    expect(extractBnoFullLid(html, "2026-07-10")).toBeNull();
+  });
+
   it("alerts once per ET date when a lid is found", () => {
     const previousValue = formatFullLidValue({
       dateEt: "2026-05-12",
@@ -52,7 +88,8 @@ describe("White House full lid monitor", () => {
       detail: "White House Press Office: Full lid called",
       beforeCutoff: true,
       rollCallStatus: "full lid found at 6:05 PM",
-      forthStatus: "unavailable HTTP 429"
+      forthStatus: "unavailable HTTP 429",
+      bnoStatus: "lid report found at 6:05 PM"
     });
     const duplicateValue = previousValue.replace("6:05 PM", "6:10 PM");
     const nextDayValue = previousValue.replaceAll("2026-05-12", "2026-05-13");

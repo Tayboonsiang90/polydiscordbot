@@ -11,6 +11,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const rollCallUrl = "https://rollcall.com/factbase/trump/calendar/";
 const forthUrl = "https://www.forth.news/whpool";
+const bnoWhPoolUrl = "https://bnonews.com/whpool";
 const defaultPolymarketUrl =
   "https://polymarket.com/event/will-the-white-house-call-a-full-lid-by-630-pm-may-11-16";
 const cutoffMinutesEt = 18 * 60 + 30;
@@ -24,20 +25,22 @@ const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
 export type FullLidResult = {
   dateEt: string;
   found: boolean;
-  source: "Roll Call" | "Forth" | "none";
+  source: "Roll Call" | "Forth" | "BNO" | "none";
   timeEt: string;
   detail: string;
   beforeCutoff: boolean | null;
   rollCallStatus: string;
   forthStatus: string;
+  bnoStatus: string;
 };
 
 type LidCandidate = {
-  source: "Roll Call" | "Forth";
+  source: "Roll Call" | "Forth" | "BNO";
   dateEt: string;
   timeEt: string;
   detail: string;
   minutesEt: number | null;
+  url?: string;
 };
 
 type FullLidDiscoverySettings = {
@@ -113,6 +116,67 @@ export function extractForthFullLid(html: string, targetDateEt: string): LidCand
   };
 }
 
+export function extractBnoFullLid(html: string, targetDateEt: string, sourceUrl?: string): LidCandidate | null {
+  return extractBnoArticleFullLid(html, targetDateEt, sourceUrl) ?? extractBnoListingFullLid(html, targetDateEt);
+}
+
+function extractBnoListingFullLid(html: string, targetDateEt: string): LidCandidate | null {
+  const $ = cheerio.load(html);
+  const candidates: LidCandidate[] = [];
+
+  $("article.report-card").each((_, article) => {
+    const card = $(article);
+    const title = normalizeText(card.find("h2").text());
+    const excerpt = normalizeText(card.find(".excerpt").text());
+    const publishedAt = parseDate(card.find("time").attr("datetime"));
+    const dateEt = publishedAt ? getEasternParts(publishedAt).date : parseBnoVisibleDate(card.find("time").text()) ?? targetDateEt;
+    if (dateEt !== targetDateEt || !isBnoFinalLidText(`${title} ${excerpt}`)) {
+      return;
+    }
+
+    const href = card.find("h2 a").attr("href");
+    const url = href ? new URL(href, bnoWhPoolUrl).toString() : undefined;
+    candidates.push({
+      source: "BNO",
+      dateEt,
+      timeEt: "not listed",
+      detail: normalizeText(`${title}: ${excerpt}${url ? ` (${url})` : ""}`).slice(0, 500),
+      minutesEt: null,
+      url
+    });
+  });
+
+  return candidates.sort(compareLidCandidates)[0] ?? null;
+}
+
+function extractBnoArticleFullLid(html: string, targetDateEt: string, sourceUrl?: string): LidCandidate | null {
+  const $ = cheerio.load(html);
+  const article = $("article.full-report").first();
+  if (!article.length) {
+    return null;
+  }
+
+  const title = normalizeText(article.find("h1").first().text());
+  const body = normalizeText(article.find(".report-body-html").text() || article.text());
+  const publishedAt = parseDate(
+    $('meta[property="article:published_time"]').attr("content") ?? article.find("time").attr("datetime")
+  );
+  const dateEt = parseBnoSentDate(body) ?? (publishedAt ? getEasternParts(publishedAt).date : targetDateEt);
+  if (dateEt !== targetDateEt || !isBnoFinalLidText(`${title} ${body}`)) {
+    return null;
+  }
+
+  const timeEt = extractBnoLidTimeEt(`${title}. ${body}`, publishedAt);
+  return {
+    source: "BNO",
+    dateEt,
+    timeEt: timeEt ?? "not listed",
+    detail: extractBnoLidDetail(title, body, sourceUrl),
+    minutesEt: timeEt ? parseTimeToMinutes(timeEt) : null,
+    url: sourceUrl
+  };
+}
+
 export function formatFullLidValue(result: FullLidResult): string {
   const cutoffStatus =
     result.beforeCutoff === null ? "unknown" : result.beforeCutoff ? "BEFORE 6:30 PM ET" : "AFTER 6:30 PM ET";
@@ -127,8 +191,10 @@ export function formatFullLidValue(result: FullLidResult): string {
     `Detail: ${result.detail}`,
     `Roll Call: ${result.rollCallStatus}`,
     `Forth: ${result.forthStatus}`,
+    `BNO alpha: ${result.bnoStatus}`,
     `Resolution: ${rollCallUrl}`,
-    `Fallback: ${forthUrl}`
+    `Fallback: ${forthUrl}`,
+    `Alpha: ${bnoWhPoolUrl}`
   ].join("\n");
 }
 
@@ -225,12 +291,14 @@ export async function refreshWhiteHouseFullLidPolymarketQueue(
 }
 
 async function fetchFullLidResult(dateEt: string): Promise<FullLidResult> {
-  const [rollCall, forth] = await Promise.all([fetchRollCallLid(dateEt), fetchForthLid(dateEt)]);
-  const firstLid = [rollCall.candidate, forth.candidate].filter((candidate): candidate is LidCandidate => Boolean(candidate)).sort(compareLidCandidates)[0];
+  const [rollCall, forth, bno] = await Promise.all([fetchRollCallLid(dateEt), fetchForthLid(dateEt), fetchBnoLid(dateEt)]);
+  const firstLid = [rollCall.candidate, forth.candidate, bno.candidate]
+    .filter((candidate): candidate is LidCandidate => Boolean(candidate))
+    .sort(compareLidCandidates)[0];
 
   if (!firstLid) {
-    if (!rollCall.ok && !forth.ok) {
-      throw new Error(`Could not check full lid sources. Roll Call: ${rollCall.status}; Forth: ${forth.status}`);
+    if (!rollCall.ok && !forth.ok && !bno.ok) {
+      throw new Error(`Could not check full lid sources. Roll Call: ${rollCall.status}; Forth: ${forth.status}; BNO: ${bno.status}`);
     }
 
     return {
@@ -241,7 +309,8 @@ async function fetchFullLidResult(dateEt: string): Promise<FullLidResult> {
       detail: "No full lid found yet for today's ET date",
       beforeCutoff: null,
       rollCallStatus: rollCall.status,
-      forthStatus: forth.status
+      forthStatus: forth.status,
+      bnoStatus: bno.status
     };
   }
 
@@ -253,7 +322,8 @@ async function fetchFullLidResult(dateEt: string): Promise<FullLidResult> {
     detail: firstLid.detail,
     beforeCutoff: firstLid.minutesEt === null ? null : firstLid.minutesEt <= cutoffMinutesEt,
     rollCallStatus: rollCall.status,
-    forthStatus: forth.status
+    forthStatus: forth.status,
+    bnoStatus: bno.status
   };
 }
 
@@ -284,6 +354,42 @@ async function fetchForthLid(dateEt: string): Promise<{ ok: boolean; status: str
 
   const candidate = extractForthFullLid(await response.text(), dateEt);
   return { ok: true, status: candidate ? `full lid found at ${candidate.timeEt}` : "no full lid found", candidate };
+}
+
+async function fetchBnoLid(dateEt: string): Promise<{ ok: boolean; status: string; candidate: LidCandidate | null }> {
+  const response = await fetchWithTimeout(bnoWhPoolUrl, {
+    headers: {
+      accept: "text/html",
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+  if (!response.ok) {
+    return { ok: false, status: `unavailable HTTP ${response.status}`, candidate: null };
+  }
+
+  const listingHtml = await response.text();
+  const listingCandidate = extractBnoListingFullLid(listingHtml, dateEt);
+  if (!listingCandidate?.url) {
+    return { ok: true, status: listingCandidate ? `lid report found at ${listingCandidate.timeEt}` : "no lid report found", candidate: listingCandidate };
+  }
+
+  try {
+    const articleResponse = await fetchWithTimeout(listingCandidate.url, {
+      headers: {
+        accept: "text/html",
+        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+      }
+    });
+    if (!articleResponse.ok) {
+      return { ok: true, status: `lid report found; detail page HTTP ${articleResponse.status}`, candidate: listingCandidate };
+    }
+
+    const articleCandidate = extractBnoArticleFullLid(await articleResponse.text(), dateEt, listingCandidate.url);
+    const candidate = articleCandidate ?? listingCandidate;
+    return { ok: true, status: `lid report found at ${candidate.timeEt}`, candidate };
+  } catch (error) {
+    return { ok: true, status: `lid report found; detail fetch failed: ${error instanceof Error ? error.message : String(error)}`, candidate: listingCandidate };
+  }
 }
 
 async function fetchFullLidMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
@@ -430,6 +536,131 @@ function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, 
 
   const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
   return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
+}
+
+function parseDate(value: string | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseBnoVisibleDate(value: string): string | null {
+  const match = normalizeText(value).match(/\b([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4}),\s+\d{1,2}:\d{2}\s+(?:AM|PM)\s+EDT\b/i);
+  if (!match) {
+    return null;
+  }
+
+  const month = monthNumber(match[1]);
+  return month ? `${match[3]}-${month}-${match[2].padStart(2, "0")}` : null;
+}
+
+function parseBnoSentDate(text: string): string | null {
+  const match = text.match(/\bSent:\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s*([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\s+\d{1,2}:\d{2}\s*(?:AM|PM)?/i);
+  if (!match) {
+    return null;
+  }
+
+  const month = monthNumber(match[1]);
+  return month ? `${match[3]}-${month}-${match[2].padStart(2, "0")}` : null;
+}
+
+function isBnoFinalLidText(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!/\blid\b/i.test(normalized)) {
+    return false;
+  }
+
+  return !/\blunch\s+lid\b|\blid\s+until\b/i.test(normalized);
+}
+
+function extractBnoLidTimeEt(text: string, publishedAt: Date | null): string | null {
+  const explicitLidDeclaration = text.match(/\blid\s+(?:was\s+)?declared\s+(?:at\s+)?(\d{1,2}[:;]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?|\d{3,4})\b/i);
+  if (explicitLidDeclaration) {
+    return parseBnoTimeToken(explicitLidDeclaration[1], publishedAt);
+  }
+
+  const lidIndex = text.toLowerCase().lastIndexOf("lid");
+  const nearby = lidIndex === -1 ? text.slice(0, 400) : text.slice(Math.max(0, lidIndex - 40), lidIndex + 220);
+
+  const compact = nearby.match(/\b(?:at|as of|declared)\s+(\d{3,4})\s*(?:ET|EDT)?\b/i);
+  if (compact) {
+    const raw = compact[1].padStart(4, "0");
+    const hour24 = Number(raw.slice(0, -2));
+    const minute = Number(raw.slice(-2));
+    return formatHourMinute(hour24, minute);
+  }
+
+  const numeric = nearby.match(/\b(?:at|as of|declared)\s+(\d{1,2})[:;](\d{2})\s*(a\.?m\.?|p\.?m\.?)?\b/i);
+  if (numeric) {
+    const hour = Number(numeric[1]);
+    const minute = Number(numeric[2]);
+    if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 1 || hour > 23 || minute < 0 || minute > 59) {
+      return null;
+    }
+
+    const meridiem = numeric[3]?.toUpperCase().replaceAll(".", "");
+    if (meridiem === "AM" || meridiem === "PM") {
+      const hour24 = meridiem === "PM" && hour !== 12 ? hour + 12 : meridiem === "AM" && hour === 12 ? 0 : hour;
+      return formatHourMinute(hour24, minute);
+    }
+
+    const publishedParts = publishedAt ? getEasternParts(publishedAt) : null;
+    const inferredHour24 =
+      hour > 12 ? hour : publishedParts && publishedParts.hour < 12 ? (hour === 12 ? 0 : hour) : hour === 12 ? 12 : hour + 12;
+    return formatHourMinute(inferredHour24, minute);
+  }
+
+  return extractTimeEt(nearby);
+}
+
+function parseBnoTimeToken(value: string, publishedAt: Date | null): string | null {
+  const token = value.trim();
+  const compact = token.match(/^(\d{3,4})$/);
+  if (compact) {
+    const raw = compact[1].padStart(4, "0");
+    return formatHourMinute(Number(raw.slice(0, -2)), Number(raw.slice(-2)));
+  }
+
+  const numeric = token.match(/^(\d{1,2})[:;](\d{2})\s*(a\.?m\.?|p\.?m\.?)?$/i);
+  if (!numeric) {
+    return null;
+  }
+
+  const hour = Number(numeric[1]);
+  const minute = Number(numeric[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 1 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  const meridiem = numeric[3]?.toUpperCase().replaceAll(".", "");
+  if (meridiem === "AM" || meridiem === "PM") {
+    const hour24 = meridiem === "PM" && hour !== 12 ? hour + 12 : meridiem === "AM" && hour === 12 ? 0 : hour;
+    return formatHourMinute(hour24, minute);
+  }
+
+  const publishedParts = publishedAt ? getEasternParts(publishedAt) : null;
+  const inferredHour24 =
+    hour > 12 ? hour : publishedParts && publishedParts.hour < 12 ? (hour === 12 ? 0 : hour) : hour === 12 ? 12 : hour + 12;
+  return formatHourMinute(inferredHour24, minute);
+}
+
+function extractBnoLidDetail(title: string, body: string, sourceUrl?: string): string {
+  const lidIndex = body.toLowerCase().indexOf("lid");
+  const nearby = lidIndex === -1 ? body.slice(0, 350) : body.slice(Math.max(0, lidIndex - 140), lidIndex + 260);
+  return normalizeText(`${title}: ${nearby}${sourceUrl ? ` (${sourceUrl})` : ""}`).slice(0, 500);
+}
+
+function formatHourMinute(hour24: number, minute: number): string | null {
+  if (!Number.isInteger(hour24) || !Number.isInteger(minute) || hour24 < 0 || hour24 > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  const suffix = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
 }
 
 function compareLidCandidates(left: LidCandidate, right: LidCandidate): number {
