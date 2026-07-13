@@ -77,7 +77,8 @@ describe("UFO files adapter", () => {
     expect(value).toContain("Tracked files: 1");
     expect(value).toMatch(/^Fingerprint: [a-f0-9]{16}$/m);
     expect(value).toContain("Polymarket deadlines: July 17, 2026-07-31");
-    expect(value).toContain("NARA UAP Bulk Downloads: 1 tracked file link(s)");
+    expect(value).toMatch(/NARA UAP Bulk Downloads: 1 tracked file link\(s\), fp [a-f0-9]{16}/);
+    expect(value).toContain("Tracked link sample by source (not a diff):");
     expect(value).toContain("https://catalog.archives.gov/id/123456");
   });
 

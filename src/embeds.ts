@@ -164,12 +164,14 @@ export function buildUpdateLogsEmbed(integration: Integration, logs: Integration
 
 export function buildCheckEmbed(result: CheckResult): EmbedBuilder {
   const title = result.marketRollover ? "Market rollover" : result.changed ? "Value changed" : "Current value";
+  const changeSummaryFields = result.changed ? formatValueChangeSummaryFields(result.previousValue, result.currentValue) : [];
   const embed = baseEmbed(result.integration, title)
     .addFields(
       { name: "Current", value: formatValue(result.currentValue), inline: true },
       { name: "Current retrieved at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false },
       { name: "Last stored", value: formatValue(result.previousValue), inline: true },
       { name: "Last retrieved at", value: formatSingaporeDateTime(result.previousCheckedAt), inline: false },
+      ...changeSummaryFields,
       ...(result.marketRollover
         ? [
             { name: "Previous Polymarket", value: result.marketRollover.previousPolymarketUrl ?? "not set", inline: false },
@@ -473,11 +475,13 @@ export function buildClearErrorsEmbed(summary: ErrorCleanupSummary): EmbedBuilde
 }
 
 export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
+  const changeSummaryFields = formatValueChangeSummaryFields(result.previousValue, result.currentValue);
   return baseEmbed(result.integration, "Value changed")
     .setColor(successColor)
     .addFields(
       { name: "Previous", value: formatAlertValue(result.previousValue), inline: true },
       { name: "Current", value: formatAlertValue(result.currentValue), inline: true },
+      ...changeSummaryFields,
       { name: "Retrieved at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false },
       { name: "Links", value: formatLinks(result.integration), inline: false }
     )
@@ -1388,6 +1392,89 @@ function formatEasternDateTime(date: Date): string {
 
 function formatValue(value: string | null): string {
   return value ? truncateEmbedValue(value) : "not checked yet";
+}
+
+function formatValueChangeSummaryFields(previousValue: string | null, currentValue: string): Array<{ name: string; value: string; inline: false }> {
+  const lines = [
+    ...formatNumericLineDiffs(previousValue, currentValue, ["Tracked files"]),
+    ...formatTrackedSourceCountDiffs(previousValue, currentValue),
+    ...formatFingerprintDiff(previousValue, currentValue)
+  ];
+
+  return lines.length ? [{ name: "Detected change", value: truncateEmbedValue(lines.join("\n"), 800), inline: false }] : [];
+}
+
+function formatNumericLineDiffs(previousValue: string | null, currentValue: string, labels: string[]): string[] {
+  return labels.flatMap((label) => {
+    const previousNumber = extractLabeledNumber(previousValue, label);
+    const currentNumber = extractLabeledNumber(currentValue, label);
+    if (previousNumber === null || currentNumber === null || previousNumber === currentNumber) {
+      return [];
+    }
+    return `${label}: ${formatNumberChange(previousNumber, currentNumber)}`;
+  });
+}
+
+function formatTrackedSourceCountDiffs(previousValue: string | null, currentValue: string): string[] {
+  const previousCounts = extractTrackedSourceCounts(previousValue);
+  const currentCounts = extractTrackedSourceCounts(currentValue);
+  const sourceNames = [...new Set([...previousCounts.keys(), ...currentCounts.keys()])].sort();
+
+  return sourceNames.flatMap((sourceName) => {
+    const previousCount = previousCounts.get(sourceName);
+    const currentCount = currentCounts.get(sourceName);
+    if (previousCount === undefined || currentCount === undefined || previousCount === currentCount) {
+      return [];
+    }
+    return `${sourceName}: ${formatNumberChange(previousCount, currentCount)}`;
+  });
+}
+
+function formatFingerprintDiff(previousValue: string | null, currentValue: string): string[] {
+  const previousFingerprint = extractLabeledText(previousValue, "Fingerprint");
+  const currentFingerprint = extractLabeledText(currentValue, "Fingerprint");
+  if (!previousFingerprint || !currentFingerprint || previousFingerprint === currentFingerprint) {
+    return [];
+  }
+  return [`Fingerprint: ${previousFingerprint} -> ${currentFingerprint}`];
+}
+
+function extractLabeledNumber(value: string | null, label: string): number | null {
+  const match = value?.match(new RegExp(`^${escapeRegExp(label)}:\\s*([\\d,]+)`, "m"));
+  if (!match) {
+    return null;
+  }
+  const parsed = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractLabeledText(value: string | null, label: string): string | null {
+  return value?.match(new RegExp(`^${escapeRegExp(label)}:\\s*(\\S+)`, "m"))?.[1] ?? null;
+}
+
+function extractTrackedSourceCounts(value: string | null): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (!value) {
+    return counts;
+  }
+
+  for (const match of value.matchAll(/^(.+?):\s*([\d,]+)\s+tracked file link\(s\)/gm)) {
+    const parsed = Number(match[2].replace(/,/g, ""));
+    if (Number.isFinite(parsed)) {
+      counts.set(match[1], parsed);
+    }
+  }
+  return counts;
+}
+
+function formatNumberChange(previousNumber: number, currentNumber: number): string {
+  const delta = currentNumber - previousNumber;
+  const formattedDelta = `${delta > 0 ? "+" : ""}${delta.toLocaleString("en-US")}`;
+  return `${previousNumber.toLocaleString("en-US")} -> ${currentNumber.toLocaleString("en-US")} (${formattedDelta})`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function formatIntervalMs(intervalMs: number): string {

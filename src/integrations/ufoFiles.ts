@@ -162,8 +162,16 @@ export function buildUfoFilesFingerprint(records: UfoFileRecord[]): string {
 export function formatUfoFilesValue(snapshots: Array<{ source: UfoFileSource; records: UfoFileRecord[] }>, deadlines: string[], polymarketUrl: string): string {
   const records = dedupeRecords(snapshots.flatMap((snapshot) => snapshot.records));
   const fingerprint = buildUfoFilesFingerprint(records);
-  const sourceLines = snapshots.map((snapshot) => `${snapshot.source.name}: ${snapshot.records.length} tracked file link(s)`);
-  const latestRecords = records.slice(0, 12).map((record) => `- ${record.title || record.url}\n  ${record.url}`);
+  const sourceLines = snapshots.map((snapshot) => {
+    const sourceFingerprint = buildUfoFilesFingerprint(snapshot.records);
+    return `${snapshot.source.name}: ${snapshot.records.length} tracked file link(s), fp ${sourceFingerprint}`;
+  });
+  const sampleRecords = snapshots
+    .map((snapshot) => {
+      const record = dedupeRecords(snapshot.records)[0];
+      return record ? `${snapshot.source.name}: ${formatUfoFileSample(record)}` : `${snapshot.source.name}: none found`;
+    })
+    .slice(0, 8);
 
   return [
     "Metric: Official UFO/UAP file inventory",
@@ -172,8 +180,8 @@ export function formatUfoFilesValue(snapshots: Array<{ source: UfoFileSource; re
     `Polymarket deadlines: ${deadlines.length ? deadlines.join(", ") : "not parsed"}`,
     "Sources:",
     ...sourceLines,
-    "Latest tracked links:",
-    ...(latestRecords.length ? latestRecords : ["none found"]),
+    "Tracked link sample by source (not a diff):",
+    ...(sampleRecords.length ? sampleRecords : ["none found"]),
     `Resolution: ${sourceUrl}`,
     `Polymarket: ${polymarketUrl}`
   ].join("\n");
@@ -363,4 +371,13 @@ function normalizeText(value: string): string {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function formatUfoFileSample(record: UfoFileRecord): string {
+  const title = record.title || inferTitleFromUrl(record.url);
+  return `${truncateText(title, 72)} - ${record.url}`;
+}
+
+function truncateText(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
 }

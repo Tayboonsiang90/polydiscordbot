@@ -11,6 +11,7 @@ import {
   selectCheckAllTargets
 } from "../src/commands.js";
 import {
+  buildAlertEmbed,
   buildCheckAllChannelEmbed,
   buildCheckEmbed,
   buildClearErrorsEmbed,
@@ -310,6 +311,38 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "Recent updates", value: expect.stringContaining("Value changed") }),
         expect.objectContaining({ name: "SGT hour pattern", value: expect.stringContaining("10:00 - 1") }),
         expect.objectContaining({ name: "ET hour pattern", value: expect.stringContaining("22:00 - 1") })
+      ])
+    );
+  });
+
+  it("summarizes source-level inventory changes in alert embeds", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "ufo-files", displayName: "UFO Files" },
+      previousValue: [
+        "Metric: Official UFO/UAP file inventory",
+        "Tracked files: 410",
+        "Fingerprint: 909951cf296a476e",
+        "Sources:",
+        "AARO Official UAP Imagery: 7 tracked file link(s)"
+      ].join("\n"),
+      previousCheckedAt: "2026-07-12T16:30:00.000Z",
+      currentValue: [
+        "Metric: Official UFO/UAP file inventory",
+        "Tracked files: 442",
+        "Fingerprint: d57952d15d3cddd4",
+        "Sources:",
+        "AARO Official UAP Imagery: 39 tracked file link(s)"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Detected change",
+          value: expect.stringContaining("AARO Official UAP Imagery: 7 -> 39 (+32)")
+        })
       ])
     );
   });
