@@ -109,7 +109,8 @@ export const rottenTomatoesScoresAdapter: WebsiteAdapter = {
     const settings = parseRottenTomatoesSettings(integration?.settingsJson ?? null);
     const markets = getCurrentRottenTomatoesMarkets(settings.markets ?? [], new Date());
     const snapshots = await Promise.all(markets.map(fetchRottenTomatoesMovieSnapshot));
-    const value = formatRottenTomatoesScoresValue(snapshots);
+    const previousBuckets = extractRottenTomatoesBucketMap(integration?.lastValue ?? null);
+    const value = formatRottenTomatoesScoresValue(snapshots, new Date(), previousBuckets);
     return {
       value,
       rawValue: value,
@@ -242,11 +243,11 @@ export function extractRottenTomatoesScoreFromSearch(
   };
 }
 
-export function formatRottenTomatoesScoresValue(snapshots: MovieScoreSnapshot[], now = new Date()): string {
+export function formatRottenTomatoesScoresValue(snapshots: MovieScoreSnapshot[], now = new Date(), previousBuckets = new Map<string, string>()): string {
   const lines = [
     "Metric: Rotten Tomatoes All Critics Tomatometer",
     `Tracked active markets: ${snapshots.length}`,
-    `Bucket rule: alerts when score changes to a new 5-point bucket`,
+    `Bucket rule: alerts only on real 5-point bucket moves; transient fetch errors keep the last known bucket`,
     "Scores:"
   ];
 
@@ -255,10 +256,10 @@ export function formatRottenTomatoesScoresValue(snapshots: MovieScoreSnapshot[],
   }
 
   for (const snapshot of snapshots) {
-    lines.push(formatRottenTomatoesSnapshotLine(snapshot, now));
+    lines.push(formatRottenTomatoesSnapshotLine(snapshot, now, previousBuckets));
   }
 
-  lines.push(`Buckets: ${formatRottenTomatoesBucketState(snapshots)}`);
+  lines.push(`Buckets: ${formatRottenTomatoesBucketState(snapshots, previousBuckets)}`);
   lines.push(`Resolution: ${sourceUrl}`);
   return lines.join("\n");
 }
@@ -275,7 +276,12 @@ export function shouldAlertOnRottenTomatoesBucketChange(previousValue: string | 
       continue;
     }
 
-    if (!previousBuckets.has(slug) || previousBuckets.get(slug) !== bucket) {
+    const previousBucket = previousBuckets.get(slug);
+    if (previousBucket === "error") {
+      continue;
+    }
+
+    if (!previousBuckets.has(slug) || previousBucket !== bucket) {
       return true;
     }
   }
@@ -374,15 +380,20 @@ async function fetchRottenTomatoesMarketByUrl(url: string, now: Date): Promise<R
   return normalizeRottenTomatoesGammaEvent(events[0] ?? {}, now);
 }
 
-function formatRottenTomatoesSnapshotLine(snapshot: MovieScoreSnapshot, now: Date): string {
+function formatRottenTomatoesSnapshotLine(snapshot: MovieScoreSnapshot, now: Date, previousBuckets: Map<string, string>): string {
   const { market, score } = snapshot;
+  const previousBucket = previousBuckets.get(formatRottenTomatoesMarketKey(market));
   const scoreText = score?.score === null || score?.score === undefined ? "pending" : `${score.score}%`;
-  const bucket = score?.score === null || score?.score === undefined ? (snapshot.error ? "error" : "pending") : String(scoreBucket(score.score));
+  const bucket = getEffectiveRottenTomatoesBucket(snapshot, previousBuckets);
   const nextThreshold = score?.score === null || score?.score === undefined ? null : market.thresholds.find((threshold) => threshold > score.score!);
   const hitThresholds = score?.score === null || score?.score === undefined
     ? []
     : market.thresholds.filter((threshold) => threshold <= score.score!);
-  const status = snapshot.error ? `error: ${snapshot.error.slice(0, 80)}` : scoreText;
+  const status = snapshot.error
+    ? isNumericBucket(previousBucket)
+      ? `fetch failed, kept prior bucket ${previousBucket}`
+      : `fetch failed: ${snapshot.error.slice(0, 60)}`
+    : scoreText;
   const thresholdText = market.thresholds.length ? market.thresholds.join("/") : "none";
   const progress = score?.score === null || score?.score === undefined
     ? `thresholds ${thresholdText}`
@@ -395,16 +406,27 @@ function formatRottenTomatoesSnapshotLine(snapshot: MovieScoreSnapshot, now: Dat
   ].filter(Boolean).join(" ");
 }
 
-function formatRottenTomatoesBucketState(snapshots: MovieScoreSnapshot[]): string {
+function formatRottenTomatoesBucketState(snapshots: MovieScoreSnapshot[], previousBuckets = new Map<string, string>()): string {
   return snapshots
     .map((snapshot) => {
       const key = formatRottenTomatoesMarketKey(snapshot.market);
-      const bucket = snapshot.score?.score === null || snapshot.score?.score === undefined
-        ? snapshot.error ? "error" : "pending"
-        : String(scoreBucket(snapshot.score.score));
+      const bucket = getEffectiveRottenTomatoesBucket(snapshot, previousBuckets);
       return `${key}=${bucket}`;
     })
     .join("; ");
+}
+
+function getEffectiveRottenTomatoesBucket(snapshot: MovieScoreSnapshot, previousBuckets: Map<string, string>): string {
+  if (snapshot.score?.score !== null && snapshot.score?.score !== undefined) {
+    return String(scoreBucket(snapshot.score.score));
+  }
+
+  const previousBucket = previousBuckets.get(formatRottenTomatoesMarketKey(snapshot.market));
+  if (snapshot.error && isNumericBucket(previousBucket)) {
+    return previousBucket;
+  }
+
+  return snapshot.error ? "error" : "pending";
 }
 
 function formatRottenTomatoesMarketKey(market: RottenTomatoesMarket): string {
@@ -642,6 +664,10 @@ function isDiscoveryDue(lastDiscoveryAt: string | undefined, now: Date): boolean
 
 function scoreBucket(score: number): number {
   return Math.floor(score / 5) * 5;
+}
+
+function isNumericBucket(bucket: string | undefined): bucket is string {
+  return Boolean(bucket && /^\d+$/.test(bucket));
 }
 
 function formatShortEasternDateTime(value: string | null): string {

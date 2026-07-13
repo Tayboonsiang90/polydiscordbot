@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractRottenTomatoesBucketMap,
   extractRottenTomatoesScoreFromSearch,
+  formatRottenTomatoesScoresValue,
   normalizeRottenTomatoesGammaEvent,
   refreshRottenTomatoesMarkets,
   shouldAlertOnRottenTomatoesBucketChange
@@ -105,6 +106,40 @@ describe("Rotten Tomatoes scores adapter", () => {
     expect(shouldAlertOnRottenTomatoesBucketChange(previous, previous.replace(": 35", ": 35"))).toBe(false);
     expect(shouldAlertOnRottenTomatoesBucketChange(previous, previous.replace(": 35", ": 40"))).toBe(true);
     expect(extractRottenTomatoesBucketMap(previous).get("moana-rotten-tomatoes-score-20260630145544856")).toBe("35");
+  });
+
+  it("does not alert when Rotten Tomatoes recovers from a transient error", () => {
+    const previous = ["Buckets: Evil Dead Burn (2026)=error; Moana (2026)=30"].join("\n");
+    const current = ["Buckets: Evil Dead Burn (2026)=70; Moana (2026)=30"].join("\n");
+
+    expect(shouldAlertOnRottenTomatoesBucketChange(previous, current)).toBe(false);
+  });
+
+  it("keeps previous numeric buckets during transient score fetch errors", () => {
+    const value = formatRottenTomatoesScoresValue(
+      [
+        {
+          market: {
+            url: moanaUrl,
+            slug: "moana-rotten-tomatoes-score-20260630145544856",
+            title: "Moana",
+            releaseYear: 2026,
+            thresholds: [30, 35, 40],
+            resolutionAt: "2026-07-13T14:00:00.000Z",
+            noDataDeadlineAt: "2026-07-18T03:59:00.000Z",
+            endAt: "2026-07-13T00:00:00.000Z",
+            addedAt: "2026-07-01T00:00:00.000Z"
+          },
+          score: null,
+          error: "Rotten Tomatoes search returned HTTP 500 for Moana"
+        }
+      ],
+      new Date("2026-07-13T12:00:00.000Z"),
+      new Map([["Moana (2026)", "30"]])
+    );
+
+    expect(value).toContain("Moana (2026): fetch failed, kept prior bucket 30");
+    expect(value).toContain("Buckets: Moana (2026)=30");
   });
 
   it("discovers active Rotten Tomatoes markets from Polymarket search", async () => {
