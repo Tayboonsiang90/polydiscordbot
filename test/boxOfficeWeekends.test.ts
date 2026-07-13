@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildWeekendSnapshot,
+  extractBoxOfficeBondableMap,
   extractBoxOfficeStateMap,
+  formatBoxOfficeWeekendValue,
   normalizeBoxOfficeGammaEvent,
   parseDailyBoxOfficeRows,
   shouldAlertOnBoxOfficeStateChange
@@ -78,12 +80,58 @@ describe("Box Office weekend adapter", () => {
     });
   });
 
-  it("alerts only on meaningful state changes", () => {
+  it("alerts only when a market becomes bondable", () => {
     const previous = "State: abc=30500000:2:partial; def=pending";
     expect(shouldAlertOnBoxOfficeStateChange(null, previous)).toBe(false);
     expect(shouldAlertOnBoxOfficeStateChange(previous, previous)).toBe(false);
-    expect(shouldAlertOnBoxOfficeStateChange(previous, "State: abc=30500000:3:complete; def=pending")).toBe(true);
-    expect(shouldAlertOnBoxOfficeStateChange(previous, "State: abc=30500000:2:partial; def=1000000:1:partial")).toBe(true);
+    expect(shouldAlertOnBoxOfficeStateChange(previous, "Bondable: abc=29-34m\nState: abc=30500000:3:complete; def=pending")).toBe(true);
+    expect(shouldAlertOnBoxOfficeStateChange(previous, "State: abc=30500000:2:partial; def=1000000:1:partial")).toBe(false);
     expect(extractBoxOfficeStateMap(previous).get("abc")).toBe("30500000:2:partial");
+  });
+
+  it("does not re-alert for fetch recovery after a market is already complete", () => {
+    const previousCompleteWithoutBondable = "State: abc=30500000:3:complete";
+    const currentBondable = "Bondable: abc=29-34m\nState: abc=30500000:3:complete";
+    const previousBondableError = "Bondable: abc=29-34m\nState: abc=error";
+
+    expect(shouldAlertOnBoxOfficeStateChange(previousCompleteWithoutBondable, currentBondable)).toBe(false);
+    expect(shouldAlertOnBoxOfficeStateChange(previousBondableError, currentBondable)).toBe(false);
+    expect(shouldAlertOnBoxOfficeStateChange(currentBondable, "Bondable: abc=34-39m\nState: abc=35000000:3:complete")).toBe(true);
+  });
+
+  it("keeps prior bondable bracket visible during transient fetch errors", () => {
+    const value = formatBoxOfficeWeekendValue(
+      [
+        {
+          market: {
+            url: "https://polymarket.com/event/moana",
+            slug: "moana",
+            title: "Moana",
+            releaseYear: 2026,
+            weekendLabel: "opening",
+            startDate: "2026-07-10",
+            endDate: "2026-07-12",
+            includePreview: true,
+            bracketLabels: ["<29m", "29-34m", "34-39m"],
+            endAt: "2026-07-13T12:00:00.000Z",
+            movieUrl: "https://www.the-numbers.com/movie/Moana-%282026%29",
+            addedAt: "2026-07-01T00:00:00.000Z"
+          },
+          sourceUrl: "https://www.the-numbers.com/movie/Moana-%282026%29",
+          totalGross: null,
+          status: "error",
+          reportedWindowDays: 0,
+          expectedWindowDays: 3,
+          previewGross: null,
+          rows: [],
+          currentBracket: null,
+          error: "fetch failed"
+        }
+      ],
+      new Map([["1pyiuq", "29-34m"]])
+    );
+
+    expect(value).toContain("fetch failed, kept bondable 29-34m");
+    expect(extractBoxOfficeBondableMap(value).get("1pyiuq")).toBe("29-34m");
   });
 });

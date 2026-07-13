@@ -108,7 +108,7 @@ export const boxOfficeWeekendsAdapter: WebsiteAdapter = {
   alertRoleEmoji: "🎬",
   getPollIntervalMinutes: () => 5,
   getPollIntervalReason: () =>
-    "5-minute The Numbers polling; alerts when any tracked weekend gross, completeness status, or discovered scored market changes.",
+    "5-minute The Numbers polling; alerts only when a tracked weekend market becomes complete and bondable, or its complete bracket changes.",
   getErrorNoticeWindowMinutes: () => 30,
   shouldAlertOnChange: shouldAlertOnBoxOfficeStateChange,
   async refreshSettings(integration: Integration, options?: { force?: boolean }): Promise<string> {
@@ -125,7 +125,8 @@ export const boxOfficeWeekendsAdapter: WebsiteAdapter = {
     const settings = parseBoxOfficeWeekendSettings(integration?.settingsJson ?? null);
     const markets = getCurrentBoxOfficeWeekendMarkets(settings.markets ?? [], new Date());
     const snapshots = await Promise.all(markets.map(fetchWeekendSnapshot));
-    const value = formatBoxOfficeWeekendValue(snapshots);
+    const previousBondable = extractBoxOfficeBondableMap(integration?.lastValue ?? null);
+    const value = formatBoxOfficeWeekendValue(snapshots, previousBondable);
     return {
       value,
       rawValue: value,
@@ -242,11 +243,12 @@ export function parseDailyBoxOfficeRows(markdown: string): BoxOfficeDailyRow[] {
   });
 }
 
-export function formatBoxOfficeWeekendValue(snapshots: WeekendSnapshot[]): string {
+export function formatBoxOfficeWeekendValue(snapshots: WeekendSnapshot[], previousBondable = new Map<string, string>()): string {
   const lines = [
     "Metric: The Numbers domestic weekend box office",
     `Tracked active markets: ${snapshots.length}`,
-    "Rule: Daily rows; opening weekends include preview row when present.",
+    "Alert rule: alerts only when a market becomes complete and bondable, or its complete bracket changes.",
+    "Data rule: Daily rows; opening weekends include preview row when present.",
     "Movies:"
   ];
 
@@ -255,9 +257,10 @@ export function formatBoxOfficeWeekendValue(snapshots: WeekendSnapshot[]): strin
   }
 
   for (const snapshot of snapshots) {
-    lines.push(formatWeekendSnapshotLine(snapshot));
+    lines.push(formatWeekendSnapshotLine(snapshot, previousBondable));
   }
 
+  lines.push(`Bondable: ${formatBoxOfficeBondableState(snapshots, previousBondable)}`);
   lines.push(`State: ${formatBoxOfficeState(snapshots)}`);
   lines.push(`Resolution: ${sourceUrl}`);
   return lines.join("\n");
@@ -268,19 +271,45 @@ export function shouldAlertOnBoxOfficeStateChange(previousValue: string | null, 
     return false;
   }
 
+  const previousBondable = extractBoxOfficeBondableMap(previousValue);
+  const currentBondable = extractBoxOfficeBondableMap(currentValue);
   const previousState = extractBoxOfficeStateMap(previousValue);
-  const currentState = extractBoxOfficeStateMap(currentValue);
-  for (const [key, value] of currentState) {
-    if (value.startsWith("pending") || value.startsWith("error")) {
+  for (const [key, value] of currentBondable) {
+    const previousValueForKey = previousBondable.get(key);
+    if (previousValueForKey === value) {
       continue;
     }
 
-    if (!previousState.has(key) || previousState.get(key) !== value) {
+    if (!previousBondable.has(key) && isCompleteBoxOfficeState(previousState.get(key))) {
+      continue;
+    }
+
+    if (previousValueForKey !== value) {
       return true;
     }
   }
 
   return false;
+}
+
+export function extractBoxOfficeBondableMap(value: string | null): Map<string, string> {
+  const bondable = new Map<string, string>();
+  if (!value) {
+    return bondable;
+  }
+
+  for (const match of value.matchAll(/^Bondable:\s*(.+)$/gm)) {
+    if (match[1].trim() === "none") {
+      continue;
+    }
+    for (const entry of match[1].split(";")) {
+      const [key, stateValue] = entry.split("=").map((part) => part.trim());
+      if (key && stateValue) {
+        bondable.set(key, stateValue);
+      }
+    }
+  }
+  return bondable;
 }
 
 export function extractBoxOfficeStateMap(value: string | null): Map<string, string> {
@@ -426,9 +455,16 @@ async function fetchBoxOfficeWeekendMarketByUrl(url: string, now: Date): Promise
   return normalizeBoxOfficeGammaEvent(events[0] ?? {}, now);
 }
 
-function formatWeekendSnapshotLine(snapshot: WeekendSnapshot): string {
+function formatWeekendSnapshotLine(snapshot: WeekendSnapshot, previousBondable: Map<string, string>): string {
   const market = snapshot.market;
-  const amountStatus = snapshot.totalGross === null ? snapshot.status : `${formatMillions(snapshot.totalGross)} ${snapshot.status}`;
+  const key = shortStateKey(market.slug);
+  const previousActionable = previousBondable.get(key);
+  const amountStatus =
+    snapshot.status === "error" && previousActionable
+      ? `fetch failed, kept bondable ${previousActionable}`
+      : snapshot.totalGross === null
+        ? snapshot.status
+        : `${formatMillions(snapshot.totalGross)} ${snapshot.status}`;
   const dates = market.startDate && market.endDate ? `${shortDate(market.startDate)}-${shortDate(market.endDate)}` : "dates ?";
   const preview = snapshot.previewGross !== null ? ` + P ${formatMillions(snapshot.previewGross)}` : "";
   const bracket = snapshot.currentBracket ? `, bracket ${snapshot.currentBracket}` : "";
@@ -439,6 +475,29 @@ function formatWeekendSnapshotLine(snapshot: WeekendSnapshot): string {
     `(${snapshot.reportedWindowDays}/${snapshot.expectedWindowDays} days${preview})`,
     `${dates}${bracket}`
   ].join(" ");
+}
+
+function formatBoxOfficeBondableState(snapshots: WeekendSnapshot[], previousBondable: Map<string, string>): string {
+  const entries = snapshots.flatMap((snapshot) => {
+    const key = shortStateKey(snapshot.market.slug);
+    const currentBondable = getBoxOfficeBondableValue(snapshot);
+    const previousActionable = previousBondable.get(key);
+    if (currentBondable) {
+      return [`${key}=${currentBondable}`];
+    }
+    if (snapshot.status === "error" && previousActionable) {
+      return [`${key}=${previousActionable}`];
+    }
+    return [];
+  });
+  return entries.length ? entries.join("; ") : "none";
+}
+
+function getBoxOfficeBondableValue(snapshot: WeekendSnapshot): string | null {
+  if (snapshot.status !== "complete" || snapshot.totalGross === null) {
+    return null;
+  }
+  return snapshot.currentBracket ?? `complete:${snapshot.totalGross}`;
 }
 
 function formatBoxOfficeState(snapshots: WeekendSnapshot[]): string {
@@ -452,6 +511,10 @@ function formatBoxOfficeState(snapshots: WeekendSnapshot[]): string {
       return `${key}=${value}`;
     })
     .join("; ");
+}
+
+function isCompleteBoxOfficeState(value: string | undefined): boolean {
+  return Boolean(value && value.split(":")[2] === "complete");
 }
 
 function parseMarkdownTable(markdown: string, sectionTitle: string): Array<Record<string, string>> {
