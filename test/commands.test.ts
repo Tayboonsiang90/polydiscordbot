@@ -347,6 +347,62 @@ describe("adapter commands", () => {
     );
   });
 
+  it("puts Full Lid before-cutoff status first in alert embeds", () => {
+    const currentValue = [
+      "Date ET: 2026-07-13",
+      "Cutoff: 6:30 PM ET",
+      "Lid found: yes",
+      "Alert Date: 2026-07-13",
+      "First lid source: BNO",
+      "First lid time: not listed",
+      "Cutoff status: unknown",
+      "Detail: In-Town Press Pool #12: Travel/Photo lid: Have a good night everyone!",
+      "Resolution: https://rollcall.com/factbase/trump/calendar/",
+      "Fallback: https://www.forth.news/whpool",
+      "Alpha: https://bnonews.com/whpool"
+    ].join("\n");
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "white-house-full-lid", displayName: "White House Full Lid" },
+      previousValue: "Date ET: 2026-07-13\nLid found: no\nAlert Date: none\nCutoff status: unknown",
+      previousCheckedAt: "2026-07-13T22:00:00.000Z",
+      currentValue,
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Quick read",
+          value: expect.stringContaining("**Before 6:30 PM ET:** ⚠️ **UNKNOWN")
+        }),
+        expect.objectContaining({
+          name: "Current snapshot",
+          value: expect.not.stringContaining("Resolution:")
+        })
+      ])
+    );
+  });
+
+  it("formats value-change alerts as compact markdown snapshots", () => {
+    const embed = buildAlertEmbed({
+      integration: checkedIntegration,
+      previousValue: "Current total: 214.0 mm\nResolution: https://example.com",
+      previousCheckedAt: "2026-07-13T22:00:00.000Z",
+      currentValue: "Current total: 227.2 mm\nResolution: https://example.com",
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Quick read", value: expect.stringContaining("**Current total:** 214.0 mm → **227.2 mm**") }),
+        expect.objectContaining({ name: "Current snapshot", value: "**Current total:** 227.2 mm" }),
+        expect.objectContaining({ name: "Previous snapshot", value: "**Current total:** 214.0 mm" })
+      ])
+    );
+  });
+
   it("formats manually set market end dates", () => {
     const embed = buildMarketEndManualUpdatedEmbed(checkedIntegration, new Date("2026-05-11T03:59:00.000Z")).toJSON();
 

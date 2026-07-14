@@ -475,13 +475,15 @@ export function buildClearErrorsEmbed(summary: ErrorCleanupSummary): EmbedBuilde
 }
 
 export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
+  const quickReadFields = formatAlertQuickReadFields(result.integration, result.previousValue, result.currentValue);
   const changeSummaryFields = formatValueChangeSummaryFields(result.previousValue, result.currentValue);
   return baseEmbed(result.integration, "Value changed")
     .setColor(successColor)
     .addFields(
-      { name: "Previous", value: formatAlertValue(result.previousValue), inline: true },
-      { name: "Current", value: formatAlertValue(result.currentValue), inline: true },
+      ...quickReadFields,
       ...changeSummaryFields,
+      { name: "Current snapshot", value: formatCompactAlertValue(result.currentValue), inline: false },
+      { name: "Previous snapshot", value: formatCompactAlertValue(result.previousValue), inline: false },
       { name: "Retrieved at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false },
       { name: "Links", value: formatLinks(result.integration), inline: false }
     )
@@ -1392,6 +1394,155 @@ function formatEasternDateTime(date: Date): string {
 
 function formatValue(value: string | null): string {
   return value ? truncateEmbedValue(value) : "not checked yet";
+}
+
+function formatAlertQuickReadFields(
+  integration: Integration,
+  previousValue: string | null,
+  currentValue: string
+): Array<{ name: string; value: string; inline: false }> {
+  const value =
+    integration.adapterId === "white-house-full-lid"
+      ? formatFullLidQuickRead(currentValue)
+      : formatGenericQuickRead(previousValue, currentValue);
+
+  return value ? [{ name: "Quick read", value, inline: false }] : [];
+}
+
+function formatFullLidQuickRead(currentValue: string): string {
+  const found = extractValueLine(currentValue, "Lid found")?.toLowerCase() === "yes";
+  const cutoffStatus = extractValueLine(currentValue, "Cutoff status") ?? "unknown";
+  const firstLidSource = extractValueLine(currentValue, "First lid source") ?? "unknown";
+  const firstLidTime = extractValueLine(currentValue, "First lid time") ?? "not found";
+  const dateEt = extractValueLine(currentValue, "Date ET") ?? "unknown";
+  const detail = truncatePlainText(extractValueLine(currentValue, "Detail") ?? "", 220);
+  const beforeCutoff =
+    cutoffStatus === "BEFORE 6:30 PM ET" ? "✅ **YES — before 6:30 PM ET**" : cutoffStatus === "AFTER 6:30 PM ET" ? "❌ **NO — after 6:30 PM ET**" : "⚠️ **UNKNOWN — time not listed/parseable**";
+
+  return truncateEmbedValue(
+    [
+      `**Full lid:** ${found ? "✅ Found" : "❌ Not found yet"}`,
+      `**Before 6:30 PM ET:** ${found ? beforeCutoff : "not applicable yet"}`,
+      `**Date ET:** ${dateEt}`,
+      ...(found ? [`**Source:** ${firstLidSource}`, `**First lid time:** ${firstLidTime}`] : []),
+      ...(found && detail ? [`**Why:** ${detail}`] : [])
+    ].join("\n"),
+    900
+  );
+}
+
+function formatGenericQuickRead(previousValue: string | null, currentValue: string): string {
+  const changedLines = formatChangedKeyLines(previousValue, currentValue);
+  if (changedLines.length) {
+    return truncateEmbedValue(changedLines.slice(0, 6).join("\n"), 900);
+  }
+
+  return truncateEmbedValue(formatImportantCurrentLines(currentValue).slice(0, 6).join("\n"), 900);
+}
+
+function formatChangedKeyLines(previousValue: string | null, currentValue: string): string[] {
+  const previousLines = extractKeyValueLines(previousValue);
+  const currentLines = extractKeyValueLines(currentValue);
+  return [...currentLines.entries()].flatMap(([key, current]) => {
+    const previous = previousLines.get(key);
+    if (!previous || previous === current || isLowValueAlertLine(key)) {
+      return [];
+    }
+
+    return `**${key}:** ${truncatePlainText(previous, 90)} → **${truncatePlainText(current, 140)}**`;
+  });
+}
+
+function formatImportantCurrentLines(currentValue: string): string[] {
+  return currentValue
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => {
+      const key = line.match(/^([^:]{2,70}):\s*(.*)$/)?.[1]?.trim();
+      return !key || !isLowValueAlertLine(key);
+    })
+    .map(formatMarkdownKeyValueLine);
+}
+
+function extractKeyValueLines(value: string | null): Map<string, string> {
+  const lines = new Map<string, string>();
+  if (!value) {
+    return lines;
+  }
+
+  for (const line of value.split(/\r?\n/)) {
+    const match = line.match(/^([^:]{2,70}):\s*(.+)$/);
+    if (match) {
+      lines.set(match[1].trim(), match[2].trim());
+    }
+  }
+  return lines;
+}
+
+function formatCompactAlertValue(value: string | null): string {
+  if (!value) {
+    return "not checked yet";
+  }
+
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => {
+      const key = line.match(/^([^:]{2,70}):\s*(.*)$/)?.[1]?.trim();
+      return !key || !isLowValueAlertLine(key);
+    })
+    .map((line) => {
+      const detail = line.match(/^(Detail):\s*(.+)$/);
+      if (detail) {
+        return `**${detail[1]}:** ${truncatePlainText(detail[2], 240)}`;
+      }
+      return formatMarkdownKeyValueLine(convertIsoTimestampsToEastern(line));
+    });
+  const displayedLines = lines.slice(0, 12);
+  const omittedCount = lines.length - displayedLines.length;
+  return truncateEmbedValue(
+    [...displayedLines, ...(omittedCount > 0 ? [`_…${omittedCount} more line(s) omitted._`] : [])].join("\n"),
+    950
+  );
+}
+
+function formatMarkdownKeyValueLine(line: string): string {
+  const match = line.match(/^([^:]{2,70}):\s*(.+)$/);
+  if (!match || isLikelyUrlScheme(match[1])) {
+    return line;
+  }
+  return `**${match[1].trim()}:** ${match[2].trim()}`;
+}
+
+function isLikelyUrlScheme(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*$/i.test(value.trim());
+}
+
+function isLowValueAlertLine(key: string): boolean {
+  return new Set([
+    "Resolution",
+    "Polymarket",
+    "Fallback",
+    "Alpha",
+    "API",
+    "Source",
+    "Source URL",
+    "Search URL",
+    "Raw",
+    "State",
+    "Links"
+  ]).has(key.trim());
+}
+
+function extractValueLine(value: string, label: string): string | null {
+  return value.match(new RegExp(`^${escapeRegExp(label)}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
+}
+
+function truncatePlainText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
 }
 
 function formatValueChangeSummaryFields(previousValue: string | null, currentValue: string): Array<{ name: string; value: string; inline: false }> {
