@@ -482,8 +482,6 @@ export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
     .addFields(
       ...quickReadFields,
       ...changeSummaryFields,
-      { name: "Current snapshot", value: formatCompactAlertValue(result.currentValue), inline: false },
-      { name: "Previous snapshot", value: formatCompactAlertValue(result.previousValue), inline: false },
       { name: "Retrieved at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false },
       { name: "Links", value: formatLinks(result.integration), inline: false }
     )
@@ -1438,7 +1436,7 @@ function formatGenericQuickRead(previousValue: string | null, currentValue: stri
   }
 
   const currentLines = formatImportantCurrentLines(currentValue).slice(0, 6);
-  return truncateEmbedValue((currentLines.length ? currentLines : ["_No compact summary available; see current snapshot._"]).join("\n"), 900);
+  return truncateEmbedValue((currentLines.length ? currentLines : ["_No compact summary available._"]).join("\n"), 900);
 }
 
 function formatChangedKeyLines(previousValue: string | null, currentValue: string): string[] {
@@ -1481,36 +1479,6 @@ function extractKeyValueLines(value: string | null): Map<string, string> {
     }
   }
   return lines;
-}
-
-function formatCompactAlertValue(value: string | null): string {
-  if (!value) {
-    return "not checked yet";
-  }
-
-  const rawLines = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const priorityLines = rawLines
-    .filter((line) => {
-      const key = line.match(/^([^:]{2,70}):\s*(.*)$/)?.[1]?.trim();
-      return !key || !isLowValueAlertLine(key);
-    });
-  const lines = (priorityLines.length ? priorityLines : rawLines.slice(0, 6))
-    .map((line) => {
-      const detail = line.match(/^(Detail):\s*(.+)$/);
-      if (detail) {
-        return `**${detail[1]}:** ${truncatePlainText(detail[2], 240)}`;
-      }
-      return formatMarkdownKeyValueLine(convertIsoTimestampsToEastern(line));
-    });
-  const displayedLines = lines.slice(0, 12);
-  const omittedCount = lines.length - displayedLines.length;
-  return truncateEmbedValue(
-    [...displayedLines, ...(omittedCount > 0 ? [`_…${omittedCount} more line(s) omitted._`] : [])].join("\n") || "_No details available._",
-    950
-  );
 }
 
 function formatMarkdownKeyValueLine(line: string): string {

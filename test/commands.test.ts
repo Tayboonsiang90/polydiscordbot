@@ -375,16 +375,14 @@ describe("adapter commands", () => {
         expect.objectContaining({
           name: "Quick read",
           value: expect.stringContaining("**Before 6:30 PM ET:** ⚠️ **UNKNOWN")
-        }),
-        expect.objectContaining({
-          name: "Current snapshot",
-          value: expect.not.stringContaining("Resolution:")
         })
       ])
     );
+    expect(embed.fields?.some((field) => field.name === "Current snapshot")).toBe(false);
+    expect(embed.fields?.some((field) => field.name === "Previous snapshot")).toBe(false);
   });
 
-  it("formats value-change alerts as compact markdown snapshots", () => {
+  it("formats value-change alerts as quick-read-only summaries", () => {
     const embed = buildAlertEmbed({
       integration: checkedIntegration,
       previousValue: "Current total: 214.0 mm\nResolution: https://example.com",
@@ -397,13 +395,14 @@ describe("adapter commands", () => {
     expect(embed.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Quick read", value: expect.stringContaining("**Current total:** 214.0 mm → **227.2 mm**") }),
-        expect.objectContaining({ name: "Current snapshot", value: "**Current total:** 227.2 mm" }),
-        expect.objectContaining({ name: "Previous snapshot", value: "**Current total:** 214.0 mm" })
+        expect.objectContaining({ name: "Links", value: expect.stringContaining("Resolution: https://www.bonbast.com/graph/usd") })
       ])
     );
+    expect(embed.fields?.some((field) => field.name === "Current snapshot")).toBe(false);
+    expect(embed.fields?.some((field) => field.name === "Previous snapshot")).toBe(false);
   });
 
-  it("keeps compact snapshots non-empty when only low-priority links are present", () => {
+  it("keeps a quick-read fallback when only low-priority links are present", () => {
     const embed = buildAlertEmbed({
       integration: checkedIntegration,
       previousValue: "Resolution: https://example.com/old\nPolymarket: https://polymarket.com/event/old",
@@ -415,11 +414,12 @@ describe("adapter commands", () => {
 
     expect(embed.fields).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Quick read", value: "_No compact summary available; see current snapshot._" }),
-        expect.objectContaining({ name: "Current snapshot", value: expect.stringContaining("**Resolution:** https://example.com/new") }),
-        expect.objectContaining({ name: "Previous snapshot", value: expect.stringContaining("**Resolution:** https://example.com/old") })
+        expect.objectContaining({ name: "Quick read", value: "_No compact summary available._" }),
+        expect.objectContaining({ name: "Links", value: expect.stringContaining("Polymarket: https://polymarket.com/event/will-usd-hit-iranian-rials-by-may-31") })
       ])
     );
+    expect(embed.fields?.some((field) => field.name === "Current snapshot")).toBe(false);
+    expect(embed.fields?.some((field) => field.name === "Previous snapshot")).toBe(false);
   });
 
   it("formats ISO timestamps in quick-read diffs as ET", () => {
