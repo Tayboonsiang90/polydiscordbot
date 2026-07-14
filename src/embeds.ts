@@ -1437,7 +1437,8 @@ function formatGenericQuickRead(previousValue: string | null, currentValue: stri
     return truncateEmbedValue(changedLines.slice(0, 6).join("\n"), 900);
   }
 
-  return truncateEmbedValue(formatImportantCurrentLines(currentValue).slice(0, 6).join("\n"), 900);
+  const currentLines = formatImportantCurrentLines(currentValue).slice(0, 6);
+  return truncateEmbedValue((currentLines.length ? currentLines : ["_No compact summary available; see current snapshot._"]).join("\n"), 900);
 }
 
 function formatChangedKeyLines(previousValue: string | null, currentValue: string): string[] {
@@ -1449,7 +1450,9 @@ function formatChangedKeyLines(previousValue: string | null, currentValue: strin
       return [];
     }
 
-    return `**${key}:** ${truncatePlainText(previous, 90)} → **${truncatePlainText(current, 140)}**`;
+    const previousFormatted = truncatePlainText(convertIsoTimestampsToEastern(previous), 90);
+    const currentFormatted = truncatePlainText(convertIsoTimestampsToEastern(current), 140);
+    return `**${key}:** ${previousFormatted} → **${currentFormatted}**`;
   });
 }
 
@@ -1462,7 +1465,7 @@ function formatImportantCurrentLines(currentValue: string): string[] {
       const key = line.match(/^([^:]{2,70}):\s*(.*)$/)?.[1]?.trim();
       return !key || !isLowValueAlertLine(key);
     })
-    .map(formatMarkdownKeyValueLine);
+    .map((line) => formatMarkdownKeyValueLine(convertIsoTimestampsToEastern(line)));
 }
 
 function extractKeyValueLines(value: string | null): Map<string, string> {
@@ -1485,14 +1488,16 @@ function formatCompactAlertValue(value: string | null): string {
     return "not checked yet";
   }
 
-  const lines = value
+  const rawLines = value
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
+    .filter(Boolean);
+  const priorityLines = rawLines
     .filter((line) => {
       const key = line.match(/^([^:]{2,70}):\s*(.*)$/)?.[1]?.trim();
       return !key || !isLowValueAlertLine(key);
-    })
+    });
+  const lines = (priorityLines.length ? priorityLines : rawLines.slice(0, 6))
     .map((line) => {
       const detail = line.match(/^(Detail):\s*(.+)$/);
       if (detail) {
@@ -1503,21 +1508,21 @@ function formatCompactAlertValue(value: string | null): string {
   const displayedLines = lines.slice(0, 12);
   const omittedCount = lines.length - displayedLines.length;
   return truncateEmbedValue(
-    [...displayedLines, ...(omittedCount > 0 ? [`_…${omittedCount} more line(s) omitted._`] : [])].join("\n"),
+    [...displayedLines, ...(omittedCount > 0 ? [`_…${omittedCount} more line(s) omitted._`] : [])].join("\n") || "_No details available._",
     950
   );
 }
 
 function formatMarkdownKeyValueLine(line: string): string {
   const match = line.match(/^([^:]{2,70}):\s*(.+)$/);
-  if (!match || isLikelyUrlScheme(match[1])) {
+  if (!match || isLikelyUrlLine(line)) {
     return line;
   }
   return `**${match[1].trim()}:** ${match[2].trim()}`;
 }
 
-function isLikelyUrlScheme(value: string): boolean {
-  return /^[a-z][a-z0-9+.-]*$/i.test(value.trim());
+function isLikelyUrlLine(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(value.trim());
 }
 
 function isLowValueAlertLine(key: string): boolean {
@@ -1527,7 +1532,6 @@ function isLowValueAlertLine(key: string): boolean {
     "Fallback",
     "Alpha",
     "API",
-    "Source",
     "Source URL",
     "Search URL",
     "Raw",

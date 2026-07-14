@@ -403,6 +403,40 @@ describe("adapter commands", () => {
     );
   });
 
+  it("keeps compact snapshots non-empty when only low-priority links are present", () => {
+    const embed = buildAlertEmbed({
+      integration: checkedIntegration,
+      previousValue: "Resolution: https://example.com/old\nPolymarket: https://polymarket.com/event/old",
+      previousCheckedAt: "2026-07-13T22:00:00.000Z",
+      currentValue: "Resolution: https://example.com/new\nPolymarket: https://polymarket.com/event/new",
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Quick read", value: "_No compact summary available; see current snapshot._" }),
+        expect.objectContaining({ name: "Current snapshot", value: expect.stringContaining("**Resolution:** https://example.com/new") }),
+        expect.objectContaining({ name: "Previous snapshot", value: expect.stringContaining("**Resolution:** https://example.com/old") })
+      ])
+    );
+  });
+
+  it("formats ISO timestamps in quick-read diffs as ET", () => {
+    const embed = buildAlertEmbed({
+      integration: checkedIntegration,
+      previousValue: "Published: 2026-07-13T12:00:00.000Z",
+      previousCheckedAt: "2026-07-13T22:00:00.000Z",
+      currentValue: "Published: 2026-07-13T13:00:00.000Z",
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("ET");
+    expect(quickRead).not.toContain("2026-07-13T13:00:00.000Z");
+  });
+
   it("formats manually set market end dates", () => {
     const embed = buildMarketEndManualUpdatedEmbed(checkedIntegration, new Date("2026-05-11T03:59:00.000Z")).toJSON();
 
