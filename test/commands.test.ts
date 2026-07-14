@@ -402,6 +402,68 @@ describe("adapter commands", () => {
     expect(embed.fields?.some((field) => field.name === "Previous snapshot")).toBe(false);
   });
 
+  it("puts precipitation totals before long daily row diffs", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "noaa-seattle-precip", displayName: "NOAA Seattle Precipitation" },
+      previousValue: [
+        "Metric: NOAA monthly precipitation",
+        "Location: Seattle Area",
+        "Period: 2026-07",
+        "Status: partial",
+        "Reported days: 12/31",
+        "Total precipitation: 0.00 inches",
+        "Latest reported day: 2026-07-12",
+        "Latest day value: 0.00 inches",
+        "Daily values: 2026-07-01: 0.00 | 2026-07-02: 0.00"
+      ].join("\n"),
+      previousCheckedAt: "2026-07-13T22:00:00.000Z",
+      currentValue: [
+        "Metric: NOAA monthly precipitation",
+        "Location: Seattle Area",
+        "Period: 2026-07",
+        "Status: partial",
+        "Reported days: 13/31",
+        "Total precipitation: 0.00 inches",
+        "Latest reported day: 2026-07-13",
+        "Latest day value: 0.00 inches",
+        "Daily values: 2026-07-01: 0.00 | 2026-07-02: 0.00 | 2026-07-03: 0.00 | 2026-07-04: 0.00"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Total precipitation:** 0.00 inches");
+    expect(quickRead).toContain("**Latest day value:** 0.00 inches");
+    expect(quickRead).toContain("**Latest reported day:** 2026-07-13");
+    expect(quickRead).toContain("**Reported days:** 13/31");
+    expect(quickRead).not.toContain("Daily values");
+  });
+
+  it("shows precipitation alpha totals in quick-read alerts", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "hk-precip", displayName: "HKO Hong Kong Precipitation" },
+      previousValue: "Current total: 215.0 mm (2026-05)\nData status: official daily extract",
+      previousCheckedAt: "2026-07-13T22:00:00.000Z",
+      currentValue: [
+        "Current total: 227.2 mm (2026-05)",
+        "Data status: alpha daily report added",
+        "Official Daily Extract total: 215.0 mm",
+        "Alpha pending daily reports: 2026-05-29: 12.2 mm",
+        "Yesterday report rainfall: 12.2 mm (2026-05-29)",
+        "Alpha source: https://www.hko.gov.hk/textonly/v2/pastwx/ryestxt.htm"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Current total:** 227.2 mm (2026-05)");
+    expect(quickRead).toContain("**Official Daily Extract total:** 215.0 mm");
+    expect(quickRead).toContain("**Alpha pending daily reports:** 2026-05-29: 12.2 mm");
+    expect(quickRead).not.toContain("Alpha source");
+  });
+
   it("keeps a quick-read fallback when only low-priority links are present", () => {
     const embed = buildAlertEmbed({
       integration: checkedIntegration,

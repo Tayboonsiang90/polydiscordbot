@@ -44,7 +44,14 @@ describe("KMA Seoul precipitation adapter", () => {
       { year: 2026, month: 5 }
     );
 
-    expect(value).toBe("18.0 mm (2026-05)");
+    expect(value).toBe(
+      [
+        "Metric: KMA Seoul precipitation",
+        "Period: 2026-05",
+        "Current total: 18.0 mm",
+        "Data status: official KMA monthly total"
+      ].join("\n")
+    );
   });
 
   it("detects a present Seoul monthly row with no monthly precipitation total", () => {

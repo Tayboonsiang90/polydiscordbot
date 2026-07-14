@@ -37,6 +37,18 @@ const eventRefreshCustomIdPrefix = "event-refresh:";
 const addressLabelButtonCustomIdPrefix = "address-label:";
 const addressLabelModalCustomIdPrefix = "address-label-modal:";
 const addressPattern = /^0x[0-9a-fA-F]{40}$/;
+const precipitationAdapterIds = new Set([
+  "hk-precip",
+  "kma-seoul-precip",
+  "met-office-london-precip",
+  "noaa-atlanta-rain",
+  "noaa-boston-rain",
+  "noaa-dallas-rain",
+  "noaa-denver-rain",
+  "noaa-nyc-precip",
+  "noaa-san-francisco-rain",
+  "noaa-seattle-precip"
+]);
 export const addressLabelModalNameInputId = "address-label-name";
 export type AddressLabelButtonRole = "proposer" | "disputer";
 
@@ -1402,9 +1414,64 @@ function formatAlertQuickReadFields(
   const value =
     integration.adapterId === "white-house-full-lid"
       ? formatFullLidQuickRead(currentValue)
+      : isPrecipitationAdapter(integration.adapterId)
+        ? formatPrecipitationQuickRead(currentValue, previousValue)
       : formatGenericQuickRead(previousValue, currentValue);
 
   return value ? [{ name: "Quick read", value, inline: false }] : [];
+}
+
+function isPrecipitationAdapter(adapterId: string): boolean {
+  return precipitationAdapterIds.has(adapterId);
+}
+
+function formatPrecipitationQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPrecipitationPreferredLine(currentValue, "Current total"),
+    ...formatPrecipitationPreferredLine(currentValue, "Total precipitation"),
+    ...formatPrecipitationPreferredLine(currentValue, "Value"),
+    ...formatPrecipitationPreferredLine(currentValue, "Latest day value"),
+    ...formatPrecipitationPreferredLine(currentValue, "Latest reported day"),
+    ...formatPrecipitationPreferredLine(currentValue, "Reported days"),
+    ...formatPrecipitationPreferredLine(currentValue, "Data status"),
+    ...formatPrecipitationPreferredLine(currentValue, "Status"),
+    ...formatPrecipitationPreferredLine(currentValue, "Official Daily Extract total"),
+    ...formatPrecipitationPreferredLine(currentValue, "Official Met Office row"),
+    ...formatAlphaPrecipitationLines(currentValue),
+    ...formatPrecipitationPreferredLine(currentValue, "Alpha pending daily reports"),
+    ...formatPrecipitationPreferredLine(currentValue, "Alpha daily estimate"),
+    ...formatPrecipitationPreferredLine(currentValue, "Yesterday report rainfall")
+  ];
+  const uniqueLines = [...new Set(lines)];
+
+  if (uniqueLines.length) {
+    return truncateEmbedValue(uniqueLines.slice(0, 8).join("\n"), 900);
+  }
+
+  return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatPrecipitationPreferredLine(value: string, label: string): string[] {
+  const current = extractValueLine(value, label);
+  if (!current) {
+    return [];
+  }
+
+  return [`**${label}:** ${truncatePlainText(convertIsoTimestampsToEastern(current), 180)}`];
+}
+
+function formatAlphaPrecipitationLines(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .flatMap((line) => {
+      const match = line.match(/^(Alpha .* cumulative):\s*(.+)$/);
+      if (!match) {
+        return [];
+      }
+
+      return [`**${match[1]}:** ${truncatePlainText(convertIsoTimestampsToEastern(match[2]), 180)}`];
+    });
 }
 
 function formatFullLidQuickRead(currentValue: string): string {

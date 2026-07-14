@@ -85,7 +85,11 @@ export function extractKmaSeoulPrecipitationValue(response: KmaResponse, setting
   }
 
   const period = row.tma ?? `${settings.year}-${padMonth(settings.month)}`;
-  return `${value.toFixed(1)} mm (${period})`;
+  return formatKmaSeoulPrecipitationValue({
+    period,
+    currentTotal: `${value.toFixed(1)} mm`,
+    dataStatus: "official KMA monthly total"
+  });
 }
 
 export function isKmaSeoulMonthlyPrecipitationPending(response: KmaResponse): boolean {
@@ -187,8 +191,30 @@ export const kmaSeoulPrecipAdapter: WebsiteAdapter = {
 async function fetchKmaSeoulDailyPrecipitationValue(settings: KmaSettings): Promise<string> {
   const summary = await fetchKmaSeoulDailyPrecipitationSummary(settings);
   const period = `${settings.year}-${padMonth(settings.month)}`;
-  const status = summary.latestDate ? `latest daily row ${summary.latestDate}` : "no daily rainfall rows";
-  return `${summary.total.toFixed(1)} mm (${period}, ASOS daily fallback; ${status})`;
+  return formatKmaSeoulPrecipitationValue({
+    period,
+    currentTotal: `${summary.total.toFixed(1)} mm`,
+    dataStatus: "ASOS daily fallback",
+    reportedDays: String(summary.rowCount),
+    latestReportedDay: summary.latestDate ?? "none"
+  });
+}
+
+function formatKmaSeoulPrecipitationValue(input: {
+  period: string;
+  currentTotal: string;
+  dataStatus: string;
+  reportedDays?: string;
+  latestReportedDay?: string;
+}): string {
+  return [
+    "Metric: KMA Seoul precipitation",
+    `Period: ${input.period}`,
+    `Current total: ${input.currentTotal}`,
+    `Data status: ${input.dataStatus}`,
+    ...(input.reportedDays ? [`Reported days: ${input.reportedDays}`] : []),
+    ...(input.latestReportedDay ? [`Latest reported day: ${input.latestReportedDay}`] : [])
+  ].join("\n");
 }
 
 async function fetchKmaSeoulDailyPrecipitationSummary(settings: KmaSettings): Promise<KmaDailyPrecipitationSummary> {
