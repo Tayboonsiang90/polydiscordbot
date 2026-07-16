@@ -388,6 +388,37 @@ describe("adapter commands", () => {
     );
   });
 
+  it("shows Spotify top 5 leaders in alert quick reads", () => {
+    const currentValue = [
+      "Metric: Spotify Top 50 - USA daily top 10",
+      "Chart date: 2026/07/14 (Kworb daily chart)",
+      "Top 10:",
+      "#1 +3 Malcolm Todd - Earrings — 1,751,197 streams, 177d, peak #1 (x1)",
+      "#2 -1 Alex Warren - Ordinary — 1,466,912 streams, 147d, peak #1 (x5)",
+      "#3 -1 Sabrina Carpenter - Manchild — 1,437,509 streams, 24d, peak #1 (x4)",
+      "#4 -1 Morgan Wallen - What I Want — 1,236,397 streams, 46d, peak #1 (x1)",
+      "#5 +1 Ravyn Lenae - Love Me Not — 1,070,609 streams, 114d, peak #5",
+      "#6 -1 Lady Gaga - Die With A Smile — 1,031,384 streams, 318d, peak #1 (x15)",
+      "Spotify playlist: https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp",
+      "Kworb details: https://kworb.net/spotify/country/us_daily.html"
+    ].join("\n");
+    const previousValue = currentValue.replace("2026/07/14", "2026/07/13").replace("Malcolm Todd - Earrings", "Alex Warren - Ordinary");
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "spotify-top-50-usa", displayName: "Spotify Top 50 USA" },
+      previousValue,
+      previousCheckedAt: "2026-07-15T16:30:00.000Z",
+      currentValue,
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Top 5:**");
+    expect(quickRead).toContain("Malcolm Todd - Earrings");
+    expect(quickRead).toContain("Ravyn Lenae - Love Me Not");
+    expect(quickRead).not.toContain("Lady Gaga - Die With A Smile");
+  });
+
   it("puts Full Lid before-cutoff status first in alert embeds", () => {
     const currentValue = [
       "Date ET: 2026-07-13",

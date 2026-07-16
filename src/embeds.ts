@@ -49,6 +49,7 @@ const precipitationAdapterIds = new Set([
   "noaa-san-francisco-rain",
   "noaa-seattle-precip"
 ]);
+const spotifyTop50AdapterIds = new Set(["spotify-top-50-usa", "spotify-top-50-global"]);
 export const addressLabelModalNameInputId = "address-label-name";
 export type AddressLabelButtonRole = "proposer" | "disputer";
 
@@ -1418,6 +1419,8 @@ function formatAlertQuickReadFields(
         ? formatPrecipitationQuickRead(currentValue, previousValue)
       : integration.adapterId === "ufo-files"
         ? formatUfoFilesQuickRead(currentValue, previousValue)
+      : spotifyTop50AdapterIds.has(integration.adapterId)
+        ? formatSpotifyTop50QuickRead(currentValue, previousValue)
       : integration.adapterId === "mt-washington-wind"
         ? formatMtWashingtonWindQuickRead(currentValue, previousValue)
       : integration.adapterId === "nsidc-arctic-sea-ice"
@@ -1548,6 +1551,75 @@ function formatUfoFilesQuickRead(currentValue: string, previousValue: string | n
   }
 
   return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatSpotifyTop50QuickRead(currentValue: string, previousValue: string | null): string {
+  const currentRows = extractSpotifyTopRows(currentValue).slice(0, 5);
+  const previousNumberOne = extractSpotifyTopRows(previousValue).find((row) => row.position === 1);
+  const currentNumberOne = currentRows.find((row) => row.position === 1);
+  const chartDate = extractValueLine(currentValue, "Chart date");
+  const lines = [
+    ...(chartDate ? [`**Chart date:** ${chartDate}`] : []),
+    ...(previousNumberOne && currentNumberOne && previousNumberOne.artistTitle !== currentNumberOne.artistTitle
+      ? [`**#1 change:** ${previousNumberOne.artistTitle} → **${currentNumberOne.artistTitle}**`]
+      : []),
+    ...(currentRows.length
+      ? [
+          "**Top 5:**",
+          ...currentRows.map((row) => `**#${row.position}:** ${row.movement ? `(${row.movement}) ` : ""}${row.artistTitle}${row.streams ? ` — ${row.streams}` : ""}`)
+        ]
+      : [])
+  ];
+
+  if (lines.length) {
+    return truncateEmbedValue(lines.join("\n"), 900);
+  }
+
+  return formatGenericQuickRead(previousValue, currentValue);
+}
+
+type SpotifyTopRow = {
+  position: number;
+  movement: string;
+  artistTitle: string;
+  streams: string;
+};
+
+function extractSpotifyTopRows(value: string | null): SpotifyTopRow[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .flatMap((line) => {
+      const match = line.match(/^#(\d+)\s+(.+)$/);
+      if (!match) {
+        return [];
+      }
+
+      const position = Number(match[1]);
+      const parsed = parseSpotifyTopRowBody(match[2]);
+      if (!Number.isInteger(position) || !parsed.artistTitle) {
+        return [];
+      }
+
+      return [{ position, ...parsed }];
+    });
+}
+
+function parseSpotifyTopRowBody(body: string): Omit<SpotifyTopRow, "position"> {
+  const [left, right = ""] = body.split(/\s+(?:\u2014|â€”)\s+/, 2);
+  const tokens = left.trim().split(/\s+/);
+  const movement = isSpotifyMovementToken(tokens[0]) ? tokens.shift() ?? "" : "";
+  const artistTitle = tokens.join(" ").trim();
+  const streams = right.match(/^([^,]+ streams)/)?.[1]?.trim() ?? "";
+  return { movement, artistTitle, streams };
+}
+
+function isSpotifyMovementToken(value: string | undefined): boolean {
+  return Boolean(value && /^(?:[+-]\d+|=|NEW|RE)$/i.test(value));
 }
 
 function formatPreferredQuickReadLine(value: string, label: string): string[] {
