@@ -156,12 +156,15 @@ export function formatMtWashingtonWindValue(report: MtWashingtonWindReport, pdfU
     );
   }
 
+  const latestDailyRow = report.dailyRows.at(-1) ?? null;
+  const latestDayDate = report.latestReportedDay ? `${report.year}-${padMonth(report.month)}-${padMonth(report.latestReportedDay)}` : null;
   return [
     "Metric: Mt. Washington summit highest wind speed",
     `Period: ${report.year}-${padMonth(report.month)}`,
     `Highest wind speed: ${report.highestSpeedMph} mph`,
     `Highest day: ${report.highestDay ? `${report.year}-${padMonth(report.month)}-${padMonth(report.highestDay)}` : "monthly MISC row only"}`,
-    `Latest reported day: ${report.latestReportedDay ? `${report.year}-${padMonth(report.month)}-${padMonth(report.latestReportedDay)}` : "none"}`,
+    `Latest reported day: ${latestDayDate ?? "none"}`,
+    `Latest day wind speed: ${latestDailyRow ? `${latestDailyRow.fastestSpeedMph} mph on ${latestDayDate} (avg ${latestDailyRow.averageSpeedMph} mph, ${latestDailyRow.directionDegrees} (${latestDailyRow.directionLabel}))` : "none"}`,
     `Daily rows parsed: ${report.dailyRows.length}`,
     `MISC fastest: ${report.miscFastestSpeedMph === null ? "not found" : `${report.miscFastestSpeedMph} mph${report.miscDirection ? ` ${report.miscDirection}` : ""}`}`,
     `F6 last modified: ${lastModified ?? "unknown"}`,

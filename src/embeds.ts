@@ -1416,6 +1416,8 @@ function formatAlertQuickReadFields(
       ? formatFullLidQuickRead(currentValue)
       : isPrecipitationAdapter(integration.adapterId)
         ? formatPrecipitationQuickRead(currentValue, previousValue)
+      : integration.adapterId === "mt-washington-wind"
+        ? formatMtWashingtonWindQuickRead(currentValue, previousValue)
       : formatGenericQuickRead(previousValue, currentValue);
 
   return value ? [{ name: "Quick read", value, inline: false }] : [];
@@ -1427,20 +1429,20 @@ function isPrecipitationAdapter(adapterId: string): boolean {
 
 function formatPrecipitationQuickRead(currentValue: string, previousValue: string | null): string {
   const lines = [
-    ...formatPrecipitationPreferredLine(currentValue, "Current total"),
-    ...formatPrecipitationPreferredLine(currentValue, "Total precipitation"),
-    ...formatPrecipitationPreferredLine(currentValue, "Value"),
-    ...formatPrecipitationPreferredLine(currentValue, "Latest day value"),
-    ...formatPrecipitationPreferredLine(currentValue, "Latest reported day"),
-    ...formatPrecipitationPreferredLine(currentValue, "Reported days"),
-    ...formatPrecipitationPreferredLine(currentValue, "Data status"),
-    ...formatPrecipitationPreferredLine(currentValue, "Status"),
-    ...formatPrecipitationPreferredLine(currentValue, "Official Daily Extract total"),
-    ...formatPrecipitationPreferredLine(currentValue, "Official Met Office row"),
+    ...formatPreferredQuickReadLine(currentValue, "Current total"),
+    ...formatPreferredQuickReadLine(currentValue, "Total precipitation"),
+    ...formatPreferredQuickReadLine(currentValue, "Value"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest day value"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest reported day"),
+    ...formatPreferredQuickReadLine(currentValue, "Reported days"),
+    ...formatPreferredQuickReadLine(currentValue, "Data status"),
+    ...formatPreferredQuickReadLine(currentValue, "Status"),
+    ...formatPreferredQuickReadLine(currentValue, "Official Daily Extract total"),
+    ...formatPreferredQuickReadLine(currentValue, "Official Met Office row"),
     ...formatAlphaPrecipitationLines(currentValue),
-    ...formatPrecipitationPreferredLine(currentValue, "Alpha pending daily reports"),
-    ...formatPrecipitationPreferredLine(currentValue, "Alpha daily estimate"),
-    ...formatPrecipitationPreferredLine(currentValue, "Yesterday report rainfall")
+    ...formatPreferredQuickReadLine(currentValue, "Alpha pending daily reports"),
+    ...formatPreferredQuickReadLine(currentValue, "Alpha daily estimate"),
+    ...formatPreferredQuickReadLine(currentValue, "Yesterday report rainfall")
   ];
   const uniqueLines = [...new Set(lines)];
 
@@ -1449,15 +1451,6 @@ function formatPrecipitationQuickRead(currentValue: string, previousValue: strin
   }
 
   return formatGenericQuickRead(previousValue, currentValue);
-}
-
-function formatPrecipitationPreferredLine(value: string, label: string): string[] {
-  const current = extractValueLine(value, label);
-  if (!current) {
-    return [];
-  }
-
-  return [`**${label}:** ${truncatePlainText(convertIsoTimestampsToEastern(current), 180)}`];
 }
 
 function formatAlphaPrecipitationLines(value: string): string[] {
@@ -1496,6 +1489,33 @@ function formatFullLidQuickRead(currentValue: string): string {
     ].join("\n"),
     900
   );
+}
+
+function formatMtWashingtonWindQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Highest wind speed"),
+    ...formatPreferredQuickReadLine(currentValue, "Highest day"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest reported day"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest day wind speed"),
+    ...formatPreferredQuickReadLine(currentValue, "MISC fastest"),
+    ...formatPreferredQuickReadLine(currentValue, "F6 last modified")
+  ];
+  const uniqueLines = [...new Set(lines)];
+
+  if (uniqueLines.length) {
+    return truncateEmbedValue(uniqueLines.join("\n"), 900);
+  }
+
+  return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatPreferredQuickReadLine(value: string, label: string): string[] {
+  const current = extractValueLine(value, label);
+  if (!current) {
+    return [];
+  }
+
+  return [`**${label}:** ${truncatePlainText(convertIsoTimestampsToEastern(current), 180)}`];
 }
 
 function formatGenericQuickRead(previousValue: string | null, currentValue: string): string {

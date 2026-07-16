@@ -58,6 +58,7 @@ describe("Mt. Washington wind adapter", () => {
     expect(value).toContain("Highest wind speed: 97 mph");
     expect(value).toContain("Highest day: 2025-07-17");
     expect(value).toContain("Latest reported day: 2025-07-31");
+    expect(value).toContain("Latest day wind speed: 43 mph on 2025-07-31 (avg 18.4 mph, 310 (NW))");
     expect(value).toContain("F6 last modified: Sun, 03 Aug 2025 03:48:04 GMT");
   });
 

@@ -467,6 +467,41 @@ describe("adapter commands", () => {
     expect(quickRead).not.toContain("Alpha source");
   });
 
+  it("keeps Mt. Washington wind speed numbers in quick-read alerts", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "mt-washington-wind", displayName: "Mt. Washington Wind Speed" },
+      previousValue: [
+        "Metric: Mt. Washington summit highest wind speed",
+        "Period: 2026-07",
+        "Highest wind speed: 72 mph",
+        "Highest day: 2026-07-12",
+        "Latest reported day: 2026-07-14",
+        "Latest day wind speed: 48 mph on 2026-07-14 (avg 22.1 mph, 290 (W))",
+        "Daily rows parsed: 14",
+        "F6 last modified: Wed, 15 Jul 2026 06:20:04 GMT"
+      ].join("\n"),
+      previousCheckedAt: "2026-07-15T22:00:00.000Z",
+      currentValue: [
+        "Metric: Mt. Washington summit highest wind speed",
+        "Period: 2026-07",
+        "Highest wind speed: 72 mph",
+        "Highest day: 2026-07-12",
+        "Latest reported day: 2026-07-15",
+        "Latest day wind speed: 55 mph on 2026-07-15 (avg 24.8 mph, 300 (NW))",
+        "Daily rows parsed: 15",
+        "F6 last modified: Thu, 16 Jul 2026 06:05:04 GMT"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Highest wind speed:** 72 mph");
+    expect(quickRead).toContain("**Latest day wind speed:** 55 mph on 2026-07-15");
+    expect(quickRead).toContain("**Latest reported day:** 2026-07-15");
+    expect(quickRead).not.toContain("Daily rows parsed");
+  });
+
   it("keeps a quick-read fallback when only low-priority links are present", () => {
     const embed = buildAlertEmbed({
       integration: checkedIntegration,
