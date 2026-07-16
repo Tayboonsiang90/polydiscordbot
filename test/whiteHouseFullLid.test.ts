@@ -79,7 +79,7 @@ describe("White House full lid monitor", () => {
     expect(extractBnoFullLid(html, "2026-07-10")).toBeNull();
   });
 
-  it("alerts on alpha corrections until Roll Call confirms the lid", () => {
+  it("alerts on same-day revisions after a lid is found", () => {
     const bnoValue = formatFullLidValue({
       dateEt: "2026-05-12",
       found: true,
@@ -116,6 +116,18 @@ describe("White House full lid monitor", () => {
       forthStatus: "unavailable HTTP 429",
       bnoStatus: "lid report found at 6:04 PM"
     });
+    const rollCallRevisionValue = formatFullLidValue({
+      dateEt: "2026-05-12",
+      found: true,
+      source: "Roll Call",
+      timeEt: "6:03 PM",
+      detail: "Roll Call revised the official lid time",
+      sourceUrl: "https://rollcall.com/factbase/trump/calendar/",
+      beforeCutoff: true,
+      rollCallStatus: "full lid found at 6:03 PM",
+      forthStatus: "unavailable HTTP 429",
+      bnoStatus: "lid report found at 6:04 PM"
+    });
     const nextDayValue = bnoValue.replaceAll("2026-05-12", "2026-05-13");
 
     expect(fullLidShouldAlertOnChange(null, bnoValue)).toBe(true);
@@ -123,6 +135,7 @@ describe("White House full lid monitor", () => {
     expect(fullLidShouldAlertOnChange(bnoValue, bnoCorrectionValue)).toBe(true);
     expect(fullLidShouldAlertOnChange(bnoCorrectionValue, rollCallConfirmedValue)).toBe(true);
     expect(fullLidShouldAlertOnChange(rollCallConfirmedValue, rollCallConfirmedValue)).toBe(false);
+    expect(fullLidShouldAlertOnChange(rollCallConfirmedValue, rollCallRevisionValue)).toBe(true);
     expect(fullLidShouldAlertOnChange(bnoValue, nextDayValue)).toBe(true);
   });
 

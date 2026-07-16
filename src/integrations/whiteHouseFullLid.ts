@@ -215,40 +215,7 @@ export function fullLidShouldAlertOnChange(previousValue: string | null, current
     return true;
   }
 
-  const currentRollCallConfirmed = isRollCallConfirmed(currentValue);
-  const previousRollCallConfirmed = isRollCallConfirmed(previousValue);
-  if (currentRollCallConfirmed && !previousRollCallConfirmed) {
-    return true;
-  }
-
-  const currentFingerprint = currentRollCallConfirmed
-    ? buildFullLidOfficialFingerprint(currentValue)
-    : buildFullLidAlphaFingerprint(currentValue);
-  const previousFingerprint = previousRollCallConfirmed
-    ? buildFullLidOfficialFingerprint(previousValue)
-    : buildFullLidAlphaFingerprint(previousValue);
-  return currentFingerprint !== previousFingerprint;
-}
-
-function isRollCallConfirmed(value: string): boolean {
-  return /^Roll Call:\s*full lid found at\b/im.test(value);
-}
-
-function buildFullLidOfficialFingerprint(value: string): string {
-  return buildFullLidFingerprint(value, ["Date ET", "Roll Call", "First lid time", "Cutoff status"]);
-}
-
-function buildFullLidAlphaFingerprint(value: string): string {
-  return buildFullLidFingerprint(value, ["Date ET", "First lid source", "First lid time", "First lid URL", "Cutoff status", "Detail"]);
-}
-
-function buildFullLidFingerprint(value: string, labels: string[]): string {
-  return labels.map((label) => `${label}: ${extractFullLidLine(value, label) ?? ""}`).join("\n");
-}
-
-function extractFullLidLine(value: string, label: string): string | null {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return value.match(new RegExp(`^${escaped}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
+  return currentValue !== previousValue;
 }
 
 export function getWhiteHouseFullLidPollIntervalMinutes(_integration: unknown, now = new Date()): number {
