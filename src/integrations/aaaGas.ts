@@ -1,8 +1,17 @@
 ﻿import * as cheerio from "cheerio";
-import type { AdapterValue, WebsiteAdapter } from "./types.js";
+import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 
 const sourceUrl = "https://gasprices.aaa.com/";
+const defaultPolymarketUrl = "https://polymarket.com/event/will-gas-hit-by-end-of-july-20260630204747602";
+
+const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
+  searchQuery: "will gas hit",
+  slugPrefix: "will-gas-hit-by-end-of-",
+  titlePrefix: "Will gas hit",
+  lastDiscoveryAtKey: "lastAaaGasDiscoveryAt"
+};
 
 export function extractAaaRegularGasCurrentAvg(html: string): string {
   const $ = cheerio.load(html);
@@ -41,10 +50,13 @@ export const aaaRegularGasAdapter: WebsiteAdapter = {
   commandName: "aaa",
   displayName: "AAA Regular Gas",
   sourceUrl,
-  defaultPolymarketUrl: "https://polymarket.com/event/will-gas-hit-by-end-of-may",
+  defaultPolymarketUrl,
   defaultChannelName: "aaa-regular-gas",
   alertRoleName: "AAA Gas Alerts",
   alertRoleEmoji: "\u26fd",
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshAaaGasPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(): Promise<AdapterValue> {
     const response = await fetchWithTimeout(sourceUrl, {
       headers: {
@@ -66,6 +78,13 @@ export const aaaRegularGasAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export async function refreshAaaGasPolymarketQueue(
+  integration: Integration,
+  now = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  return refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig, now);
+}
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();

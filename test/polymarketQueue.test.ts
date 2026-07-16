@@ -117,6 +117,22 @@ describe("Polymarket URL queue", () => {
         new Date("2026-05-29T12:00:00.000Z")
       )
     ).toMatchObject({ year: 2026, month: 4 });
+
+    expect(
+      parsePolymarketDateRangeWindow(
+        "https://polymarket.com/event/will-gas-hit-by-end-of-july-20260630204747602",
+        new Date("2026-07-16T12:00:00.000Z")
+      )
+    ).toEqual({
+      startAt: "2026-07-01T04:00:00.000Z",
+      endAt: "2026-08-01T03:59:00.000Z"
+    });
+    expect(
+      parsePolymarketMonthWindow(
+        "https://polymarket.com/event/will-gas-hit-by-end-of-july-20260630204747602",
+        new Date("2026-07-16T12:00:00.000Z")
+      )
+    ).toMatchObject({ year: 2026, month: 7 });
   });
 
   it("keeps a future market queued without replacing the currently active market", () => {

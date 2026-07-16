@@ -137,6 +137,22 @@ export function parsePolymarketMonthWindow(url: string, now = new Date()): Polym
     return window ? { year, month, ...window } : null;
   }
 
+  for (let index = 2; index < parts.length; index += 1) {
+    if (parts[index - 2] !== "end" || parts[index - 1] !== "of") {
+      continue;
+    }
+
+    const month = monthNumber(parts[index]);
+    if (!month) {
+      continue;
+    }
+
+    const explicitYear = parts.slice(index + 1).map(parseYear).find((value): value is number => value !== null);
+    const year = explicitYear ?? inferMonthOnlyMarketYear(month, now);
+    const window = buildEasternWindow(year, month, 1, month, new Date(Date.UTC(year, month, 0)).getUTCDate());
+    return window ? { year, month, ...window } : null;
+  }
+
   return null;
 }
 
