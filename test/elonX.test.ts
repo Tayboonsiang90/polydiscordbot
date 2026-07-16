@@ -3,6 +3,8 @@ import {
   elonXAdapter,
   extractElonXGammaStrikeTerms,
   findMatchedElonXStrikeTerms,
+  getXFeedUrls,
+  getXFrontendBaseUrls,
   parseElonXCancelTimeline,
   parseElonXMarketWindow,
   parseElonXNitterFeed,
@@ -133,6 +135,11 @@ describe("Elon X strike monitor", () => {
         strikeTerms: ["Crypto"]
       })
     ).toBe(false);
+  });
+
+  it("uses multiple public X frontends by default", () => {
+    expect(getXFrontendBaseUrls()).toEqual(["https://xcancel.com", "https://nitter.kareem.one"]);
+    expect(getXFeedUrls()).toEqual(["https://xcancel.com/elonmusk/rss"]);
   });
 
   it("parses Nitter/XCancel RSS fallback posts", () => {

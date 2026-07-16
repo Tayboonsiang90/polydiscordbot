@@ -11,8 +11,8 @@ const gammaApiUrl = "https://gamma-api.polymarket.com/events";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const marketSearchQuery = "what will elon post this week";
 const marketSearchTags = ["elon-tweets", "mention-markets"];
-const defaultXFrontendBaseUrls = ["https://xcancel.com"];
-const defaultXFeedUrls = ["https://xcancel.com/elonmusk/rss", "https://nitter.net/elonmusk/rss"];
+const defaultXFrontendBaseUrls = ["https://xcancel.com", "https://nitter.kareem.one"];
+const defaultXFeedUrls = ["https://xcancel.com/elonmusk/rss"];
 const maxPosts = 40;
 const sourceTimeoutMs = 30_000;
 const strikeRefreshIntervalMs = 5 * 60_000;
@@ -921,13 +921,13 @@ function normalizeXPostUrl(link: string, id: string, baseUrl: string): string {
   }
 }
 
-function getXFrontendBaseUrls(): string[] {
+export function getXFrontendBaseUrls(): string[] {
   const configured = process.env.ELON_X_NITTER_BASE_URLS ?? process.env.ELON_X_FRONTEND_BASE_URLS;
   const urls = configured?.split(",").map((url) => url.trim()).filter(Boolean) ?? [];
   return uniqueStrings([...urls, ...defaultXFrontendBaseUrls]).map((url) => url.replace(/\/+$/, ""));
 }
 
-function getXFeedUrls(): string[] {
+export function getXFeedUrls(): string[] {
   const configured = process.env.ELON_X_NITTER_FEEDS ?? process.env.ELON_X_RSS_URLS;
   const urls = configured?.split(",").map((url) => url.trim()).filter(Boolean) ?? [];
   return uniqueStrings([...urls, ...defaultXFeedUrls]);
