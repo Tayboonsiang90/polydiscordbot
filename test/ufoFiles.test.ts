@@ -80,6 +80,8 @@ describe("UFO files adapter", () => {
     expect(value).toMatch(/NARA UAP Bulk Downloads: 1 tracked file link\(s\), fp [a-f0-9]{16}/);
     expect(value).toContain("Tracked link sample by source (not a diff):");
     expect(value).toContain("https://catalog.archives.gov/id/123456");
+    expect(value).toContain("Tracked file inventory:");
+    expect(value).toContain("Tracked file: NARA UAP Bulk Downloads | https://catalog.archives.gov/id/123456 | Catalog Record 123456");
   });
 
   it("alerts only after an existing stored fingerprint changes", () => {

@@ -347,6 +347,47 @@ describe("adapter commands", () => {
     );
   });
 
+  it("shows concrete UFO file inventory changes in alert embeds", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "ufo-files", displayName: "UFO Files" },
+      previousValue: [
+        "Metric: Official UFO/UAP file inventory",
+        "Tracked files: 1",
+        "Fingerprint: 1111111111111111",
+        "Sources:",
+        "AARO Official UAP Imagery: 1 tracked file link(s)",
+        "Tracked file inventory:",
+        "Tracked file: AARO Official UAP Imagery | https://www.aaro.mil/old.pdf | Old case"
+      ].join("\n"),
+      previousCheckedAt: "2026-07-12T16:30:00.000Z",
+      currentValue: [
+        "Metric: Official UFO/UAP file inventory",
+        "Tracked files: 2",
+        "Fingerprint: 2222222222222222",
+        "Sources:",
+        "AARO Official UAP Imagery: 2 tracked file link(s)",
+        "Tracked file inventory:",
+        "Tracked file: AARO Official UAP Imagery | https://www.aaro.mil/old.pdf | Old case",
+        "Tracked file: AARO Official UAP Imagery | https://www.aaro.mil/new.pdf | New case"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Quick read",
+          value: expect.stringContaining("First added")
+        }),
+        expect.objectContaining({
+          name: "Detected change",
+          value: expect.stringContaining("https://www.aaro.mil/new.pdf")
+        })
+      ])
+    );
+  });
+
   it("puts Full Lid before-cutoff status first in alert embeds", () => {
     const currentValue = [
       "Date ET: 2026-07-13",

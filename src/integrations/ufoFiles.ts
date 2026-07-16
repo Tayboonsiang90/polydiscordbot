@@ -182,6 +182,8 @@ export function formatUfoFilesValue(snapshots: Array<{ source: UfoFileSource; re
     ...sourceLines,
     "Tracked link sample by source (not a diff):",
     ...(sampleRecords.length ? sampleRecords : ["none found"]),
+    "Tracked file inventory:",
+    ...records.map(formatUfoFileInventoryLine),
     `Resolution: ${sourceUrl}`,
     `Polymarket: ${polymarketUrl}`
   ].join("\n");
@@ -376,6 +378,10 @@ function isNonEmptyString(value: unknown): value is string {
 function formatUfoFileSample(record: UfoFileRecord): string {
   const title = record.title || inferTitleFromUrl(record.url);
   return `${truncateText(title, 72)} - ${record.url}`;
+}
+
+function formatUfoFileInventoryLine(record: UfoFileRecord): string {
+  return `Tracked file: ${record.source} | ${record.url} | ${record.title || inferTitleFromUrl(record.url)}`;
 }
 
 function truncateText(value: string, maxLength: number): string {

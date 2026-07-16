@@ -1416,6 +1416,8 @@ function formatAlertQuickReadFields(
       ? formatFullLidQuickRead(currentValue)
       : isPrecipitationAdapter(integration.adapterId)
         ? formatPrecipitationQuickRead(currentValue, previousValue)
+      : integration.adapterId === "ufo-files"
+        ? formatUfoFilesQuickRead(currentValue, previousValue)
       : integration.adapterId === "mt-washington-wind"
         ? formatMtWashingtonWindQuickRead(currentValue, previousValue)
       : integration.adapterId === "nsidc-arctic-sea-ice"
@@ -1529,6 +1531,25 @@ function formatNsidcSeaIceQuickRead(currentValue: string, previousValue: string 
   return formatGenericQuickRead(previousValue, currentValue);
 }
 
+function formatUfoFilesQuickRead(currentValue: string, previousValue: string | null): string {
+  const diff = diffUfoTrackedFiles(previousValue, currentValue);
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Tracked files"),
+    ...(diff.added.length ? [`**Added files:** ${diff.added.length}`] : []),
+    ...(diff.removed.length ? [`**Removed files:** ${diff.removed.length}`] : []),
+    ...(diff.updated.length ? [`**Changed metadata:** ${diff.updated.length}`] : []),
+    ...(diff.added[0] ? [`**First added:** ${formatUfoTrackedFileLabel(diff.added[0])}`] : []),
+    ...(diff.removed[0] ? [`**First removed:** ${formatUfoTrackedFileLabel(diff.removed[0])}`] : []),
+    ...formatTrackedSourceCountDiffs(previousValue, currentValue).map((line) => `**Source count:** ${line}`)
+  ];
+
+  if (lines.length) {
+    return truncateEmbedValue(lines.slice(0, 8).join("\n"), 900);
+  }
+
+  return formatGenericQuickRead(previousValue, currentValue);
+}
+
 function formatPreferredQuickReadLine(value: string, label: string): string[] {
   const current = extractValueLine(value, label);
   if (!current) {
@@ -1627,13 +1648,112 @@ function truncatePlainText(value: string, maxLength: number): string {
 }
 
 function formatValueChangeSummaryFields(previousValue: string | null, currentValue: string): Array<{ name: string; value: string; inline: false }> {
+  const ufoFileDiffLines = formatUfoTrackedFileDiffs(previousValue, currentValue);
   const lines = [
+    ...ufoFileDiffLines,
     ...formatNumericLineDiffs(previousValue, currentValue, ["Tracked files"]),
     ...formatTrackedSourceCountDiffs(previousValue, currentValue),
-    ...formatFingerprintDiff(previousValue, currentValue)
+    ...(ufoFileDiffLines.length ? [] : formatFingerprintDiff(previousValue, currentValue))
   ];
 
   return lines.length ? [{ name: "Detected change", value: truncateEmbedValue(lines.join("\n"), 800), inline: false }] : [];
+}
+
+type UfoTrackedFile = {
+  source: string;
+  url: string;
+  title: string;
+};
+
+type UfoTrackedFileDiff = {
+  added: UfoTrackedFile[];
+  removed: UfoTrackedFile[];
+  updated: Array<{ previous: UfoTrackedFile; current: UfoTrackedFile }>;
+};
+
+function formatUfoTrackedFileDiffs(previousValue: string | null, currentValue: string): string[] {
+  const diff = diffUfoTrackedFiles(previousValue, currentValue);
+  if (!diff.added.length && !diff.removed.length && !diff.updated.length) {
+    return [];
+  }
+
+  const lines = [
+    ...formatUfoTrackedFileGroup("Added files", "+", diff.added),
+    ...formatUfoTrackedFileGroup("Removed files", "-", diff.removed),
+    ...formatUfoTrackedFileUpdateGroup(diff.updated)
+  ];
+  return lines.length ? lines : [];
+}
+
+function formatUfoTrackedFileGroup(label: string, marker: string, records: UfoTrackedFile[]): string[] {
+  if (!records.length) {
+    return [];
+  }
+
+  const shown = records.slice(0, 5).map((record) => `${marker} ${formatUfoTrackedFileLabel(record)} - ${record.url}`);
+  const remaining = records.length - shown.length;
+  return [`${label} (${records.length}):`, ...shown, ...(remaining > 0 ? [`...and ${remaining} more`] : [])];
+}
+
+function formatUfoTrackedFileUpdateGroup(updates: Array<{ previous: UfoTrackedFile; current: UfoTrackedFile }>): string[] {
+  if (!updates.length) {
+    return [];
+  }
+
+  const shown = updates
+    .slice(0, 3)
+    .map((update) => `~ ${formatUfoTrackedFileLabel(update.previous)} -> ${formatUfoTrackedFileLabel(update.current)} - ${update.current.url}`);
+  const remaining = updates.length - shown.length;
+  return [`Changed metadata (${updates.length}):`, ...shown, ...(remaining > 0 ? [`...and ${remaining} more`] : [])];
+}
+
+function diffUfoTrackedFiles(previousValue: string | null, currentValue: string): UfoTrackedFileDiff {
+  const previousFiles = extractUfoTrackedFiles(previousValue);
+  const currentFiles = extractUfoTrackedFiles(currentValue);
+  if (!previousFiles.size || !currentFiles.size) {
+    return { added: [], removed: [], updated: [] };
+  }
+
+  const added = [...currentFiles.values()].filter((record) => !previousFiles.has(record.url));
+  const removed = [...previousFiles.values()].filter((record) => !currentFiles.has(record.url));
+  const updated = [...currentFiles.values()].flatMap((current) => {
+    const previous = previousFiles.get(current.url);
+    if (!previous || (previous.source === current.source && previous.title === current.title)) {
+      return [];
+    }
+
+    return [{ previous, current }];
+  });
+
+  return {
+    added: added.sort(compareUfoTrackedFiles),
+    removed: removed.sort(compareUfoTrackedFiles),
+    updated: updated.sort((left, right) => compareUfoTrackedFiles(left.current, right.current))
+  };
+}
+
+function extractUfoTrackedFiles(value: string | null): Map<string, UfoTrackedFile> {
+  const records = new Map<string, UfoTrackedFile>();
+  if (!value) {
+    return records;
+  }
+
+  for (const match of value.matchAll(/^Tracked file:\s*(.+?)\s+\|\s+(https?:\/\/\S+)\s+\|\s*(.*)$/gm)) {
+    const source = match[1].trim();
+    const url = match[2].trim();
+    const title = match[3].trim() || url;
+    records.set(url, { source, url, title });
+  }
+
+  return records;
+}
+
+function formatUfoTrackedFileLabel(record: UfoTrackedFile): string {
+  return truncatePlainText(`${record.source} - ${record.title}`, 140);
+}
+
+function compareUfoTrackedFiles(left: UfoTrackedFile, right: UfoTrackedFile): number {
+  return left.source.localeCompare(right.source) || left.title.localeCompare(right.title) || left.url.localeCompare(right.url);
 }
 
 function formatNumericLineDiffs(previousValue: string | null, currentValue: string, labels: string[]): string[] {
