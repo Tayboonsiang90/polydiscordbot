@@ -1479,6 +1479,7 @@ function formatFullLidQuickRead(currentValue: string): string {
   const cutoffStatus = extractValueLine(currentValue, "Cutoff status") ?? "unknown";
   const firstLidSource = extractValueLine(currentValue, "First lid source") ?? "unknown";
   const firstLidTime = extractValueLine(currentValue, "First lid time") ?? "not found";
+  const firstLidUrl = extractValueLine(currentValue, "First lid URL") ?? null;
   const dateEt = extractValueLine(currentValue, "Date ET") ?? "unknown";
   const detail = truncatePlainText(extractValueLine(currentValue, "Detail") ?? "", 220);
   const beforeCutoff =
@@ -1490,6 +1491,7 @@ function formatFullLidQuickRead(currentValue: string): string {
       `**Before 6:30 PM ET:** ${found ? beforeCutoff : "not applicable yet"}`,
       `**Date ET:** ${dateEt}`,
       ...(found ? [`**Source:** ${firstLidSource}`, `**First lid time:** ${firstLidTime}`] : []),
+      ...(found && firstLidUrl && firstLidUrl !== "not available" ? [`**Source URL:** ${firstLidUrl}`] : []),
       ...(found && detail ? [`**Why:** ${detail}`] : [])
     ].join("\n"),
     900

@@ -28,6 +28,7 @@ export type FullLidResult = {
   source: "Roll Call" | "Forth" | "BNO" | "none";
   timeEt: string;
   detail: string;
+  sourceUrl?: string;
   beforeCutoff: boolean | null;
   rollCallStatus: string;
   forthStatus: string;
@@ -187,6 +188,7 @@ export function formatFullLidValue(result: FullLidResult): string {
     `Alert Date: ${result.found ? result.dateEt : "none"}`,
     `First lid source: ${result.source}`,
     `First lid time: ${result.timeEt}`,
+    `First lid URL: ${result.found ? result.sourceUrl ?? "not available" : "none"}`,
     `Cutoff status: ${cutoffStatus}`,
     `Detail: ${result.detail}`,
     `Roll Call: ${result.rollCallStatus}`,
@@ -205,7 +207,48 @@ export function fullLidShouldAlertOnChange(previousValue: string | null, current
 
   const currentAlertDate = currentValue.match(/^Alert Date:\s*(.+)$/m)?.[1]?.trim();
   const previousAlertDate = previousValue?.match(/^Alert Date:\s*(.+)$/m)?.[1]?.trim();
-  return Boolean(currentAlertDate && currentAlertDate !== "none" && currentAlertDate !== previousAlertDate);
+  if (!currentAlertDate || currentAlertDate === "none") {
+    return false;
+  }
+
+  if (!previousValue || currentAlertDate !== previousAlertDate) {
+    return true;
+  }
+
+  const currentRollCallConfirmed = isRollCallConfirmed(currentValue);
+  const previousRollCallConfirmed = isRollCallConfirmed(previousValue);
+  if (currentRollCallConfirmed && !previousRollCallConfirmed) {
+    return true;
+  }
+
+  const currentFingerprint = currentRollCallConfirmed
+    ? buildFullLidOfficialFingerprint(currentValue)
+    : buildFullLidAlphaFingerprint(currentValue);
+  const previousFingerprint = previousRollCallConfirmed
+    ? buildFullLidOfficialFingerprint(previousValue)
+    : buildFullLidAlphaFingerprint(previousValue);
+  return currentFingerprint !== previousFingerprint;
+}
+
+function isRollCallConfirmed(value: string): boolean {
+  return /^Roll Call:\s*full lid found at\b/im.test(value);
+}
+
+function buildFullLidOfficialFingerprint(value: string): string {
+  return buildFullLidFingerprint(value, ["Date ET", "Roll Call", "First lid time", "Cutoff status"]);
+}
+
+function buildFullLidAlphaFingerprint(value: string): string {
+  return buildFullLidFingerprint(value, ["Date ET", "First lid source", "First lid time", "First lid URL", "Cutoff status", "Detail"]);
+}
+
+function buildFullLidFingerprint(value: string, labels: string[]): string {
+  return labels.map((label) => `${label}: ${extractFullLidLine(value, label) ?? ""}`).join("\n");
+}
+
+function extractFullLidLine(value: string, label: string): string | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.match(new RegExp(`^${escaped}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
 }
 
 export function getWhiteHouseFullLidPollIntervalMinutes(_integration: unknown, now = new Date()): number {
@@ -307,6 +350,7 @@ async function fetchFullLidResult(dateEt: string): Promise<FullLidResult> {
       source: "none",
       timeEt: "not found",
       detail: "No full lid found yet for today's ET date",
+      sourceUrl: undefined,
       beforeCutoff: null,
       rollCallStatus: rollCall.status,
       forthStatus: forth.status,
@@ -320,11 +364,28 @@ async function fetchFullLidResult(dateEt: string): Promise<FullLidResult> {
     source: firstLid.source,
     timeEt: firstLid.timeEt,
     detail: firstLid.detail,
+    sourceUrl: getFullLidSourceUrl(firstLid),
     beforeCutoff: firstLid.minutesEt === null ? null : firstLid.minutesEt <= cutoffMinutesEt,
     rollCallStatus: rollCall.status,
     forthStatus: forth.status,
     bnoStatus: bno.status
   };
+}
+
+function getFullLidSourceUrl(candidate: LidCandidate): string {
+  if (candidate.url) {
+    return candidate.url;
+  }
+
+  if (candidate.source === "Roll Call") {
+    return rollCallUrl;
+  }
+
+  if (candidate.source === "Forth") {
+    return forthUrl;
+  }
+
+  return bnoWhPoolUrl;
 }
 
 async function fetchRollCallLid(dateEt: string): Promise<{ ok: boolean; status: string; candidate: LidCandidate | null }> {

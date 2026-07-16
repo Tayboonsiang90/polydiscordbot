@@ -79,24 +79,51 @@ describe("White House full lid monitor", () => {
     expect(extractBnoFullLid(html, "2026-07-10")).toBeNull();
   });
 
-  it("alerts once per ET date when a lid is found", () => {
-    const previousValue = formatFullLidValue({
+  it("alerts on alpha corrections until Roll Call confirms the lid", () => {
+    const bnoValue = formatFullLidValue({
       dateEt: "2026-05-12",
       found: true,
-      source: "Roll Call",
+      source: "BNO",
       timeEt: "6:05 PM",
-      detail: "White House Press Office: Full lid called",
+      detail: "BNO pool report #5: full lid called",
+      sourceUrl: "https://bnonews.com/whpool/alpha-one",
       beforeCutoff: true,
-      rollCallStatus: "full lid found at 6:05 PM",
+      rollCallStatus: "no full lid found",
       forthStatus: "unavailable HTTP 429",
       bnoStatus: "lid report found at 6:05 PM"
     });
-    const duplicateValue = previousValue.replace("6:05 PM", "6:10 PM");
-    const nextDayValue = previousValue.replaceAll("2026-05-12", "2026-05-13");
+    const bnoCorrectionValue = formatFullLidValue({
+      dateEt: "2026-05-12",
+      found: true,
+      source: "BNO",
+      timeEt: "6:04 PM",
+      detail: "BNO pool report #5a: lid time correction",
+      sourceUrl: "https://bnonews.com/whpool/alpha-two",
+      beforeCutoff: true,
+      rollCallStatus: "no full lid found",
+      forthStatus: "unavailable HTTP 429",
+      bnoStatus: "lid report found at 6:04 PM"
+    });
+    const rollCallConfirmedValue = formatFullLidValue({
+      dateEt: "2026-05-12",
+      found: true,
+      source: "BNO",
+      timeEt: "6:04 PM",
+      detail: "BNO pool report #5a: lid time correction",
+      sourceUrl: "https://bnonews.com/whpool/alpha-two",
+      beforeCutoff: true,
+      rollCallStatus: "full lid found at 6:04 PM",
+      forthStatus: "unavailable HTTP 429",
+      bnoStatus: "lid report found at 6:04 PM"
+    });
+    const nextDayValue = bnoValue.replaceAll("2026-05-12", "2026-05-13");
 
-    expect(fullLidShouldAlertOnChange(null, previousValue)).toBe(true);
-    expect(fullLidShouldAlertOnChange(previousValue, duplicateValue)).toBe(false);
-    expect(fullLidShouldAlertOnChange(previousValue, nextDayValue)).toBe(true);
+    expect(fullLidShouldAlertOnChange(null, bnoValue)).toBe(true);
+    expect(fullLidShouldAlertOnChange(bnoValue, bnoValue)).toBe(false);
+    expect(fullLidShouldAlertOnChange(bnoValue, bnoCorrectionValue)).toBe(true);
+    expect(fullLidShouldAlertOnChange(bnoCorrectionValue, rollCallConfirmedValue)).toBe(true);
+    expect(fullLidShouldAlertOnChange(rollCallConfirmedValue, rollCallConfirmedValue)).toBe(false);
+    expect(fullLidShouldAlertOnChange(bnoValue, nextDayValue)).toBe(true);
   });
 
   it("uses one-minute polling during the ET watch window", () => {

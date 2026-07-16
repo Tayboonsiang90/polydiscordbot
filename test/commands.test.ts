@@ -355,6 +355,7 @@ describe("adapter commands", () => {
       "Alert Date: 2026-07-13",
       "First lid source: BNO",
       "First lid time: not listed",
+      "First lid URL: https://bnonews.com/whpool/example",
       "Cutoff status: unknown",
       "Detail: In-Town Press Pool #12: Travel/Photo lid: Have a good night everyone!",
       "Resolution: https://rollcall.com/factbase/trump/calendar/",
@@ -378,6 +379,8 @@ describe("adapter commands", () => {
         })
       ])
     );
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Source URL:** https://bnonews.com/whpool/example");
     expect(embed.fields?.some((field) => field.name === "Current snapshot")).toBe(false);
     expect(embed.fields?.some((field) => field.name === "Previous snapshot")).toBe(false);
   });
