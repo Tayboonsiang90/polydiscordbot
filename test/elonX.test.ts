@@ -5,6 +5,7 @@ import {
   findMatchedElonXStrikeTerms,
   parseElonXCancelTimeline,
   parseElonXMarketWindow,
+  parseElonXNitterFeed,
   refreshElonXSettings
 } from "../src/integrations/elonX.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -132,6 +133,37 @@ describe("Elon X strike monitor", () => {
         strikeTerms: ["Crypto"]
       })
     ).toBe(false);
+  });
+
+  it("parses Nitter/XCancel RSS fallback posts", () => {
+    const posts = parseElonXNitterFeed(`
+      <rss>
+        <channel>
+          <item>
+            <title>Elon Musk: Tesla factories in Texas</title>
+            <description><![CDATA[Tesla factories in Texas]]></description>
+            <link>https://xcancel.com/elonmusk/status/201#m</link>
+            <pubDate>Tue, 14 Jul 2026 12:00:00 GMT</pubDate>
+            <enclosure url="https://pbs.twimg.com/media/sample.jpg" />
+          </item>
+          <item>
+            <title>RT by @elonmusk: Crypto in a repost</title>
+            <description><![CDATA[Crypto in a repost]]></description>
+            <link>https://xcancel.com/other/status/202#m</link>
+            <pubDate>Tue, 14 Jul 2026 12:01:00 GMT</pubDate>
+          </item>
+        </channel>
+      </rss>
+    `);
+
+    expect(posts.map((post) => post.id)).toEqual(["202", "201"]);
+    expect(posts[0]).toMatchObject({ type: "Repost", qualifyingText: "" });
+    expect(posts[1]).toMatchObject({
+      type: "Post",
+      text: "Tesla factories in Texas",
+      qualifyingText: "Tesla factories in Texas",
+      imageUrls: ["https://pbs.twimg.com/media/sample.jpg"]
+    });
   });
 
   it("force-refreshes strike settings from the configured Polymarket URL", async () => {

@@ -12,6 +12,7 @@ const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const marketSearchQuery = "what will elon post this week";
 const marketSearchTags = ["elon-tweets", "mention-markets"];
 const defaultXFrontendBaseUrls = ["https://xcancel.com"];
+const defaultXFeedUrls = ["https://xcancel.com/elonmusk/rss", "https://nitter.net/elonmusk/rss"];
 const maxPosts = 40;
 const sourceTimeoutMs = 30_000;
 const strikeRefreshIntervalMs = 5 * 60_000;
@@ -291,6 +292,42 @@ export function parseElonXCancelTimeline(html: string, baseUrl = defaultXFronten
   return sortPostsNewestFirst(dedupePosts(posts));
 }
 
+export function parseElonXNitterFeed(xml: string, feedUrl = defaultXFeedUrls[0]): ElonXPost[] {
+  const document = cheerio.load(xml, { xmlMode: true });
+  const posts: ElonXPost[] = [];
+
+  document("item").each((_, element) => {
+    const item = document(element);
+    const title = normalizeText(item.find("title").first().text());
+    const descriptionHtml = item.find("description").first().text();
+    const descriptionText = htmlToText(descriptionHtml);
+    const link = item.find("link").first().text().trim();
+    const pubDate = item.find("pubDate").first().text().trim();
+    const timestamp = new Date(pubDate);
+    const id = extractTweetId(link) ?? buildStableFeedPostId(link, pubDate, title);
+    if (!id || Number.isNaN(timestamp.getTime())) {
+      return;
+    }
+
+    const type = inferNitterFeedPostType(title, descriptionText);
+    const text = normalizeNitterFeedText(title, descriptionText);
+    const imageUrls = extractNitterFeedImageUrls(document, item);
+
+    posts.push({
+      id,
+      type,
+      text,
+      qualifyingText: type === "Repost" ? "" : text,
+      postedAt: timestamp,
+      url: normalizeXPostUrl(link, id, feedUrl),
+      imageUrls,
+      imageText: ""
+    });
+  });
+
+  return sortPostsNewestFirst(dedupePosts(posts));
+}
+
 export function extractElonXGammaStrikeTerms(markets: GammaMarket[]): Pick<ElonXMarket, "strikeTerms" | "resolvedTerms" | "activeStrikeTerms"> {
   const strikeTerms = new Set<string>();
   const resolvedTerms = new Set<string>();
@@ -384,7 +421,57 @@ async function fetchElonXPosts(): Promise<{ posts: ElonXPost[]; source: string }
     }
   }
 
+  try {
+    return { posts: await fetchElonXPostsFromNitterFeeds(), source: "Nitter/XCancel RSS" };
+  } catch (error) {
+    errors.push(`Nitter/XCancel RSS: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   throw new Error(`Public Elon X polling failed: ${errors.join(" | ")}`);
+}
+
+async function fetchElonXPostsFromNitterFeeds(): Promise<ElonXPost[]> {
+  const feedUrls = getXFeedUrls();
+  const posts: ElonXPost[] = [];
+  const errors: string[] = [];
+
+  for (const feedUrl of feedUrls) {
+    try {
+      const response = await fetchWithTimeout(
+        feedUrl,
+        {
+          headers: {
+            accept: "application/rss+xml, application/xml, text/xml",
+            "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+          }
+        },
+        sourceTimeoutMs
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const xml = await response.text();
+      if (isUnavailableXFrontendPage(xml) || isUnavailableXFeed(xml)) {
+        throw new Error("RSS feed returned an unavailable/whitelist placeholder");
+      }
+
+      const feedPosts = parseElonXNitterFeed(xml, feedUrl);
+      if (!feedPosts.length && !/<item[\s>]/i.test(xml)) {
+        throw new Error("RSS feed returned no items");
+      }
+
+      posts.push(...feedPosts);
+    } catch (error) {
+      errors.push(`${feedUrl}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (!posts.length && errors.length === feedUrls.length) {
+    throw new Error(errors.join(" | "));
+  }
+
+  return sortPostsNewestFirst(dedupePosts(posts)).slice(0, maxPosts);
 }
 
 async function fetchElonXPostsFromFrontend(baseUrl: string): Promise<ElonXPost[]> {
@@ -723,8 +810,21 @@ function buildElonXCheckFields(
   source: string
 ): NonNullable<EventMonitorResult["checkFields"]> {
   const displayMarket = getDisplayElonXMarket(settings.markets ?? []);
+  const suppressedReposts = posts.filter((post) => post.type === "Repost").length;
+  const alertablePosts = posts.filter((post) => post.type !== "Repost");
+  const strikeHitPosts = posts.filter((post) => post.matchedTerms.length > 0);
   return [
     { name: activeMarket ? "Posts in active window" : "Monitored feed posts", value: String(posts.length), inline: true },
+    {
+      name: "Alert eligibility",
+      value: [
+        `Alertable non-reposts: ${alertablePosts.length}`,
+        `Suppressed reposts: ${suppressedReposts}`,
+        `Text strike hits: ${strikeHitPosts.length}`,
+        "Reposts are intentionally ignored for alerts because they do not qualify for strike detection."
+      ].join("\n"),
+      inline: false
+    },
     {
       name: "Active Polymarket market",
       value: activeMarket
@@ -744,6 +844,18 @@ function buildElonXCheckFields(
     {
       name: activeMarket ? "Latest in active window" : "Latest monitored feed post",
       value: posts[0] ? [`ID: ${posts[0].id}`, `Posted: ${formatEasternDateTime(posts[0].postedAt)}`, posts[0].url].join("\n") : "none",
+      inline: false
+    },
+    {
+      name: "Latest alertable post",
+      value: alertablePosts[0]
+        ? [
+            `ID: ${alertablePosts[0].id}`,
+            `Type: ${alertablePosts[0].type}`,
+            `Posted: ${formatEasternDateTime(alertablePosts[0].postedAt)}`,
+            alertablePosts[0].url
+          ].join("\n")
+        : "none in returned source rows",
       inline: false
     },
     {
@@ -815,12 +927,22 @@ function getXFrontendBaseUrls(): string[] {
   return uniqueStrings([...urls, ...defaultXFrontendBaseUrls]).map((url) => url.replace(/\/+$/, ""));
 }
 
+function getXFeedUrls(): string[] {
+  const configured = process.env.ELON_X_NITTER_FEEDS ?? process.env.ELON_X_RSS_URLS;
+  const urls = configured?.split(",").map((url) => url.trim()).filter(Boolean) ?? [];
+  return uniqueStrings([...urls, ...defaultXFeedUrls]);
+}
+
 function buildFrontendUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, "")}${path}`;
 }
 
 function isUnavailableXFrontendPage(html: string): boolean {
   return /RSS reader not yet whitelisted|Making sure you&#39;re not a bot|Making sure you're not a bot|Verifying your browser/i.test(html);
+}
+
+function isUnavailableXFeed(xml: string): boolean {
+  return /RSS reader not yet whitelisted|RSS reader not yet whitelist/i.test(xml);
 }
 
 function isResolvedYesMarket(market: GammaMarket): boolean {
@@ -867,6 +989,56 @@ function escapeRegExp(value: string): string {
 
 function decodeHtmlEntities(value: string): string {
   return cheerio.load(value).text();
+}
+
+function htmlToText(html: string): string {
+  return cheerio.load(html).text().replace(/\s+/g, " ").trim();
+}
+
+function normalizeNitterFeedText(title: string, descriptionText: string): string {
+  const preferred = descriptionText || title;
+  return normalizeText(
+    preferred
+      .replace(/^RT by @?elonmusk:\s*/i, "")
+      .replace(/^R to @[^:]+:\s*/i, "")
+      .replace(/^Elon Musk\s*\(@elonmusk\):\s*/i, "")
+      .replace(/^Elon Musk:\s*/i, "")
+  );
+}
+
+function inferNitterFeedPostType(title: string, descriptionText: string): ElonXPost["type"] {
+  const combined = `${title}\n${descriptionText}`;
+  if (/^RT by @?elonmusk:|^RT @/i.test(combined)) {
+    return "Repost";
+  }
+
+  if (/^R to @|Replying to @/i.test(combined)) {
+    return "Reply";
+  }
+
+  if (/\bQuote(?:d)?(?: post| tweet)?\b/i.test(combined)) {
+    return "Quote";
+  }
+
+  return "Post";
+}
+
+function extractNitterFeedImageUrls(document: cheerio.CheerioAPI, item: cheerio.Cheerio<AnyNode>): string[] {
+  const urls = item
+    .find("enclosure, media\\:content, content")
+    .toArray()
+    .flatMap((element) => [document(element).attr("url"), document(element).attr("href")])
+    .filter(isNonEmptyString)
+    .filter((url) => /^https?:\/\//i.test(url));
+  return uniqueStrings(urls);
+}
+
+function buildStableFeedPostId(link: string, pubDate: string, title: string): string {
+  let hash = 0;
+  for (const character of `${link}|${pubDate}|${title}`) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return `feed-${hash.toString(16)}`;
 }
 
 function sortPostsNewestFirst(posts: ElonXPost[]): ElonXPost[] {
