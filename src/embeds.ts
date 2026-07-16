@@ -1418,6 +1418,8 @@ function formatAlertQuickReadFields(
         ? formatPrecipitationQuickRead(currentValue, previousValue)
       : integration.adapterId === "mt-washington-wind"
         ? formatMtWashingtonWindQuickRead(currentValue, previousValue)
+      : integration.adapterId === "nsidc-arctic-sea-ice"
+        ? formatNsidcSeaIceQuickRead(currentValue, previousValue)
       : formatGenericQuickRead(previousValue, currentValue);
 
   return value ? [{ name: "Quick read", value, inline: false }] : [];
@@ -1499,6 +1501,24 @@ function formatMtWashingtonWindQuickRead(currentValue: string, previousValue: st
     ...formatPreferredQuickReadLine(currentValue, "Latest day wind speed"),
     ...formatPreferredQuickReadLine(currentValue, "MISC fastest"),
     ...formatPreferredQuickReadLine(currentValue, "F6 last modified")
+  ];
+  const uniqueLines = [...new Set(lines)];
+
+  if (uniqueLines.length) {
+    return truncateEmbedValue(uniqueLines.join("\n"), 900);
+  }
+
+  return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatNsidcSeaIceQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Current minimum"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest window day"),
+    ...formatPreferredQuickReadLine(currentValue, "Reported window days"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest dataset date"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest dataset extent"),
+    ...formatPreferredQuickReadLine(currentValue, "Data status")
   ];
   const uniqueLines = [...new Set(lines)];
 

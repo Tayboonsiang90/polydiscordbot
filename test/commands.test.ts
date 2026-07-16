@@ -502,6 +502,41 @@ describe("adapter commands", () => {
     expect(quickRead).not.toContain("Daily rows parsed");
   });
 
+  it("keeps NSIDC sea ice minimum in quick-read alerts", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "nsidc-arctic-sea-ice", displayName: "NSIDC Arctic Sea Ice" },
+      previousValue: [
+        "Metric: NSIDC Arctic sea ice minimum extent",
+        "Window: 2026-08-01 to 2026-10-01",
+        "Current minimum: 4.300 million sq km on 2026-09-08",
+        "Latest window day: 2026-09-08 — 4.300 million sq km",
+        "Reported window days: 39/62",
+        "Latest dataset date: 2026-09-08",
+        "Latest dataset extent: 4.300 million sq km",
+        "Data status: in progress"
+      ].join("\n"),
+      previousCheckedAt: "2026-09-09T12:00:00.000Z",
+      currentValue: [
+        "Metric: NSIDC Arctic sea ice minimum extent",
+        "Window: 2026-08-01 to 2026-10-01",
+        "Current minimum: 4.255 million sq km on 2026-09-10",
+        "Latest window day: 2026-09-10 — 4.255 million sq km",
+        "Reported window days: 41/62",
+        "Latest dataset date: 2026-09-10",
+        "Latest dataset extent: 4.255 million sq km",
+        "Data status: in progress"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Current minimum:** 4.255 million sq km on 2026-09-10");
+    expect(quickRead).toContain("**Latest window day:** 2026-09-10");
+    expect(quickRead).toContain("**Reported window days:** 41/62");
+    expect(quickRead).not.toContain("Window:");
+  });
+
   it("keeps a quick-read fallback when only low-priority links are present", () => {
     const embed = buildAlertEmbed({
       integration: checkedIntegration,

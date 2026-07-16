@@ -55,6 +55,7 @@ const expectedCommandIds = [
   ["nbs", "nbs-press-release"],
   ["gistemp", "nasa-gistemp-temperature"],
   ["tornadoes", "ncei-tornadoes"],
+  ["arcticice", "nsidc-arctic-sea-ice"],
   ["nytfront", "nyt-front-page"],
   ["anthropicvaluation", "npm-anthropic-valuation"],
   ["andurilvaluation", "npm-anduril-valuation"],
