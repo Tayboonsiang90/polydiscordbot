@@ -13,6 +13,7 @@ import {
   buildTrumpTruthArchiveSearchUrl,
   parseTrumpTruthMarketWindow,
   parseTrumpTruthArchiveFeed,
+  parseTrumpTruthArchiveHomePage,
   parseTrumpTruthArchiveSearchResults,
   parseTrumpTruthSettings,
   refreshTrumpTruthSettings,
@@ -518,6 +519,35 @@ describe("Trump Truth archive feed", () => {
       archiveUrl: "https://www.trumpstruth.org/statuses/1",
       originalUrl: "https://truthsocial.com/@realDonaldTrump/123",
       originalId: "123"
+    });
+  });
+
+  it("parses archive homepage cards as a fast post source", () => {
+    const items = parseTrumpTruthArchiveHomePage(`
+      <div class="status" data-status-url="https://www.trumpstruth.org/statuses/40095 ">
+        <div class="status-info__meta">
+          <a class="status-info__meta-item">@realDonaldTrump</a>
+          <a href="https://www.trumpstruth.org/statuses/40095" class="status-info__meta-item">July 17, 2026, 1:38 PM</a>
+        </div>
+        <a href="https://truthsocial.com/@realDonaldTrump/116936532955860241" class="status__external-link">Original Post</a>
+        <div class="status__body">
+          <p>Hello King</p>
+          <img src="https://truth-archive.example/attachments/17217/post.png">
+        </div>
+      </div>
+    `);
+
+    expect(items[0]).toMatchObject({
+      id: "116936532955860241",
+      archiveUrl: "https://www.trumpstruth.org/statuses/40095",
+      originalUrl: "https://truthsocial.com/@realDonaldTrump/116936532955860241",
+      originalId: "116936532955860241"
+    });
+    expect(items[0].postedAt.toISOString()).toBe("2026-07-17T17:38:00.000Z");
+    expect(normalizeTrumpTruthArchiveItem(items[0], ["King"])).toMatchObject({
+      text: "Hello King",
+      matchedTerms: ["King"],
+      imageUrls: ["https://truth-archive.example/attachments/17217/post.png"]
     });
   });
 

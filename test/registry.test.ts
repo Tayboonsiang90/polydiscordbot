@@ -187,6 +187,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("lemonade").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("metadao").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("trumptruth").supportsStrikes).toBe(true);
+    expect(getAdapterByCommandName("trumptruth").getPollIntervalMinutes?.({} as never)).toBe(10 / 60);
     expect(getAdapterByCommandName("claudeavg").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();

@@ -5,10 +5,13 @@ import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlug, parseManualEasternDateTime } from "../marketEnd.js";
 
 const sourceUrl = "https://truthsocial.com/@realDonaldTrump";
+const archiveHomeUrl = "https://www.trumpstruth.org/";
 const archiveFeedUrl = "https://www.trumpstruth.org/feed";
 const archiveSearchUrl = "https://www.trumpstruth.org/search";
 const defaultPolymarketUrl = "https://polymarket.com/event/what-will-trump-post-this-week-may-4-may-10";
 const maxPosts = 20;
+const fastPollIntervalMinutes = 10 / 60;
+const maxDetailFetchItems = 5;
 const maxOcrImagesPerPost = 2;
 const archiveDetailTimeoutMs = 8_000;
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
@@ -99,6 +102,8 @@ export const trumpTruthAdapter: WebsiteAdapter = {
   alertRoleName: "Trump Truth Alerts",
   alertRoleEmoji: "\uD83D\uDCF0",
   supportsStrikes: true,
+  getPollIntervalMinutes: () => fastPollIntervalMinutes,
+  getPollIntervalReason: () => "Fast Truth Social monitor: polls Trump's Truth archive every 10 seconds and only details newly relevant posts",
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     if (!integration) {
       throw new Error("Trump Truth requires an integration record");
@@ -113,7 +118,7 @@ export const trumpTruthAdapter: WebsiteAdapter = {
     const now = new Date();
     const settings = await refreshTrumpTruthSettings(integration, false, now);
     const activeMarket = getActiveTrumpTruthMarket(settings.markets ?? [], now);
-    const items = await fetchTrumpTruthArchiveItems();
+    const items = await fetchTrumpTruthArchiveItems(integration.lastValue);
     const archivePosts = items
       .slice(0, maxPosts)
       .map((item) => normalizeTrumpTruthArchiveItem(item, settings.strikeTerms ?? []));
@@ -638,6 +643,26 @@ export function parseTrumpTruthArchiveFeed(xml: string): TrumpTruthArchiveItem[]
     .filter((item) => item.id && item.archiveUrl && !Number.isNaN(item.postedAt.getTime()));
 }
 
+export function parseTrumpTruthArchiveHomePage(html: string): TrumpTruthArchiveItem[] {
+  const $ = cheerio.load(html);
+  return $(".status")
+    .toArray()
+    .map((element) => {
+      const status = $(element);
+      const archiveUrl = normalizeArchiveUrl(status.attr("data-status-url")) ?? normalizeArchiveUrl(status.find(".status-info__meta-item[href*='/statuses/']").attr("href")) ?? "";
+      const originalUrl = normalizeTruthSocialPostUrl(status.find("a.status__external-link[href*='truthsocial.com']").attr("href")) ?? "";
+      const originalId = extractTruthSocialPostId(originalUrl);
+      const postedAtText = status.find(".status-info__meta-item[href*='/statuses/']").last().text().trim();
+      const postedAt = parseArchiveEasternDateTime(postedAtText);
+      const bodyHtml = status.find(".status__body").first().html() ?? "";
+      const title = normalizeText(status.find(".status__body").first().text()) || status.find(".status-info__account-name").first().text().trim() || "Post";
+      const id = originalId || archiveUrl;
+
+      return { id, archiveUrl, originalUrl, originalId, postedAt, html: bodyHtml, title, isReTruth: isArchiveReTruth(title, bodyHtml) };
+    })
+    .filter((item) => item.id && item.archiveUrl && !Number.isNaN(item.postedAt.getTime()));
+}
+
 export function buildTrumpTruthArchiveSearchUrl(term: string, startAt: Date, endAt: Date): string {
   const url = new URL(archiveSearchUrl);
   url.searchParams.set("query", term);
@@ -672,7 +697,28 @@ export function parseTrumpTruthArchiveSearchResults(html: string, term: string):
   return { totalResults: dedupedHits.length, hits: dedupedHits };
 }
 
-async function fetchTrumpTruthArchiveItems(): Promise<TrumpTruthArchiveItem[]> {
+async function fetchTrumpTruthArchiveItems(lastSeenId: string | null = null): Promise<TrumpTruthArchiveItem[]> {
+  const sourceResults = await Promise.allSettled([fetchTrumpTruthArchiveFeedItems(), fetchTrumpTruthArchiveHomeItems()]);
+  const items = sourceResults
+    .flatMap((result) => result.status === "fulfilled" ? result.value : [])
+    .sort((left, right) => right.postedAt.getTime() - left.postedAt.getTime());
+  const dedupedItems = dedupeArchiveItems(items).slice(0, maxPosts);
+  if (!dedupedItems.length) {
+    throw new Error("Trump's Truth archive returned no posts");
+  }
+
+  const detailTargets = selectArchiveItemsForDetail(dedupedItems, lastSeenId);
+  if (!detailTargets.length) {
+    return dedupedItems;
+  }
+
+  const detailTargetIds = new Set(detailTargets.map(getArchiveItemKey));
+  const detailedItems = await Promise.all(detailTargets.map(fetchArchiveDetailIfNeeded));
+  const detailById = new Map(detailedItems.map((item) => [getArchiveItemKey(item), item]));
+  return dedupedItems.map((item) => detailTargetIds.has(getArchiveItemKey(item)) ? detailById.get(getArchiveItemKey(item)) ?? item : item);
+}
+
+async function fetchTrumpTruthArchiveFeedItems(): Promise<TrumpTruthArchiveItem[]> {
   const response = await fetchWithTimeout(archiveFeedUrl, {
     headers: {
       "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1",
@@ -685,8 +731,55 @@ async function fetchTrumpTruthArchiveItems(): Promise<TrumpTruthArchiveItem[]> {
   }
 
   const xml = await response.text();
-  const feedItems = parseTrumpTruthArchiveFeed(xml).slice(0, maxPosts);
-  return Promise.all(feedItems.map(fetchArchiveDetailIfNeeded));
+  return parseTrumpTruthArchiveFeed(xml).slice(0, maxPosts);
+}
+
+async function fetchTrumpTruthArchiveHomeItems(): Promise<TrumpTruthArchiveItem[]> {
+  const response = await fetchWithTimeout(archiveHomeUrl, {
+    headers: {
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1",
+      accept: "text/html,application/xhtml+xml"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Trump's Truth archive homepage returned HTTP ${response.status}`);
+  }
+
+  return parseTrumpTruthArchiveHomePage(await response.text()).slice(0, maxPosts);
+}
+
+function selectArchiveItemsForDetail(items: TrumpTruthArchiveItem[], lastSeenId: string | null): TrumpTruthArchiveItem[] {
+  if (!lastSeenId) {
+    return items.slice(0, 1);
+  }
+
+  const lastSeenIndex = items.findIndex((item) => item.originalId === lastSeenId || item.id === lastSeenId);
+  if (lastSeenIndex === 0) {
+    return [];
+  }
+
+  const newItems = lastSeenIndex === -1 ? items.slice(0, maxDetailFetchItems) : items.slice(0, lastSeenIndex);
+  return newItems.slice(0, maxDetailFetchItems);
+}
+
+function dedupeArchiveItems(items: TrumpTruthArchiveItem[]): TrumpTruthArchiveItem[] {
+  const seen = new Set<string>();
+  const deduped: TrumpTruthArchiveItem[] = [];
+  for (const item of items) {
+    const key = getArchiveItemKey(item);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(item);
+  }
+  return deduped;
+}
+
+function getArchiveItemKey(item: TrumpTruthArchiveItem): string {
+  return item.originalId || item.originalUrl || item.archiveUrl || item.id;
 }
 
 async function fetchArchiveDetailIfNeeded(item: TrumpTruthArchiveItem): Promise<TrumpTruthArchiveItem> {
@@ -717,6 +810,41 @@ function normalizeArchiveUrl(value: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeTruthSocialPostUrl(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value.trim());
+    return url.hostname.endsWith("truthsocial.com") ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractTruthSocialPostId(value: string): string {
+  const match = value.match(/\/(\d+)(?:[?#].*)?$/);
+  return match?.[1] ?? "";
+}
+
+function parseArchiveEasternDateTime(value: string): Date {
+  const match = value.trim().match(/^([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4}),\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) {
+    return new Date(Number.NaN);
+  }
+
+  const [, monthText, dayText, yearText, hourText, minuteText, meridiem] = match;
+  const month = monthNumber(monthText);
+  if (!month) {
+    return new Date(Number.NaN);
+  }
+
+  return parseManualEasternDateTime(
+    `${yearText}-${padNumber(month)}-${padNumber(Number(dayText))} ${hourText}:${minuteText} ${meridiem.toUpperCase()}`
+  ) ?? new Date(Number.NaN);
 }
 
 function attachTrumpTruthMarketAuditFields(
