@@ -3,6 +3,8 @@ import {
   extractCdcFluHospitalizationReport,
   fetchCdcFluHospitalizationWeeklyReport,
   formatCdcFluHospitalizationValue,
+  getCdcFluHospitalizationPollIntervalMinutes,
+  getCdcFluHospitalizationPollIntervalReason,
   parseFluHospitalizationMarketPeriod,
   refreshFluHospitalizationPolymarketQueue,
   shouldAlertOnCdcFluHospitalizationChange,
@@ -103,6 +105,32 @@ describe("CDC flu hospitalization adapter", () => {
     await vi.advanceTimersByTimeAsync(4_000);
 
     await expect(reportPromise).resolves.toBeNull();
+  });
+
+  it("polls every minute during weekday CDC release windows until the target week is published", () => {
+    const week27Integration = {
+      ...integration,
+      polymarketUrl: "https://polymarket.com/event/flu-hospitalization-rate-week-27-2026",
+      lastValue: null
+    } as Integration;
+
+    expect(getCdcFluHospitalizationPollIntervalMinutes(week27Integration, new Date("2026-07-09T17:00:00.000Z"))).toBe(60);
+    expect(getCdcFluHospitalizationPollIntervalMinutes(week27Integration, new Date("2026-07-10T17:00:00.000Z"))).toBe(60);
+    expect(getCdcFluHospitalizationPollIntervalMinutes(week27Integration, new Date("2026-07-17T17:00:00.000Z"))).toBe(1);
+    expect(getCdcFluHospitalizationPollIntervalMinutes(week27Integration, new Date("2026-07-18T17:00:00.000Z"))).toBe(60);
+  });
+
+  it("returns to hourly polling after the target week is published", () => {
+    const week27Integration = {
+      ...integration,
+      polymarketUrl: "https://polymarket.com/event/flu-hospitalization-rate-week-27-2026",
+      lastValue: "Target week: Week 27, 2026\nStatus: published\nValue: 87.7 per 100,000"
+    } as Integration;
+
+    expect(getCdcFluHospitalizationPollIntervalMinutes(week27Integration, new Date("2026-07-17T17:00:00.000Z"))).toBe(60);
+    expect(getCdcFluHospitalizationPollIntervalReason(week27Integration, new Date("2026-07-17T17:00:00.000Z"))).toContain(
+      "hourly revision watch"
+    );
   });
 
   it("auto-discovers active weekly flu hospitalization markets", async () => {

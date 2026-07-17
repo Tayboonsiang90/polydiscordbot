@@ -16,6 +16,9 @@ const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 14 * 24 * 60 * 60_000;
 const latestPriorReportSearchWeeks = 8;
 const cdcWeeklyReportTimeoutMs = 5_000;
+const easternTimeZone = "America/New_York";
+const releaseWindowStartHourEt = 10;
+const releaseWindowEndHourEt = 17;
 
 export type FluHospitalizationPeriod = {
   year: number;
@@ -138,6 +141,33 @@ export function shouldAlertOnCdcFluHospitalizationChange(previousValue: string |
   return currentRate !== null && currentRate !== previousRate;
 }
 
+export function getCdcFluHospitalizationPollIntervalMinutes(
+  integration: Integration,
+  now: Date = new Date()
+): number {
+  const period = parseFluHospitalizationMarketPeriod(integration.polymarketUrl ?? defaultPolymarketUrl);
+  if (isTargetWeekAlreadyPublished(integration.lastValue, period)) {
+    return 60;
+  }
+
+  return isCdcFluHospitalizationReleaseWindow(period, now) ? 1 : 60;
+}
+
+export function getCdcFluHospitalizationPollIntervalReason(
+  integration: Integration,
+  now: Date = new Date()
+): string {
+  const period = parseFluHospitalizationMarketPeriod(integration.polymarketUrl ?? defaultPolymarketUrl);
+  if (isTargetWeekAlreadyPublished(integration.lastValue, period)) {
+    return `CDC FluView ${period.label} already published; hourly revision watch`;
+  }
+
+  const firstReleaseDate = getExpectedFirstFluHospitalizationReleaseDate(period);
+  return isCdcFluHospitalizationReleaseWindow(period, now)
+    ? `CDC FluView release watch for ${period.label}: every minute on weekday ${releaseWindowStartHourEt}:00-${releaseWindowEndHourEt}:00 ET windows after ${firstReleaseDate}`
+    : `CDC FluView normal mode before/around ${period.label}; hourly outside weekday ${releaseWindowStartHourEt}:00-${releaseWindowEndHourEt}:00 ET release windows after ${firstReleaseDate}`;
+}
+
 export const cdcFluHospitalizationAdapter: WebsiteAdapter = {
   id: "cdc-flu-hospitalization",
   commandName: "fluhosp",
@@ -147,8 +177,8 @@ export const cdcFluHospitalizationAdapter: WebsiteAdapter = {
   defaultChannelName: "fluhosp",
   alertRoleName: "CDC Flu Hosp Alerts",
   alertRoleEmoji: "\uD83C\uDFE5",
-  getPollIntervalMinutes: () => 60,
-  getPollIntervalReason: () => "CDC FluView weekly hospitalization monitor",
+  getPollIntervalMinutes: getCdcFluHospitalizationPollIntervalMinutes,
+  getPollIntervalReason: getCdcFluHospitalizationPollIntervalReason,
   shouldAlertOnChange: shouldAlertOnCdcFluHospitalizationChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshFluHospitalizationPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
@@ -522,9 +552,65 @@ function isPublishedFluHospitalizationValue(value: string): boolean {
   return /^Status:\s*published$/im.test(value) && extractPublishedRate(value) !== null;
 }
 
+function isTargetWeekAlreadyPublished(value: string | null, period: FluHospitalizationPeriod): boolean {
+  return Boolean(value?.includes(`Target week: ${period.label}`) && isPublishedFluHospitalizationValue(value));
+}
+
 function extractPublishedRate(value: string | null): number | null {
   const match = value?.match(/^Value:\s*([0-9]+(?:\.[0-9]+)?)\s+per\s+100,000$/im);
   return match ? Number(match[1]) : null;
+}
+
+function isCdcFluHospitalizationReleaseWindow(period: FluHospitalizationPeriod, now: Date): boolean {
+  const firstReleaseDate = getExpectedFirstFluHospitalizationReleaseDate(period);
+  const parts = getEasternDateTimeParts(now);
+  return (
+    parts.date >= firstReleaseDate &&
+    isWeekday(parts.weekday) &&
+    parts.hour >= releaseWindowStartHourEt &&
+    parts.hour < releaseWindowEndHourEt
+  );
+}
+
+function getExpectedFirstFluHospitalizationReleaseDate(period: FluHospitalizationPeriod): string {
+  return nextDateWithUtcWeekday(addDays(period.weekEndDate, 1), 5);
+}
+
+function nextDateWithUtcWeekday(startDate: string, targetWeekday: number): string {
+  let cursor = startDate;
+  for (let index = 0; index < 7; index += 1) {
+    const weekday = new Date(`${cursor}T12:00:00.000Z`).getUTCDay();
+    if (weekday === targetWeekday) {
+      return cursor;
+    }
+
+    cursor = addDays(cursor, 1);
+  }
+
+  return cursor;
+}
+
+function getEasternDateTimeParts(date: Date): { date: string; hour: number; weekday: string } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: easternTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    weekday: "short"
+  }).formatToParts(date);
+
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+    hour: Number(value("hour")),
+    weekday: value("weekday")
+  };
+}
+
+function isWeekday(weekday: string): boolean {
+  return weekday !== "Sat" && weekday !== "Sun";
 }
 
 function getMmwrWeekOneStartDate(year: number): string {
