@@ -45,6 +45,7 @@ describe("Silver Bulletin Trump approval adapter", () => {
     expect(finalized).toContain("Target status: finalized");
     expect(finalized).toContain("Approval: 38.6%");
     expect(finalized).toContain("Finalized by next data point: 2026-06-06");
+    expect(finalized).toContain("Tracked approval rows: Target 2026-06-05: 2026-06-05 = 38.6% approval, 57.4% disapproval");
   });
 
   it("resolves the latest Datawrapper dataset URL from redirect HTML", () => {
@@ -69,6 +70,37 @@ describe("Silver Bulletin Trump approval adapter", () => {
 
     expect(silverTrumpApprovalShouldAlertOnChange(waiting, finalized)).toBe(true);
     expect(silverTrumpApprovalShouldAlertOnChange(waiting, waiting)).toBe(false);
+  });
+
+  it("alerts when a tracked published approval row is revised", () => {
+    const previous = [
+      "Metric: Silver Bulletin Trump approval rating",
+      "Target date: 2026-07-17",
+      "Target status: finalized",
+      "Approval: 40.1%",
+      "Tracked approval rows: Target 2026-07-17: 2026-07-17 = 40.1% approval, 56.9% disapproval"
+    ].join("\n");
+    const current = previous
+      .replace("Approval: 40.1%", "Approval: 40.2%")
+      .replace("2026-07-17 = 40.1% approval", "2026-07-17 = 40.2% approval");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(previous, current)).toBe(true);
+    expect(silverTrumpApprovalShouldAlertOnChange(current, current)).toBe(false);
+  });
+
+  it("does not alert once just because old stored values lack tracked rows", () => {
+    const previous = [
+      "Metric: Silver Bulletin Trump approval rating",
+      "Target date: 2026-07-17",
+      "Target status: finalized",
+      "Approval: 40.1%"
+    ].join("\n");
+    const current = [
+      previous,
+      "Tracked approval rows: Target 2026-07-17: 2026-07-17 = 40.1% approval, 56.9% disapproval"
+    ].join("\n");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(previous, current)).toBe(false);
   });
 
   it("alerts when an Up/Down market first has a tentative result", () => {
@@ -224,6 +256,7 @@ describe("Silver Bulletin Trump approval adapter", () => {
     expect(value).toContain("Active markets: 2");
     expect(value).toContain("Reference dates: 2026-07-10 vs 2026-07-17");
     expect(value).toContain("Result: Final Up");
+    expect(value).toContain("Tracked approval rows: First 2026-07-10: 2026-07-10 = 39.6% approval, 56.6% disapproval | Second 2026-07-17: 2026-07-17 = 40.1% approval, 56.9% disapproval");
     expect(value).toContain("Target date: 2026-07-17");
     expect(value).toContain("Approval: 40.1%");
   });

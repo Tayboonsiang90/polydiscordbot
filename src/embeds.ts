@@ -1427,6 +1427,8 @@ function formatAlertQuickReadFields(
         ? formatNsidcSeaIceQuickRead(currentValue, previousValue)
       : integration.adapterId === "powerball-jackpot"
         ? formatPowerballJackpotQuickRead(currentValue, previousValue)
+      : integration.adapterId === "silver-trump-approval"
+        ? formatSilverTrumpApprovalQuickRead(currentValue, previousValue)
       : formatGenericQuickRead(previousValue, currentValue);
 
   return value ? [{ name: "Quick read", value, inline: false }] : [];
@@ -1600,6 +1602,68 @@ function formatPowerballJackpotQuickRead(currentValue: string, previousValue: st
   }
 
   return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatSilverTrumpApprovalQuickRead(currentValue: string, previousValue: string | null): string {
+  const revisions = diffSilverApprovalTrackedRows(previousValue, currentValue);
+  const lines = [
+    ...(revisions.length ? [`**Approval revisions:** ${revisions.slice(0, 3).join("; ")}${revisions.length > 3 ? `; +${revisions.length - 3} more` : ""}`] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Result"),
+    ...formatPreferredQuickReadLine(currentValue, "Approval"),
+    ...formatPreferredQuickReadLine(currentValue, "Target date"),
+    ...formatPreferredQuickReadLine(currentValue, "Reference dates"),
+    ...formatPreferredQuickReadLine(currentValue, "First reference"),
+    ...formatPreferredQuickReadLine(currentValue, "Second reference"),
+    ...formatPreferredQuickReadLine(currentValue, "Target status"),
+    ...formatPreferredQuickReadLine(currentValue, "Status")
+  ];
+  const uniqueLines = [...new Set(lines)];
+
+  if (uniqueLines.length) {
+    return truncateEmbedValue(uniqueLines.join("\n"), 900);
+  }
+
+  return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function diffSilverApprovalTrackedRows(previousValue: string | null, currentValue: string): string[] {
+  const previousRows = extractSilverApprovalTrackedRows(previousValue);
+  const currentRows = extractSilverApprovalTrackedRows(currentValue);
+  if (!previousRows.size || !currentRows.size) {
+    return [];
+  }
+
+  return [...currentRows.entries()].flatMap(([label, current]) => {
+    const previous = previousRows.get(label);
+    if (!previous || previous === current) {
+      return [];
+    }
+
+    return `${label}: ${previous} → **${current}**`;
+  });
+}
+
+function extractSilverApprovalTrackedRows(value: string | null): Map<string, string> {
+  const rows = new Map<string, string>();
+  if (!value) {
+    return rows;
+  }
+
+  for (const line of value.split(/\r?\n/)) {
+    const match = line.match(/^Tracked approval rows:\s*(.+)$/);
+    if (!match || match[1] === "none") {
+      continue;
+    }
+
+    for (const entry of match[1].split("|").map((part) => part.trim()).filter(Boolean)) {
+      const rowMatch = entry.match(/^([^:]+):\s*(.+)$/);
+      if (rowMatch) {
+        rows.set(rowMatch[1].trim(), rowMatch[2].trim());
+      }
+    }
+  }
+
+  return rows;
 }
 
 function formatUfoFilesQuickRead(currentValue: string, previousValue: string | null): string {

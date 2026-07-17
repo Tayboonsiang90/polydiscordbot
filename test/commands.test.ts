@@ -453,6 +453,35 @@ describe("adapter commands", () => {
     expect(quickRead).toContain("**Report date (ET):** 2026-07-17");
   });
 
+  it("shows Silver approval row revisions in quick-read alerts", () => {
+    const previousValue = [
+      "Metric: Silver Bulletin Trump approval rating",
+      "Market: Trump approval rating on July 17?",
+      "Target date: 2026-07-17",
+      "Target status: finalized",
+      "Approval: 40.1%",
+      "Disapproval: 56.9%",
+      "Tracked approval rows: Target 2026-07-17: 2026-07-17 = 40.1% approval, 56.9% disapproval"
+    ].join("\n");
+    const currentValue = previousValue
+      .replace("Approval: 40.1%", "Approval: 40.2%")
+      .replace("2026-07-17 = 40.1% approval", "2026-07-17 = 40.2% approval");
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "silver-trump-approval", displayName: "Silver Trump Approval" },
+      previousValue,
+      previousCheckedAt: "2026-07-18T18:00:00.000Z",
+      currentValue,
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Approval revisions:** Target 2026-07-17");
+    expect(quickRead).toContain("40.1% approval");
+    expect(quickRead).toContain("**2026-07-17 = 40.2% approval");
+    expect(quickRead).toContain("**Approval:** 40.2%");
+  });
+
   it("puts Full Lid before-cutoff status first in alert embeds", () => {
     const currentValue = [
       "Date ET: 2026-07-13",

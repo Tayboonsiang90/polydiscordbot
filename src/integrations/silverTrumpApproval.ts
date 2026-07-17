@@ -146,6 +146,7 @@ function buildSingleDateApprovalValue(rows: SilverApprovalRow[], datasetUrl: str
       `Approval: ${formatPercent(target.approve)}`,
       `Disapproval: ${formatNullablePercent(target.disapprove)}`,
       `Finalized by next data point: ${nextAfterTarget?.date ?? "not available"}`,
+      `Tracked approval rows: ${formatTrackedApprovalRows([{ label: `Target ${activeTargetDate}`, row: target }])}`,
       `Latest available: ${formatRow(latest)}`,
       `Chart data: ${datasetUrl}`,
       `Resolution: ${sourceUrl}`
@@ -160,6 +161,7 @@ function buildSingleDateApprovalValue(rows: SilverApprovalRow[], datasetUrl: str
     `Approval: ${target ? formatPercent(target.approve) : "not published yet"}`,
     `Disapproval: ${target ? formatNullablePercent(target.disapprove) : "not published yet"}`,
     "Finalized by next data point: not yet",
+    `Tracked approval rows: ${formatTrackedApprovalRows([{ label: `Target ${activeTargetDate}`, row: target }])}`,
     `Latest available: ${formatRow(latest)}`,
     `Chart data: ${datasetUrl}`,
     `Resolution: ${sourceUrl}`
@@ -191,6 +193,10 @@ function buildSilverUpDownValue(
     `First reference: ${formatReference(firstReference, firstDate)}`,
     `Second reference: ${formatReference(secondReference, secondDate)}`,
     `Comparison: ${formatComparison(firstReference.row, secondReference.row)}`,
+    `Tracked approval rows: ${formatTrackedApprovalRows([
+      { label: `First ${firstDate}`, row: firstReference.row },
+      { label: `Second ${secondDate}`, row: secondReference.row }
+    ])}`,
     `Fallback deadline: ${deadlineAt.toISOString()} (12:00 PM ET on third calendar day after second date)`,
     `Latest available: ${formatRow(latest)}`,
     `Chart data: ${datasetUrl}`,
@@ -279,6 +285,10 @@ export function getSilverTrumpApprovalPollIntervalReason(integration: Integratio
 }
 
 export function silverTrumpApprovalShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+  if (hasSilverApprovalTrackedRowChange(previousValue, currentValue)) {
+    return true;
+  }
+
   if (currentValue.includes("Metric: Silver Bulletin Trump approval markets")) {
     const previousStates = new Set(extractSilverApprovalAlertStates(previousValue));
     return extractSilverApprovalAlertStates(currentValue).some((state) => !previousStates.has(state));
@@ -301,6 +311,43 @@ export function silverTrumpApprovalShouldAlertOnChange(previousValue: string | n
   const currentFinalized = currentValue.includes("Target status: finalized") || currentValue.includes("Status: finalized");
   const previousFinalized = previousValue?.includes("Target status: finalized") || previousValue?.includes("Status: finalized");
   return currentFinalized && !previousFinalized;
+}
+
+function hasSilverApprovalTrackedRowChange(previousValue: string | null, currentValue: string): boolean {
+  const previousRows = extractSilverApprovalTrackedRows(previousValue);
+  const currentRows = extractSilverApprovalTrackedRows(currentValue);
+  const previousHadTrackingLine = previousValue?.includes("Tracked approval rows:") ?? false;
+  if (!currentRows.size) {
+    return false;
+  }
+  if (!previousHadTrackingLine && !previousRows.size) {
+    return false;
+  }
+
+  return [...currentRows.entries()].some(([label, current]) => previousRows.get(label) !== current);
+}
+
+function extractSilverApprovalTrackedRows(value: string | null): Map<string, string> {
+  const rows = new Map<string, string>();
+  if (!value) {
+    return rows;
+  }
+
+  for (const line of value.split(/\r?\n/)) {
+    const match = line.match(/^Tracked approval rows:\s*(.+)$/);
+    if (!match || match[1] === "none") {
+      continue;
+    }
+
+    for (const entry of match[1].split("|").map((part) => part.trim()).filter(Boolean)) {
+      const rowMatch = entry.match(/^([^:]+):\s*(.+)$/);
+      if (rowMatch) {
+        rows.set(rowMatch[1].trim(), rowMatch[2].trim());
+      }
+    }
+  }
+
+  return rows;
 }
 
 function extractSilverApprovalAlertStates(value: string | null): string[] {
@@ -1085,6 +1132,11 @@ function splitCsvLine(line: string): string[] {
 
 function formatRow(row: SilverApprovalRow | null): string {
   return row ? `${row.date} = ${formatPercent(row.approve)} approval, ${formatNullablePercent(row.disapprove)} disapproval` : "none";
+}
+
+function formatTrackedApprovalRows(rows: Array<{ label: string; row: SilverApprovalRow | null }>): string {
+  const publishedRows = rows.filter((item): item is { label: string; row: SilverApprovalRow } => item.row !== null);
+  return publishedRows.length ? publishedRows.map((item) => `${item.label}: ${formatRow(item.row)}`).join(" | ") : "none";
 }
 
 function formatPercent(value: number): string {
