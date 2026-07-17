@@ -419,6 +419,40 @@ describe("adapter commands", () => {
     expect(quickRead).not.toContain("Lady Gaga - Die With A Smile");
   });
 
+  it("keeps Powerball jackpot numbers in quick-read alerts", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "powerball-jackpot", displayName: "Powerball Jackpot" },
+      previousValue: [
+        "Report date (ET): 2026-07-16",
+        "Estimated jackpot: $172 Million",
+        "Target: $1 Billion",
+        "Target status: below target (17.2%, $828 Million to go)",
+        "Cash value: $75.6 Million",
+        "Next drawing: Sat, Jul 18, 2026",
+        "Draw time UTC: 2026-07-19T02:59:00.000Z"
+      ].join("\n"),
+      previousCheckedAt: "2026-07-16T18:00:00.000Z",
+      currentValue: [
+        "Report date (ET): 2026-07-17",
+        "Estimated jackpot: $172 Million",
+        "Target: $1 Billion",
+        "Target status: below target (17.2%, $828 Million to go)",
+        "Cash value: $75.6 Million",
+        "Next drawing: Sat, Jul 18, 2026",
+        "Draw time UTC: 2026-07-19T02:59:00.000Z"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Estimated jackpot:** $172 Million");
+    expect(quickRead).toContain("**Target status:** below target (17.2%, $828 Million to go)");
+    expect(quickRead).toContain("**Cash value:** $75.6 Million");
+    expect(quickRead).toContain("**Next drawing:** Sat, Jul 18, 2026");
+    expect(quickRead).toContain("**Report date (ET):** 2026-07-17");
+  });
+
   it("puts Full Lid before-cutoff status first in alert embeds", () => {
     const currentValue = [
       "Date ET: 2026-07-13",

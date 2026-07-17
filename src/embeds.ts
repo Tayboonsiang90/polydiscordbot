@@ -1425,6 +1425,8 @@ function formatAlertQuickReadFields(
         ? formatMtWashingtonWindQuickRead(currentValue, previousValue)
       : integration.adapterId === "nsidc-arctic-sea-ice"
         ? formatNsidcSeaIceQuickRead(currentValue, previousValue)
+      : integration.adapterId === "powerball-jackpot"
+        ? formatPowerballJackpotQuickRead(currentValue, previousValue)
       : formatGenericQuickRead(previousValue, currentValue);
 
   return value ? [{ name: "Quick read", value, inline: false }] : [];
@@ -1572,6 +1574,26 @@ function formatNsidcSeaIceQuickRead(currentValue: string, previousValue: string 
     ...formatPreferredQuickReadLine(currentValue, "Data status")
   ];
   const uniqueLines = [...new Set(lines)];
+
+  if (uniqueLines.length) {
+    return truncateEmbedValue(uniqueLines.join("\n"), 900);
+  }
+
+  return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatPowerballJackpotQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Estimated jackpot"),
+    ...formatPreferredQuickReadLine(currentValue, "Target status"),
+    ...formatPreferredQuickReadLine(currentValue, "Cash value"),
+    ...formatPreferredQuickReadLine(currentValue, "Next drawing"),
+    ...formatPreferredQuickReadLine(currentValue, "Report date (ET)")
+  ];
+  const changedLines = formatChangedKeyLines(previousValue, currentValue)
+    .filter((line) => !lines.includes(line))
+    .slice(0, 2);
+  const uniqueLines = [...new Set([...lines, ...changedLines])];
 
   if (uniqueLines.length) {
     return truncateEmbedValue(uniqueLines.join("\n"), 900);
