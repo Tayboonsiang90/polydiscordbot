@@ -550,6 +550,7 @@ describe("adapter commands", () => {
         "Latest reported day: 2026-07-14",
         "Latest day wind speed: 48 mph on 2026-07-14 (avg 22.1 mph, 290 (W))",
         "Daily rows parsed: 14",
+        "Daily wind rows: 2026-07-01=64mph avg 37.8 280(W) | 2026-07-12=72mph avg 32.1 300(NW) | 2026-07-14=48mph avg 22.1 290(W)",
         "F6 last modified: Wed, 15 Jul 2026 06:20:04 GMT"
       ].join("\n"),
       previousCheckedAt: "2026-07-15T22:00:00.000Z",
@@ -561,6 +562,7 @@ describe("adapter commands", () => {
         "Latest reported day: 2026-07-15",
         "Latest day wind speed: 55 mph on 2026-07-15 (avg 24.8 mph, 300 (NW))",
         "Daily rows parsed: 15",
+        "Daily wind rows: 2026-07-01=64mph avg 37.8 280(W) | 2026-07-12=72mph avg 34.1 310(NW) | 2026-07-14=48mph avg 22.1 290(W) | 2026-07-15=55mph avg 24.8 300(NW)",
         "F6 last modified: Thu, 16 Jul 2026 06:05:04 GMT"
       ].join("\n"),
       changed: true,
@@ -571,6 +573,8 @@ describe("adapter commands", () => {
     expect(quickRead).toContain("**Highest wind speed:** 72 mph");
     expect(quickRead).toContain("**Latest day wind speed:** 55 mph on 2026-07-15");
     expect(quickRead).toContain("**Latest reported day:** 2026-07-15");
+    expect(quickRead).toContain("**Revised daily rows:** 2026-07-12: 72mph avg 32.1 300(NW)");
+    expect(quickRead).toContain("**72mph avg 34.1 310(NW)**");
     expect(quickRead).not.toContain("Daily rows parsed");
   });
 

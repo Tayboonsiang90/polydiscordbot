@@ -166,12 +166,21 @@ export function formatMtWashingtonWindValue(report: MtWashingtonWindReport, pdfU
     `Latest reported day: ${latestDayDate ?? "none"}`,
     `Latest day wind speed: ${latestDailyRow ? `${latestDailyRow.fastestSpeedMph} mph on ${latestDayDate} (avg ${latestDailyRow.averageSpeedMph} mph, ${latestDailyRow.directionDegrees} (${latestDailyRow.directionLabel}))` : "none"}`,
     `Daily rows parsed: ${report.dailyRows.length}`,
+    `Daily wind rows: ${formatMtWashingtonDailyWindRows(report)}`,
     `MISC fastest: ${report.miscFastestSpeedMph === null ? "not found" : `${report.miscFastestSpeedMph} mph${report.miscDirection ? ` ${report.miscDirection}` : ""}`}`,
     `F6 last modified: ${lastModified ?? "unknown"}`,
     "Column used: WIND (MPH) FASTEST MILE / peak gust",
     `F6 PDF: ${pdfUrl}`,
     `Resolution: ${sourceUrl}`
   ].join("\n");
+}
+
+function formatMtWashingtonDailyWindRows(report: MtWashingtonWindReport): string {
+  return report.dailyRows.length
+    ? report.dailyRows
+        .map((row) => `${report.year}-${padMonth(report.month)}-${padMonth(row.day)}=${row.fastestSpeedMph}mph avg ${row.averageSpeedMph} ${row.directionDegrees}(${row.directionLabel})`)
+        .join(" | ")
+    : "none";
 }
 
 export function mtWashingtonWindShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {

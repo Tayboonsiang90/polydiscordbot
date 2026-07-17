@@ -1499,11 +1499,13 @@ function formatFullLidQuickRead(currentValue: string): string {
 }
 
 function formatMtWashingtonWindQuickRead(currentValue: string, previousValue: string | null): string {
+  const revisions = diffMtWashingtonDailyWindRows(previousValue, currentValue);
   const lines = [
     ...formatPreferredQuickReadLine(currentValue, "Highest wind speed"),
     ...formatPreferredQuickReadLine(currentValue, "Highest day"),
     ...formatPreferredQuickReadLine(currentValue, "Latest reported day"),
     ...formatPreferredQuickReadLine(currentValue, "Latest day wind speed"),
+    ...(revisions.length ? [`**Revised daily rows:** ${revisions.slice(0, 3).join("; ")}${revisions.length > 3 ? `; +${revisions.length - 3} more` : ""}`] : []),
     ...formatPreferredQuickReadLine(currentValue, "MISC fastest"),
     ...formatPreferredQuickReadLine(currentValue, "F6 last modified")
   ];
@@ -1514,6 +1516,50 @@ function formatMtWashingtonWindQuickRead(currentValue: string, previousValue: st
   }
 
   return formatGenericQuickRead(previousValue, currentValue);
+}
+
+type MtWashingtonDailyWindRow = {
+  fastest: string;
+  average: string;
+  direction: string;
+};
+
+function diffMtWashingtonDailyWindRows(previousValue: string | null, currentValue: string): string[] {
+  const previousRows = parseMtWashingtonDailyWindRows(previousValue);
+  const currentRows = parseMtWashingtonDailyWindRows(currentValue);
+  if (!previousRows.size || !currentRows.size) {
+    return [];
+  }
+
+  return [...currentRows.entries()].flatMap(([date, currentRow]) => {
+    const previousRow = previousRows.get(date);
+    if (!previousRow || formatMtWashingtonDailyWindRow(previousRow) === formatMtWashingtonDailyWindRow(currentRow)) {
+      return [];
+    }
+
+    return `${date}: ${formatMtWashingtonDailyWindRow(previousRow)} → **${formatMtWashingtonDailyWindRow(currentRow)}**`;
+  });
+}
+
+function parseMtWashingtonDailyWindRows(value: string | null): Map<string, MtWashingtonDailyWindRow> {
+  const rows = new Map<string, MtWashingtonDailyWindRow>();
+  const line = value ? extractValueLine(value, "Daily wind rows") : null;
+  if (!line || line === "none") {
+    return rows;
+  }
+
+  for (const entry of line.split("|").map((part) => part.trim()).filter(Boolean)) {
+    const match = entry.match(/^(\d{4}-\d{2}-\d{2})=(\d+(?:\.\d+)?)mph avg (\d+(?:\.\d+)?) (\d{3}\([A-Z]+\))$/);
+    if (match) {
+      rows.set(match[1], { fastest: match[2], average: match[3], direction: match[4] });
+    }
+  }
+
+  return rows;
+}
+
+function formatMtWashingtonDailyWindRow(row: MtWashingtonDailyWindRow): string {
+  return `${row.fastest}mph avg ${row.average} ${row.direction}`;
 }
 
 function formatNsidcSeaIceQuickRead(currentValue: string, previousValue: string | null): string {
