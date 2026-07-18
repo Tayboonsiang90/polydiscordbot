@@ -50,6 +50,15 @@ const precipitationAdapterIds = new Set([
   "noaa-seattle-precip"
 ]);
 const spotifyTop50AdapterIds = new Set(["spotify-top-50-usa", "spotify-top-50-global"]);
+const arenaAiAdapterIds = new Set([
+  "arena-ai-no-style-control",
+  "arena-ai-style-control-on",
+  "arena-ai-math",
+  "arena-ai-code-webdev",
+  "arena-ai-text-to-image",
+  "arena-ai-text-to-video",
+  "arena-ai-chinese-company"
+]);
 export const addressLabelModalNameInputId = "address-label-name";
 export type AddressLabelButtonRole = "proposer" | "disputer";
 
@@ -1421,6 +1430,8 @@ function formatAlertQuickReadFields(
         ? formatUfoFilesQuickRead(currentValue, previousValue)
       : spotifyTop50AdapterIds.has(integration.adapterId)
         ? formatSpotifyTop50QuickRead(currentValue, previousValue)
+      : arenaAiAdapterIds.has(integration.adapterId)
+        ? formatArenaAiQuickRead(currentValue, previousValue)
       : integration.adapterId === "mt-washington-wind"
         ? formatMtWashingtonWindQuickRead(currentValue, previousValue)
       : integration.adapterId === "nsidc-arctic-sea-ice"
@@ -1708,6 +1719,40 @@ function formatSpotifyTop50QuickRead(currentValue: string, previousValue: string
   }
 
   return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatArenaAiQuickRead(currentValue: string, previousValue: string | null): string {
+  const previousLeader = extractValueLine(previousValue ?? "", "Top model");
+  const currentLeader = extractValueLine(currentValue, "Top model");
+  const previousCompany = extractValueLine(previousValue ?? "", "Top company") ?? extractValueLine(previousValue ?? "", "Top qualifying company");
+  const currentCompany = extractValueLine(currentValue, "Top company") ?? extractValueLine(currentValue, "Top qualifying company");
+  const topRows = extractArenaAiTopRows(currentValue).slice(0, 5);
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Leaderboard"),
+    ...(previousLeader && currentLeader && previousLeader !== currentLeader ? [`**#1 model change:** ${previousLeader} â†’ **${currentLeader}**`] : []),
+    ...(previousCompany && currentCompany && previousCompany !== currentCompany
+      ? [`**Top company change:** ${previousCompany} â†’ **${currentCompany}**`]
+      : []),
+    ...(currentLeader ? [`**Top model:** ${currentLeader}`] : []),
+    ...(currentCompany ? [`**Top company:** ${currentCompany}`] : []),
+    ...(topRows.length ? ["**Top 5:**", ...topRows] : [])
+  ];
+
+  if (lines.length) {
+    return truncateEmbedValue(lines.join("\n"), 900);
+  }
+
+  return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function extractArenaAiTopRows(value: string): string[] {
+  const lines = value.split(/\r?\n/).map((line) => line.trim());
+  const startIndex = lines.findIndex((line) => line === "Top 5:");
+  if (startIndex === -1) {
+    return [];
+  }
+
+  return lines.slice(startIndex + 1).filter((line) => /^#\d+\s+/.test(line)).slice(0, 5);
 }
 
 type SpotifyTopRow = {

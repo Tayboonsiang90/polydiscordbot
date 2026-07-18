@@ -9,7 +9,7 @@ import {
   airNowStadiumAqiAdapter
 } from "./airNowAqi.js";
 import { artistAlbumReleasesAdapter, artistSongReleasesAdapter, kpopSongReleasesAdapter } from "./appleSongReleases.js";
-import { arenaAiLeaderboardAdapter } from "./arenaAiLeaderboard.js";
+import { arenaAiLeaderboardAdapters } from "./arenaAiLeaderboard.js";
 import { awsDisruptedAdapter } from "./awsDisrupted.js";
 import { bankOfIsraelDecisionAdapter } from "./bankOfIsraelDecision.js";
 import { basedRevenueAdapter } from "./basedRevenue.js";
@@ -136,7 +136,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [airNowStadiumAqiAdapter.id, airNowStadiumAqiAdapter],
   [artistAlbumReleasesAdapter.id, artistAlbumReleasesAdapter],
   [artistSongReleasesAdapter.id, artistSongReleasesAdapter],
-  [arenaAiLeaderboardAdapter.id, arenaAiLeaderboardAdapter],
+  ...arenaAiLeaderboardAdapters.map((adapter) => [adapter.id, adapter] as [string, WebsiteAdapter]),
   [awsDisruptedAdapter.id, awsDisruptedAdapter],
   [bankOfIsraelDecisionAdapter.id, bankOfIsraelDecisionAdapter],
   [basedRevenueAdapter.id, basedRevenueAdapter],
