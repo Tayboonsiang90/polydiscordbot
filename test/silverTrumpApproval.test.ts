@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractSilverApprovalSingleTargetDate,
   extractSilverApprovalUpDownReferenceDates,
@@ -8,12 +8,19 @@ import {
   normalizeSilverApprovalSearchEvent,
   parseSilverApprovalRows,
   resolveSilverDatawrapperDatasetUrl,
+  silverTrumpApprovalAdapter,
   silverTrumpApprovalShouldAlertOnChange,
+  stabilizeSilverApprovalValue,
   type SilverApprovalMarketMetadata
 } from "../src/integrations/silverTrumpApproval.js";
 import type { Integration } from "../src/integrations/types.js";
 
 const datasetUrl = "https://datawrapper.dwcdn.net/kSCt4/5965/dataset.csv";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("Silver Bulletin Trump approval adapter", () => {
   it("parses approval trend-line CSV rows", () => {
@@ -54,6 +61,45 @@ describe("Silver Bulletin Trump approval adapter", () => {
         "<script>window.location.href='https://datawrapper.dwcdn.net/kSCt4/5965/'+window.location.search;</script>"
       )
     ).toBe(datasetUrl);
+  });
+
+  it("prefers the latest versioned Datawrapper dataset over the static CSV", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => "<script>window.location.href='https://datawrapper.dwcdn.net/kSCt4/6710/'+window.location.search;</script>"
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => ["modeldate,approve,disapprove", "6/5/2026,39.6,57.0", "6/6/2026,39.7,56.9"].join("\n")
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await silverTrumpApprovalAdapter.fetchCurrentValue();
+
+    expect(result.value).toContain("Chart data: https://datawrapper.dwcdn.net/kSCt4/6710/dataset.csv");
+    expect(result.value).toContain("Approval: 39.6%");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let stale fallback data overwrite a newer stored approval state", () => {
+    const previous = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-07-10 vs 2026-07-17",
+      "Status: tentative; waiting for a data point after 2026-07-17 to finalize",
+      "Result: Tentative Down",
+      "Latest available: 2026-07-17 = 39.6% approval, 57.0% disapproval"
+    ].join("\n");
+    const stale = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-07-10 vs 2026-07-17",
+      "Status: pending; waiting for 2026-07-17 data or fallback deadline 2026-07-20T16:00:00.000Z",
+      "Result: Pending",
+      "Latest available: 2026-07-16 = 39.7% approval, 57.0% disapproval"
+    ].join("\n");
+
+    expect(stabilizeSilverApprovalValue(previous, stale)).toBe(previous);
   });
 
   it("polls daily before target date, per minute during finalization watch, then daily after finalized", () => {
@@ -98,6 +144,50 @@ describe("Silver Bulletin Trump approval adapter", () => {
     const current = [
       previous,
       "Tracked approval rows: Target 2026-07-17: 2026-07-17 = 40.1% approval, 56.9% disapproval"
+    ].join("\n");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(previous, current)).toBe(false);
+  });
+
+  it("does not alert just because a newly discovered pending market adds tracked row labels", () => {
+    const previous = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-07-10 vs 2026-07-17",
+      "Status: tentative; waiting for a data point after 2026-07-17 to finalize",
+      "Result: Tentative Down",
+      "Tracked approval rows: First 2026-07-10: 2026-07-10 = 39.7% approval, 57.0% disapproval | Second 2026-07-17: 2026-07-17 = 39.6% approval, 57.0% disapproval"
+    ].join("\n");
+    const current = [
+      "Metric: Silver Bulletin Trump approval markets",
+      "Active markets: 2",
+      "",
+      "Tracked market 1: Trump approval Up or Down this week?",
+      previous,
+      "",
+      "Tracked market 2: Trump approval Up or Down this week?",
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-07-17 vs 2026-07-24",
+      "Status: pending; waiting for 2026-07-24 data or fallback deadline 2026-07-27T16:00:00.000Z",
+      "Result: Pending",
+      "Tracked approval rows: First 2026-07-17: 2026-07-17 = 39.6% approval, 57.0% disapproval | Second 2026-07-24: not published yet"
+    ].join("\n");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(previous, current)).toBe(false);
+  });
+
+  it("does not alert when the same Up/Down state moves into a multi-market container", () => {
+    const previous = [
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-07-10 vs 2026-07-17",
+      "Status: tentative; waiting for a data point after 2026-07-17 to finalize",
+      "Result: Tentative Down"
+    ].join("\n");
+    const current = [
+      "Metric: Silver Bulletin Trump approval markets",
+      "Active markets: 1",
+      "",
+      "Tracked market 1: Trump approval Up or Down this week?",
+      previous
     ].join("\n");
 
     expect(silverTrumpApprovalShouldAlertOnChange(previous, current)).toBe(false);

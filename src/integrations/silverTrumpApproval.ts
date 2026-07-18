@@ -89,9 +89,10 @@ export const silverTrumpApprovalAdapter: WebsiteAdapter = {
       markets.length > 1
         ? extractSilverTrumpApprovalMultiMarketValue(csv, datasetUrl, markets, new Date())
         : extractSilverTrumpApprovalValue(csv, datasetUrl, markets[0] ?? null, new Date());
+    const stableValue = stabilizeSilverApprovalValue(integration?.lastValue ?? null, value);
     return {
-      value,
-      rawValue: extractRawApproval(value) ?? value,
+      value: stableValue,
+      rawValue: extractRawApproval(stableValue) ?? stableValue,
       unit: "approval percentage",
       observedAt: new Date()
     };
@@ -324,7 +325,7 @@ function hasSilverApprovalTrackedRowChange(previousValue: string | null, current
     return false;
   }
 
-  return [...currentRows.entries()].some(([label, current]) => previousRows.get(label) !== current);
+  return [...currentRows.entries()].some(([label, current]) => previousRows.has(label) && previousRows.get(label) !== current);
 }
 
 function extractSilverApprovalTrackedRows(value: string | null): Map<string, string> {
@@ -358,18 +359,17 @@ function extractSilverApprovalAlertStates(value: string | null): string[] {
   return value
     .split(/\n\nTracked market \d+:\s*/)
     .flatMap((section) => {
-      const title = section.match(/^(.+)$/m)?.[1]?.trim() ?? "unknown market";
       const referenceDates = section.match(/^Reference dates:\s*(.+)$/m)?.[1]?.trim();
       const result = section.match(/^Result:\s*(.+)$/m)?.[1]?.trim();
       if (referenceDates && result && result !== "Pending") {
         const finalized = section.includes("Status: finalized");
-        return [`up-down|${title}|${referenceDates}|${result}|finalized=${finalized}`];
+        return [`up-down|${referenceDates}|${result}|finalized=${finalized}`];
       }
 
       const target = section.match(/^Target date:\s*(.+)$/m)?.[1]?.trim();
       const approval = section.match(/^Approval:\s*(.+)$/m)?.[1]?.trim();
       if (target && approval && approval !== "not published yet" && section.includes("Target status: finalized")) {
-        return [`single-date|${title}|${target}|${approval}`];
+        return [`single-date|${target}|${approval}`];
       }
 
       return [];
@@ -431,7 +431,32 @@ export async function upsertSilverTrumpApprovalPolymarketQueueUrl(
   return resolveIntegrationPolymarketQueue({ ...integration, settingsJson: JSON.stringify(settings) }, now);
 }
 
+export function stabilizeSilverApprovalValue(previousValue: string | null, currentValue: string): string {
+  const previousLatestDate = extractLatestAvailableDate(previousValue);
+  const currentLatestDate = extractLatestAvailableDate(currentValue);
+  if (previousLatestDate && currentLatestDate && currentLatestDate < previousLatestDate) {
+    return previousValue ?? currentValue;
+  }
+
+  return currentValue;
+}
+
 async function fetchSilverApprovalCsv(): Promise<{ csv: string; datasetUrl: string }> {
+  let latestError: unknown;
+  try {
+    const datasetUrl = await fetchLatestSilverApprovalDatasetUrl();
+    const response = await fetchWithTimeout(datasetUrl, {
+      headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+    }, 10_000);
+    if (response.ok) {
+      return { csv: await response.text(), datasetUrl };
+    }
+
+    latestError = new Error(`Silver Bulletin Datawrapper dataset returned HTTP ${response.status}`);
+  } catch (error) {
+    latestError = error;
+  }
+
   const staticResponse = await fetchWithTimeout(staticDatasetUrl, {
     headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
   }, 10_000).catch(() => null);
@@ -439,15 +464,11 @@ async function fetchSilverApprovalCsv(): Promise<{ csv: string; datasetUrl: stri
     return { csv: await staticResponse.text(), datasetUrl: staticDatasetUrl };
   }
 
-  const datasetUrl = await fetchLatestSilverApprovalDatasetUrl();
-  const response = await fetchWithTimeout(datasetUrl, {
-    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
-  }, 10_000);
-  if (!response.ok) {
-    throw new Error(`Silver Bulletin Datawrapper dataset returned HTTP ${response.status}`);
+  if (latestError instanceof Error) {
+    throw latestError;
   }
 
-  return { csv: await response.text(), datasetUrl };
+  throw new Error("Silver Bulletin Datawrapper dataset could not be fetched");
 }
 
 async function fetchLatestSilverApprovalDatasetUrl(): Promise<string> {
@@ -1158,6 +1179,11 @@ function extractUpDownResult(value: string | null): string | null {
 
 function extractUpDownReferenceDatesLine(value: string | null): string | null {
   return value?.match(/^Reference dates:\s*(.+)$/m)?.[1]?.trim() ?? null;
+}
+
+function extractLatestAvailableDate(value: string | null): string | null {
+  const match = value?.match(/^Latest available:\s*(\d{4}-\d{2}-\d{2})\s*=/m);
+  return match?.[1] ?? null;
 }
 
 function getEasternDate(date: Date): string {
