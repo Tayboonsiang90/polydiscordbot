@@ -1,6 +1,13 @@
 import { aaaRegularGasAdapter } from "./aaaGas.js";
 import { alignedLayerSaleAdapter } from "./alignedLayerSale.js";
 import { allInPodcastAdapter } from "./allInPodcast.js";
+import {
+  airNowChicagoAqiAdapter,
+  airNowColumbusAqiAdapter,
+  airNowNycAqiAdapter,
+  airNowPhiladelphiaAqiAdapter,
+  airNowStadiumAqiAdapter
+} from "./airNowAqi.js";
 import { artistAlbumReleasesAdapter, artistSongReleasesAdapter, kpopSongReleasesAdapter } from "./appleSongReleases.js";
 import { arenaAiLeaderboardAdapter } from "./arenaAiLeaderboard.js";
 import { awsDisruptedAdapter } from "./awsDisrupted.js";
@@ -122,6 +129,11 @@ const adapters = new Map<string, WebsiteAdapter>([
   [aaaRegularGasAdapter.id, aaaRegularGasAdapter],
   [alignedLayerSaleAdapter.id, alignedLayerSaleAdapter],
   [allInPodcastAdapter.id, allInPodcastAdapter],
+  [airNowChicagoAqiAdapter.id, airNowChicagoAqiAdapter],
+  [airNowColumbusAqiAdapter.id, airNowColumbusAqiAdapter],
+  [airNowNycAqiAdapter.id, airNowNycAqiAdapter],
+  [airNowPhiladelphiaAqiAdapter.id, airNowPhiladelphiaAqiAdapter],
+  [airNowStadiumAqiAdapter.id, airNowStadiumAqiAdapter],
   [artistAlbumReleasesAdapter.id, artistAlbumReleasesAdapter],
   [artistSongReleasesAdapter.id, artistSongReleasesAdapter],
   [arenaAiLeaderboardAdapter.id, arenaAiLeaderboardAdapter],
