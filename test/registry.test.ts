@@ -42,6 +42,7 @@ const expectedCommandIds = [
   ["claudecommits", "claude-code-commits"],
   ["claudedown", "claude-downtime"],
   ["cloudflare", "cloudflare-critical-incidents"],
+  ["companyrank", "companies-market-cap-top10"],
   ["arb", "cross-platform-arbitrage"],
   ["discord", "discord-critical-incidents"],
   ["ecdsafail", "ecdsa-fail"],
@@ -226,6 +227,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("pumpgo").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("companyrank").getPollIntervalMinutes?.({} as never)).toBe(5);
+    expect(getAdapterByCommandName("companyrank").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("arb").prepareArbitrageSetup).toBeDefined();
     expect(getAdapterByCommandName("arb").configureArbitrageWatch).toBeDefined();
     expect(getAdapterByCommandName("arb").getPollIntervalMinutes?.({} as never)).toBe(1);
