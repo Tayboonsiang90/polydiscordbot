@@ -16,6 +16,12 @@ const expectedCommandIds = [
   ["metadao", "metadao-credible-fundraise"],
   ["songreleases", "apple-artist-song-releases"],
   ["arenaai", "arena-ai-no-style-control"],
+  ["arenaaistyle", "arena-ai-style-control-on"],
+  ["arenaaimath", "arena-ai-math"],
+  ["arenawebdev", "arena-ai-code-webdev"],
+  ["arenaimage", "arena-ai-text-to-image"],
+  ["arenavideo", "arena-ai-text-to-video"],
+  ["arenachina", "arena-ai-chinese-company"],
   ["aws", "aws-disrupted-events"],
   ["boidecision", "bank-of-israel-decision"],
   ["rbnzdecision", "reserve-bank-new-zealand-decision"],
@@ -119,6 +125,7 @@ const expectedCommandIds = [
   ["spotifyusa", "spotify-top-50-usa"],
   ["strategybtc", "strategy-bitcoin-purchases"],
   ["tesla", "tesla-deliveries"],
+  ["wcticket", "ticketdata-world-cup-final"],
   ["trumpgetty", "trump-getty-photos"],
   ["trumpschedule", "trump-schedule"],
   ["trumptruth", "trump-truth"],
@@ -289,6 +296,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyusa").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("wcticket").getPollIntervalMinutes?.({} as never, new Date("2026-07-19T19:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("trumpgetty").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("fulllid").refreshSettings).toBeDefined();
