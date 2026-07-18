@@ -50,6 +50,7 @@ const precipitationAdapterIds = new Set([
   "noaa-seattle-precip"
 ]);
 const spotifyTop50AdapterIds = new Set(["spotify-top-50-usa", "spotify-top-50-global"]);
+const netflixTop10AdapterIds = new Set(["netflix-top-10"]);
 const arenaAiAdapterIds = new Set([
   "arena-ai-no-style-control",
   "arena-ai-style-control-on",
@@ -1430,6 +1431,8 @@ function formatAlertQuickReadFields(
         ? formatUfoFilesQuickRead(currentValue, previousValue)
       : spotifyTop50AdapterIds.has(integration.adapterId)
         ? formatSpotifyTop50QuickRead(currentValue, previousValue)
+      : netflixTop10AdapterIds.has(integration.adapterId)
+        ? formatNetflixTop10QuickRead(currentValue)
       : arenaAiAdapterIds.has(integration.adapterId)
         ? formatArenaAiQuickRead(currentValue, previousValue)
       : integration.adapterId === "mt-washington-wind"
@@ -1635,6 +1638,22 @@ function formatSilverTrumpApprovalQuickRead(currentValue: string, previousValue:
   }
 
   return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatNetflixTop10QuickRead(currentValue: string): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Chart week ending"),
+    ...formatPreferredQuickReadLine(currentValue, "US Shows #1"),
+    ...formatPreferredQuickReadLine(currentValue, "US Shows #2"),
+    ...formatPreferredQuickReadLine(currentValue, "US Movies #1"),
+    ...formatPreferredQuickReadLine(currentValue, "US Movies #2"),
+    ...formatPreferredQuickReadLine(currentValue, "Global Shows #1"),
+    ...formatPreferredQuickReadLine(currentValue, "Global Shows #2"),
+    ...formatPreferredQuickReadLine(currentValue, "Global Movies #1"),
+    ...formatPreferredQuickReadLine(currentValue, "Global Movies #2")
+  ];
+
+  return truncateEmbedValue(lines.join("\n"), 900);
 }
 
 function diffSilverApprovalTrackedRows(previousValue: string | null, currentValue: string): string[] {

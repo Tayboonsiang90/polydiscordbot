@@ -66,6 +66,7 @@ const expectedCommandIds = [
   ["mrbeastviews", "mrbeast-views"],
   ["nbs", "nbs-press-release"],
   ["gistemp", "nasa-gistemp-temperature"],
+  ["netflix", "netflix-top-10"],
   ["tornadoes", "ncei-tornadoes"],
   ["arcticice", "nsidc-arctic-sea-ice"],
   ["nytfront", "nyt-front-page"],
@@ -298,6 +299,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("spotifytopartist").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("spotifyusa").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("spotifyusa").getPollIntervalMinutes?.({} as never)).toBe(60);
+    expect(getAdapterByCommandName("netflix").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("netflix").getPollIntervalMinutes?.({} as never, new Date("2026-07-21T19:00:00.000Z"))).toBe(5);
     expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("wcticket").getPollIntervalMinutes?.({} as never, new Date("2026-07-19T19:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("trumpgetty").refreshSettings).toBeDefined();

@@ -56,6 +56,7 @@ import { mrBeastViewsAdapter } from "./mrBeastViews.js";
 import { nbsPressReleaseAdapter } from "./nbsPressRelease.js";
 import { nceiTornadoesAdapter } from "./nceiTornadoes.js";
 import { nasaGistempAdapter } from "./nasaGistemp.js";
+import { netflixTop10Adapter } from "./netflixTop10.js";
 import { nsidcArcticSeaIceAdapter } from "./nsidcArcticSeaIce.js";
 import { nytFrontPageAdapter } from "./nytFrontPage.js";
 import { npmPrivateValuationAdapters } from "./npmPrivateValuations.js";
@@ -186,6 +187,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [nbsPressReleaseAdapter.id, nbsPressReleaseAdapter],
   [nceiTornadoesAdapter.id, nceiTornadoesAdapter],
   [nasaGistempAdapter.id, nasaGistempAdapter],
+  [netflixTop10Adapter.id, netflixTop10Adapter],
   [nsidcArcticSeaIceAdapter.id, nsidcArcticSeaIceAdapter],
   [nytFrontPageAdapter.id, nytFrontPageAdapter],
   ...npmPrivateValuationAdapters.map((adapter) => [adapter.id, adapter] as [string, WebsiteAdapter]),
