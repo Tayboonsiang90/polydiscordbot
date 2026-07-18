@@ -34,6 +34,7 @@ const expectedCommandIds = [
   ["jobsadded", "bls-jobs-added"],
   ["bonbast", "bonbast-usd-irr"],
   ["boxoffice", "box-office-weekends"],
+  ["cyclospora", "cdc-cyclosporiasis"],
   ["fertility", "cdc-fertility-rate"],
   ["fluhosp", "cdc-flu-hospitalization"],
   ["measles", "cdc-measles"],
@@ -285,6 +286,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("rottentomatoes").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("boxoffice").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("boxoffice").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("cyclospora").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("cyclospora").upsertPolymarketMarket).toBeDefined();
     expect(getAdapterByCommandName("trumpapproval").getPollIntervalMinutes?.({} as never, new Date("2026-06-05T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("spiderman").fetchEventUpdates).toBeDefined();
     expect(getAdapterByCommandName("spiderman").getPollIntervalMinutes?.({} as never)).toBe(1);
