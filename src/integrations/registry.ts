@@ -41,6 +41,7 @@ import { fredEggPriceAdapter } from "./fredEggPrice.js";
 import { fredGroundBeefAdapter } from "./fredGroundBeef.js";
 import { freeAppStoreAdapter } from "./freeAppStore.js";
 import { hkPrecipAdapter } from "./hkPrecip.js";
+import { hendonMobMoneyListAdapter } from "./hendonMobMoneyList.js";
 import { iswUkraineMapAdapter } from "./iswUkraineMap.js";
 import { ismServicesPmiAdapter } from "./ismServicesPmi.js";
 import { kaitoMindshareAdapter } from "./kaitoMindshare.js";
@@ -170,6 +171,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [fredEggPriceAdapter.id, fredEggPriceAdapter],
   [fredGroundBeefAdapter.id, fredGroundBeefAdapter],
   [freeAppStoreAdapter.id, freeAppStoreAdapter],
+  [hendonMobMoneyListAdapter.id, hendonMobMoneyListAdapter],
   [hkPrecipAdapter.id, hkPrecipAdapter],
   [iswUkraineMapAdapter.id, iswUkraineMapAdapter],
   [ismServicesPmiAdapter.id, ismServicesPmiAdapter],

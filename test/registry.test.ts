@@ -53,6 +53,7 @@ const expectedCommandIds = [
   ["eggs", "fred-egg-price"],
   ["beef", "fred-ground-beef"],
   ["freeappstore", "free-app-store"],
+  ["pokermoney", "hendon-mob-money-list"],
   ["hkprecip", "hk-precip"],
   ["iswmap", "isw-ukraine-map"],
   ["ismpmi", "ism-services-pmi"],
@@ -303,6 +304,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("netflix").getPollIntervalMinutes?.({} as never, new Date("2026-07-21T19:00:00.000Z"))).toBe(5);
     expect(getAdapterByCommandName("strategybtc").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("wcticket").getPollIntervalMinutes?.({} as never, new Date("2026-07-19T19:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("pokermoney").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("trumpgetty").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("trumpgetty").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("fulllid").refreshSettings).toBeDefined();
