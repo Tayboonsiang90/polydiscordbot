@@ -33,7 +33,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `arena-ai-no-style-control` | `/monitor` | `#arenaai` | `Arena AI Alerts` | `🤖` | Monitors the top 5 models on Arena AI's overall no-style-control leaderboard and seeds the July 25, August 1, and end-of-August markets. |
 | `arena-ai-style-control-on` | `/monitor` | `#arenaaistyle` | `Arena Style Alerts` | `🤖` | Monitors the top 5 models on Arena AI's overall style-control-on leaderboard for the end-of-August company market. |
 | `arena-ai-math` | `/monitor` | `#arenaaimath` | `Arena Math Alerts` | `🧮` | Monitors the top 5 models on Arena AI's Text Arena Math no-style-control leaderboard. |
-| `arena-ai-code-webdev` | `/monitor` | `#arenawebdev` | `Arena WebDev Alerts` | `💻` | Monitors the top 5 models on Arena AI's Code Arena WebDev leaderboard. |
+| `arena-ai-code-webdev` | `/monitor` | `#arenawebdev` | `Arena WebDev Alerts` | `💻` | Monitors the top 5 models on Arena AI's Code Arena WebDev leaderboard and seeds the end-of-July and end-of-August WebDev markets. |
 | `arena-ai-text-to-image` | `/monitor` | `#arenaimage` | `Arena Image Alerts` | `🎨` | Monitors the top 5 models on Arena AI's Text-to-Image leaderboard. |
 | `arena-ai-text-to-video` | `/monitor` | `#arenavideo` | `Arena Video Alerts` | `🎬` | Monitors the top 5 models on Arena AI's Text-to-Video leaderboard. |
 | `arena-ai-chinese-company` | `/monitor` | `#arenachina` | `Arena China Alerts` | `🇨🇳` | Monitors the no-style-control leaderboard filtered to qualifying Chinese-company rows for the end-of-August market. |

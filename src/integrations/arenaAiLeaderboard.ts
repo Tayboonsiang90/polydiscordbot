@@ -108,6 +108,7 @@ const configs: ArenaAiLeaderboardConfig[] = [
     alertRoleEmoji: "💻",
     unit: "top Arena AI code WebDev models",
     polymarketUrls: [
+      "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-july-20260715140712903",
       "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-august-20260716213053775"
     ]
   },

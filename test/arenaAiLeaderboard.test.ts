@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  arenaAiCodeWebdevAdapter,
   arenaAiLeaderboardAdapter,
   extractArenaAiLeaderboardRows,
   extractArenaAiTopModels,
@@ -140,5 +141,11 @@ describe("Arena AI leaderboard parsing", () => {
     const currentValue = previousValue.replace("score 1501±5", "score 1502±4");
 
     expect(arenaAiLeaderboardAdapter.shouldAlertOnChange?.(previousValue, currentValue)).toBe(false);
+  });
+
+  it("seeds the July Code Arena WebDev market first", () => {
+    expect(arenaAiCodeWebdevAdapter.defaultPolymarketUrl).toBe(
+      "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-july-20260715140712903"
+    );
   });
 });
