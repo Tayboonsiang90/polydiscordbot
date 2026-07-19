@@ -1,4 +1,5 @@
 import { ChannelType, type Client, type Guild, type Message, type Role, type TextChannel } from "discord.js";
+import { isArchivedSettings } from "./archiveSettings.js";
 import { botStatusChannelName as defaultBotStatusChannelName, errorLogChannelName } from "./channels.js";
 import type { BotConfig } from "./config.js";
 import type { BotDatabase } from "./database.js";
@@ -121,6 +122,14 @@ export class IntegrationProvisioner {
 
   private async provisionAdapter(guild: Guild, adapter: WebsiteAdapter): Promise<void> {
     const existingIntegration = this.database.getIntegrationByAdapter(guild.id, adapter.id);
+    if (existingIntegration && isArchivedSettings(existingIntegration.settingsJson)) {
+      this.database.syncIntegrationMetadata(existingIntegration.id, {
+        displayName: adapter.displayName,
+        sourceUrl: adapter.sourceUrl
+      });
+      return;
+    }
+
     const existingChannel = existingIntegration
       ? await guild.channels.fetch(existingIntegration.channelId).catch(() => null)
       : null;
@@ -219,6 +228,9 @@ export class IntegrationProvisioner {
     for (const adapter of listAdapters()) {
       const integration = this.database.getIntegrationByAdapter(guild.id, adapter.id);
       if (!integration) {
+        continue;
+      }
+      if (isArchivedSettings(integration.settingsJson)) {
         continue;
       }
 

@@ -8,6 +8,7 @@ import {
   isUmaAdapterId,
   listSlashCommandAdapters,
   normalizePolymarketUrl,
+  selectArchivedIntegrations,
   selectCheckAllTargets
 } from "../src/commands.js";
 import {
@@ -83,6 +84,7 @@ describe("adapter commands", () => {
       name: "bot",
       options: expect.arrayContaining([
         expect.objectContaining({ name: "summarize" }),
+        expect.objectContaining({ name: "reinstate" }),
         expect.objectContaining({ name: "checkall" }),
         expect.objectContaining({ name: "clear" }),
         expect.objectContaining({ name: "clearerrors" }),
@@ -104,6 +106,29 @@ describe("adapter commands", () => {
     expect(selectCheckAllTargets(integrations, "guild").map((integration) => integration.displayName)).toEqual(["Bonbast USD/IRR"]);
     expect(isUmaAdapterId("polymarket-proposals")).toBe(true);
     expect(isUmaAdapterId("bonbast-usd-irr")).toBe(false);
+  });
+
+  it("selects archived integrations from archive metadata", () => {
+    const integrations: Integration[] = [
+      { ...checkedIntegration, id: 1, displayName: "Active", settingsJson: null, status: "active" },
+      {
+        ...checkedIntegration,
+        id: 2,
+        displayName: "Archived",
+        settingsJson: JSON.stringify({ archivedAt: "2026-05-06T01:02:03.000Z" }),
+        status: "paused"
+      },
+      {
+        ...checkedIntegration,
+        id: 3,
+        guildId: "other-guild",
+        displayName: "Other Guild Archived",
+        settingsJson: JSON.stringify({ archivedAt: "2026-05-06T01:02:03.000Z" }),
+        status: "paused"
+      }
+    ];
+
+    expect(selectArchivedIntegrations(integrations, "guild").map((integration) => integration.displayName)).toEqual(["Archived"]);
   });
 
   it("registers a generic monitor command plus UMA-specific command groups", () => {

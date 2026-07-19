@@ -1,5 +1,11 @@
 ﻿import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction, type TextChannel } from "discord.js";
 import { buildArbitrageOutcomeSelectRow } from "./arbitrageControls.js";
+import {
+  buildArchiveSettings,
+  clearArchiveSettings,
+  getArchiveMetadata,
+  isArchivedSettings
+} from "./archiveSettings.js";
 import { errorLogChannelName } from "./channels.js";
 import type { BotDatabase } from "./database.js";
 import { AttachmentBuilder, type Attachment } from "discord.js";
@@ -61,7 +67,7 @@ import type {
 import { getStoredOrFetchPolymarketEndDate, parseManualEasternDateTime } from "./marketEnd.js";
 import { upsertPolymarketQueueUrl } from "./polymarketQueue.js";
 import { buildCategoryAlertRoleName } from "./provisioner.js";
-import { deleteSettingsJsonKeys, mergeSettingsJson } from "./settingsJson.js";
+import { mergeSettingsJson } from "./settingsJson.js";
 import {
   checkEventIntegration,
   checkIntegration,
@@ -541,6 +547,19 @@ export function buildBotCommands() {
       .addSubcommand((subcommand) => subcommand.setName("summarize").setDescription("Summarize all integrations"))
       .addSubcommand((subcommand) =>
         subcommand
+          .setName("reinstate")
+          .setDescription("List or recreate archived monitor channels")
+          .addStringOption((option) =>
+            option
+              .setName("adapter")
+              .setDescription("Archived adapter ID, command, channel, or display name. Omit to list archived monitors.")
+              .setRequired(false)
+              .setMinLength(1)
+              .setMaxLength(120)
+          )
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
           .setName("checkall")
           .setDescription("Queue fetch-only checks for all active non-UMA monitors")
           .addIntegerOption((option) =>
@@ -614,6 +633,48 @@ export async function handleBotCommand(interaction: ChatInputCommandInteraction,
     for (const embed of remainingEmbeds) {
       await interaction.followUp({ embeds: [embed] });
     }
+    return;
+  }
+
+  if (subcommand === "reinstate") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const archivedIntegrations = selectArchivedIntegrations(database.listIntegrations(), interaction.guild.id);
+    const adapterQuery = interaction.options.getString("adapter")?.trim();
+    if (!adapterQuery) {
+      await interaction.editReply(formatArchivedMonitorList(archivedIntegrations));
+      return;
+    }
+
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+      await interaction.editReply("You need Manage Channels permission to reinstate archived monitors.");
+      return;
+    }
+
+    const botMember = await interaction.guild.members.fetchMe();
+    if (!botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+      await interaction.editReply("I need Manage Channels permission to recreate archived monitor channels.");
+      return;
+    }
+
+    const integration = findArchivedIntegration(archivedIntegrations, adapterQuery);
+    if (!integration) {
+      await interaction.editReply(`${formatUnknownArchivedMonitor(adapterQuery)}\n\n${formatArchivedMonitorList(archivedIntegrations)}`);
+      return;
+    }
+
+    if (!hasAdapter(integration.adapterId)) {
+      await interaction.editReply(`Archived monitor \`${integration.adapterId}\` still exists in the database, but its adapter code is not loaded.`);
+      return;
+    }
+
+    const adapter = getAdapter(integration.adapterId);
+    const channel = await findOrCreateReinstatedMonitorChannel(interaction.guild, integration, adapter);
+    let updated = database.updateIntegrationChannel(integration.id, channel.id);
+    updated = database.setSettingsJson(updated.id, clearArchiveSettings(updated.settingsJson));
+    updated = database.setStatus(updated.id, "active");
+    await channel.send({ embeds: [buildStatusReplyEmbed(updated)] });
+    await interaction.editReply(`Reinstated ${updated.displayName} in #${channel.name}. Run \`/monitor status\` there to confirm settings.`);
     return;
   }
 
@@ -787,6 +848,95 @@ export function selectCheckAllTargets(integrations: Integration[], guildId: stri
     .filter((integration) => hasAdapter(integration.adapterId))
     .filter((integration) => !isUmaAdapterId(integration.adapterId))
     .sort((left, right) => left.displayName.localeCompare(right.displayName));
+}
+
+export function selectArchivedIntegrations(integrations: Integration[], guildId: string): Integration[] {
+  return integrations
+    .filter((integration) => integration.guildId === guildId)
+    .filter((integration) => isArchivedSettings(integration.settingsJson))
+    .sort((left, right) => left.displayName.localeCompare(right.displayName));
+}
+
+function findArchivedIntegration(integrations: Integration[], query: string): Integration | null {
+  const normalizedQuery = normalizeLookup(query);
+  return (
+    integrations.find((integration) => {
+      const adapter = hasAdapter(integration.adapterId) ? getAdapter(integration.adapterId) : null;
+      const archive = getArchiveMetadata(integration.settingsJson);
+      return [
+        integration.adapterId,
+        integration.displayName,
+        adapter?.commandName,
+        adapter?.defaultChannelName,
+        archive.archivedChannel?.name
+      ]
+        .filter(isNonEmptyString)
+        .some((candidate) => normalizeLookup(candidate) === normalizedQuery);
+    }) ?? null
+  );
+}
+
+function formatUnknownArchivedMonitor(query: string): string {
+  return `No archived monitor matched \`${query}\`.`;
+}
+
+function formatArchivedMonitorList(integrations: Integration[]): string {
+  if (integrations.length === 0) {
+    return "No archived monitors found.";
+  }
+
+  const lines = integrations.slice(0, 30).map((integration) => {
+    const adapter = hasAdapter(integration.adapterId) ? getAdapter(integration.adapterId) : null;
+    const archive = getArchiveMetadata(integration.settingsJson);
+    const archivedChannel = archive.archivedChannel?.name ? `#${archive.archivedChannel.name}` : `#${adapter?.defaultChannelName ?? "unknown"}`;
+    const reason = archive.archiveReason?.trim() ? ` - ${archive.archiveReason.trim()}` : "";
+    return `- \`${integration.adapterId}\` (${integration.displayName}, ${archivedChannel})${reason}`;
+  });
+  if (integrations.length > lines.length) {
+    lines.push(`...and ${integrations.length - lines.length} more archived monitor(s).`);
+  }
+
+  return [
+    "Archived monitors:",
+    ...lines,
+    "",
+    "Reinstate one with `/bot reinstate adapter:<adapter-id>`."
+  ].join("\n").slice(0, 1_950);
+}
+
+async function findOrCreateReinstatedMonitorChannel(
+  guild: Guild,
+  integration: Integration,
+  adapter: WebsiteAdapter
+): Promise<TextChannel> {
+  await guild.channels.fetch();
+  const archive = getArchiveMetadata(integration.settingsJson);
+  const archivedChannel = archive.archivedChannel;
+  const channelName = archivedChannel?.name ?? adapter.defaultChannelName;
+  const existingByStoredId = archivedChannel?.id ? await fetchTextChannelById(guild, archivedChannel.id) : null;
+  const existing =
+    existingByStoredId ??
+    findTextChannelByName(guild, channelName) ??
+    (channelName === adapter.defaultChannelName ? null : findTextChannelByName(guild, adapter.defaultChannelName));
+
+  if (existing) {
+    return existing;
+  }
+
+  const parent =
+    archivedChannel?.parentId && guild.channels.cache.get(archivedChannel.parentId)?.type === ChannelType.GuildCategory
+      ? archivedChannel.parentId
+      : undefined;
+  return guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    topic: archivedChannel?.topic ?? `Polymarket resolution monitor: ${adapter.displayName} | ${adapter.sourceUrl}`,
+    parent
+  });
+}
+
+function normalizeLookup(value: string): string {
+  return value.trim().toLowerCase().replace(/^[/#]+/, "");
 }
 
 async function runCheckAllQueue(
@@ -1611,15 +1761,35 @@ export async function handleAdapterCommand(
   }
 
   if (subcommand === "archive") {
+    if (interaction.channel.type !== ChannelType.GuildText) {
+      await interaction.reply({ content: "Archive can only delete text monitor channels.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+      await interaction.reply({ content: "You need Manage Channels permission to archive and delete monitor channels.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const botPermissions = interaction.channel.permissionsFor(interaction.client.user);
+    if (!botPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+      await interaction.reply({ content: "I need Manage Channels permission to delete archived monitor channels.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const archivedAt = new Date();
+    const reason = interaction.options.getString("reason")?.trim();
     const archived = database.setSettingsJson(
       integration.id,
-      mergeSettingsJson(integration.settingsJson, {
-        archivedAt: new Date().toISOString(),
-        archiveReason: interaction.options.getString("reason")?.trim() || undefined
-      })
+      buildArchiveSettings(integration.settingsJson, interaction.channel, archivedAt, reason)
     );
     const updated = database.setStatus(archived.id, "paused");
-    await interaction.reply({ embeds: [buildStatusReplyEmbed(updated)] });
+    const deletedChannelName = interaction.channel.name;
+    await interaction.channel.delete(`Archived monitor: ${updated.displayName}`);
+    await interaction.editReply(
+      `Archived ${updated.displayName} and deleted #${deletedChannelName}. Reinstate it later with \`/bot reinstate adapter:${updated.adapterId}\`.`
+    );
     return;
   }
 
@@ -1676,10 +1846,6 @@ function readArbitrageSetupInput(interaction: ChatInputCommandInteraction): Arbi
     maxStakeUsd: amount,
     minNetEdgeBps: minEdgePercent === undefined ? undefined : minEdgePercent * 100
   };
-}
-
-function clearArchiveSettings(settingsJson: string | null): string {
-  return deleteSettingsJsonKeys(settingsJson, ["archivedAt", "archiveReason"]);
 }
 
 function readArbitrageWatchSide(value: string): ArbitrageWatchSide {

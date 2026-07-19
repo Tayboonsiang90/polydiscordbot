@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
 import { formatAddressWithLabel, getAddressLabelsFromSettingsJson } from "./addressLabels.js";
+import { getArchiveMetadata } from "./archiveSettings.js";
 import type { IntegrationUpdateLog } from "./database.js";
 import type { CheckResult, EventCheckResult, MarketRollover, SnapshotResult } from "./poller.js";
 import type {
@@ -2240,15 +2241,18 @@ function formatSettingsFields(integration: Integration) {
 }
 
 function formatArchiveFields(integration: Integration) {
-  const settings = parseSettingsJson(integration.settingsJson);
-  if (typeof settings.archivedAt !== "string") {
+  const archive = getArchiveMetadata(integration.settingsJson);
+  if (!archive.archivedAt) {
     return [];
   }
 
   return [
-    { name: "Archived at", value: formatSingaporeDateTime(settings.archivedAt), inline: false },
-    ...(typeof settings.archiveReason === "string" && settings.archiveReason.trim()
-      ? [{ name: "Archive reason", value: truncateEmbedValue(settings.archiveReason.trim(), 500), inline: false }]
+    { name: "Archived at", value: formatSingaporeDateTime(archive.archivedAt), inline: false },
+    ...(archive.archivedChannel?.name
+      ? [{ name: "Archived channel", value: `#${archive.archivedChannel.name} (deleted by archive flow)`, inline: false }]
+      : []),
+    ...(archive.archiveReason?.trim()
+      ? [{ name: "Archive reason", value: truncateEmbedValue(archive.archiveReason.trim(), 500), inline: false }]
       : [])
   ];
 }
