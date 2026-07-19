@@ -128,6 +128,7 @@ import { volmexEvivAdapter } from "./volmexEviv.js";
 import { whiteHouseAliensNycAdapter } from "./whiteHouseAliensNyc.js";
 import { whiteHouseBriefingsAdapter } from "./whiteHouseBriefings.js";
 import { whiteHouseFullLidAdapter } from "./whiteHouseFullLid.js";
+import { whiteHousePoolUpdatesAdapter } from "./whiteHousePoolUpdates.js";
 import { whiteHouseTweetsAdapter } from "./whiteHouseTweets.js";
 
 const adapters = new Map<string, WebsiteAdapter>([
@@ -256,6 +257,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [whiteHouseAliensNycAdapter.id, whiteHouseAliensNycAdapter],
   [whiteHouseBriefingsAdapter.id, whiteHouseBriefingsAdapter],
   [whiteHouseFullLidAdapter.id, whiteHouseFullLidAdapter],
+  [whiteHousePoolUpdatesAdapter.id, whiteHousePoolUpdatesAdapter],
   [whiteHouseTweetsAdapter.id, whiteHouseTweetsAdapter]
 ]);
 

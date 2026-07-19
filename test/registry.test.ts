@@ -146,6 +146,7 @@ const expectedCommandIds = [
   ["aliennyc", "white-house-aliens-nyc"],
   ["whbriefings", "white-house-briefings"],
   ["fulllid", "white-house-full-lid"],
+  ["whpool", "white-house-pool-updates"],
   ["whitehousetweets", "white-house-tweets"]
 ] as const;
 
@@ -259,6 +260,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("ngprice").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("whitehousetweets").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("whbriefings").getPollIntervalMinutes?.({} as never)).toBe(15);
+    expect(getAdapterByCommandName("whpool").fetchEventUpdates).toBeDefined();
+    expect(getAdapterByCommandName("whpool").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("hormuzships").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("hormuzships").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("whitehousetweets").upsertPolymarketMarket).toBeDefined();
