@@ -139,6 +139,39 @@ describe("White House full lid monitor", () => {
     expect(fullLidShouldAlertOnChange(bnoValue, nextDayValue)).toBe(true);
   });
 
+  it("alerts when Roll Call updates a recent prior day after the primary date moved on", () => {
+    const currentPrimaryNoLid = {
+      dateEt: "2026-07-18",
+      found: false,
+      source: "none" as const,
+      timeEt: "not found",
+      detail: "No full lid found yet for today's ET date",
+      sourceUrl: undefined,
+      beforeCutoff: null,
+      rollCallStatus: "no full lid found",
+      forthStatus: "no full lid found",
+      bnoStatus: "no lid report found"
+    };
+    const previous = formatFullLidValue(currentPrimaryNoLid, [
+      { dateEt: "2026-07-18", status: "no full lid found" },
+      { dateEt: "2026-07-17", status: "no full lid found" },
+      { dateEt: "2026-07-16", status: "full lid found at 9:32 PM" }
+    ]);
+    const rollCallLateUpdate = formatFullLidValue(currentPrimaryNoLid, [
+      { dateEt: "2026-07-18", status: "no full lid found" },
+      { dateEt: "2026-07-17", status: "full lid found at 7:19 PM" },
+      { dateEt: "2026-07-16", status: "full lid found at 9:32 PM" }
+    ]);
+    const normalRollover = formatFullLidValue(currentPrimaryNoLid, [
+      { dateEt: "2026-07-19", status: "no full lid found" },
+      { dateEt: "2026-07-18", status: "no full lid found" },
+      { dateEt: "2026-07-17", status: "no full lid found" }
+    ]);
+
+    expect(fullLidShouldAlertOnChange(previous, rollCallLateUpdate)).toBe(true);
+    expect(fullLidShouldAlertOnChange(previous, normalRollover)).toBe(false);
+  });
+
   it("uses one-minute polling during the ET watch window", () => {
     expect(getWhiteHouseFullLidPollIntervalMinutes({}, new Date("2026-05-12T12:00:00.000Z"))).toBe(1);
     expect(getWhiteHouseFullLidPollIntervalMinutes({}, new Date("2026-05-12T03:00:00.000Z"))).toBe(60);

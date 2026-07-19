@@ -35,6 +35,11 @@ export type FullLidResult = {
   bnoStatus: string;
 };
 
+export type RollCallRecentWatchRow = {
+  dateEt: string;
+  status: string;
+};
+
 type LidCandidate = {
   source: "Roll Call" | "Forth" | "BNO";
   dateEt: string;
@@ -178,10 +183,10 @@ function extractBnoArticleFullLid(html: string, targetDateEt: string, sourceUrl?
   };
 }
 
-export function formatFullLidValue(result: FullLidResult): string {
+export function formatFullLidValue(result: FullLidResult, rollCallRecentWatch: RollCallRecentWatchRow[] = []): string {
   const cutoffStatus =
     result.beforeCutoff === null ? "unknown" : result.beforeCutoff ? "BEFORE 6:30 PM ET" : "AFTER 6:30 PM ET";
-  return [
+  const lines = [
     `Date ET: ${result.dateEt}`,
     "Cutoff: 6:30 PM ET",
     `Lid found: ${result.found ? "yes" : "no"}`,
@@ -197,10 +202,20 @@ export function formatFullLidValue(result: FullLidResult): string {
     `Resolution: ${rollCallUrl}`,
     `Fallback: ${forthUrl}`,
     `Alpha: ${bnoWhPoolUrl}`
-  ].join("\n");
+  ];
+
+  if (rollCallRecentWatch.length > 0) {
+    lines.push("Roll Call recent watch:", ...rollCallRecentWatch.map((row) => `${row.dateEt}: ${row.status}`));
+  }
+
+  return lines.join("\n");
 }
 
 export function fullLidShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+  if (hasRollCallRecentWatchChanged(previousValue, currentValue)) {
+    return true;
+  }
+
   if (!/^Lid found:\s*yes$/m.test(currentValue)) {
     return false;
   }
@@ -247,8 +262,11 @@ export const whiteHouseFullLidAdapter: WebsiteAdapter = {
   },
   async fetchCurrentValue(): Promise<AdapterValue> {
     const dateEt = getEasternParts(new Date()).date;
-    const result = await fetchFullLidResult(dateEt);
-    const value = formatFullLidValue(result);
+    const [result, rollCallRecentWatch] = await Promise.all([
+      fetchFullLidResult(dateEt),
+      fetchRollCallRecentWatch(dateEt).catch(() => [])
+    ]);
+    const value = formatFullLidValue(result, rollCallRecentWatch);
     return {
       value,
       rawValue: value,
@@ -298,6 +316,26 @@ export async function refreshWhiteHouseFullLidPolymarketQueue(
   } catch {
     return resolved;
   }
+}
+
+async function fetchRollCallRecentWatch(anchorDateEt: string): Promise<RollCallRecentWatchRow[]> {
+  const response = await fetchWithTimeout(rollCallUrl, {
+    headers: {
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Roll Call calendar returned HTTP ${response.status}`);
+  }
+
+  const html = await response.text();
+  return getRecentEasternDates(anchorDateEt, 4).map((dateEt) => {
+    const candidate = extractRollCallFullLid(html, dateEt);
+    return {
+      dateEt,
+      status: candidate ? `full lid found at ${candidate.timeEt}` : "no full lid found"
+    };
+  });
 }
 
 async function fetchFullLidResult(dateEt: string): Promise<FullLidResult> {
@@ -564,6 +602,43 @@ function isDiscoveryIntervalDue(lastDiscoveryAt: string | undefined, now: Date, 
 
   const lastDiscoveryMs = Date.parse(lastDiscoveryAt);
   return Number.isNaN(lastDiscoveryMs) || now.getTime() - lastDiscoveryMs >= intervalMs;
+}
+
+function getRecentEasternDates(anchorDateEt: string, count: number): string[] {
+  const anchor = new Date(`${anchorDateEt}T12:00:00.000Z`);
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(anchor.getTime() - index * 24 * 60 * 60 * 1000);
+    return date.toISOString().slice(0, 10);
+  });
+}
+
+function hasRollCallRecentWatchChanged(previousValue: string | null, currentValue: string): boolean {
+  const previousRows = parseRollCallRecentWatchRows(previousValue);
+  const currentRows = parseRollCallRecentWatchRows(currentValue);
+  if (previousRows.size === 0 || currentRows.size === 0) {
+    return false;
+  }
+
+  for (const [dateEt, currentStatus] of currentRows) {
+    const previousStatus = previousRows.get(dateEt);
+    if (previousStatus !== undefined && previousStatus !== currentStatus) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function parseRollCallRecentWatchRows(value: string | null): Map<string, string> {
+  const rows = new Map<string, string>();
+  if (!value) {
+    return rows;
+  }
+
+  for (const match of value.matchAll(/^(\d{4}-\d{2}-\d{2}):\s*(.+)$/gm)) {
+    rows.set(match[1], match[2].trim());
+  }
+  return rows;
 }
 
 function parseDate(value: string | undefined): Date | null {

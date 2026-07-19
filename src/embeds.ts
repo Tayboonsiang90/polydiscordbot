@@ -1424,7 +1424,7 @@ function formatAlertQuickReadFields(
 ): Array<{ name: string; value: string; inline: false }> {
   const value =
     integration.adapterId === "white-house-full-lid"
-      ? formatFullLidQuickRead(currentValue)
+      ? formatFullLidQuickRead(currentValue, previousValue)
       : isPrecipitationAdapter(integration.adapterId)
         ? formatPrecipitationQuickRead(currentValue, previousValue)
       : integration.adapterId === "ufo-files"
@@ -1492,7 +1492,7 @@ function formatAlphaPrecipitationLines(value: string): string[] {
     });
 }
 
-function formatFullLidQuickRead(currentValue: string): string {
+function formatFullLidQuickRead(currentValue: string, previousValue: string | null): string {
   const found = extractValueLine(currentValue, "Lid found")?.toLowerCase() === "yes";
   const cutoffStatus = extractValueLine(currentValue, "Cutoff status") ?? "unknown";
   const firstLidSource = extractValueLine(currentValue, "First lid source") ?? "unknown";
@@ -1500,6 +1500,7 @@ function formatFullLidQuickRead(currentValue: string): string {
   const firstLidUrl = extractValueLine(currentValue, "First lid URL") ?? null;
   const dateEt = extractValueLine(currentValue, "Date ET") ?? "unknown";
   const detail = truncatePlainText(extractValueLine(currentValue, "Detail") ?? "", 220);
+  const rollCallRecentChanges = diffRollCallRecentWatchRows(previousValue, currentValue);
   const beforeCutoff =
     cutoffStatus === "BEFORE 6:30 PM ET" ? "✅ **YES — before 6:30 PM ET**" : cutoffStatus === "AFTER 6:30 PM ET" ? "❌ **NO — after 6:30 PM ET**" : "⚠️ **UNKNOWN — time not listed/parseable**";
 
@@ -1510,10 +1511,40 @@ function formatFullLidQuickRead(currentValue: string): string {
       `**Date ET:** ${dateEt}`,
       ...(found ? [`**Source:** ${firstLidSource}`, `**First lid time:** ${firstLidTime}`] : []),
       ...(found && firstLidUrl && firstLidUrl !== "not available" ? [`**Source URL:** ${firstLidUrl}`] : []),
-      ...(found && detail ? [`**Why:** ${detail}`] : [])
+      ...(found && detail ? [`**Why:** ${detail}`] : []),
+      ...(rollCallRecentChanges.length
+        ? [`**Roll Call recent watch:** ${rollCallRecentChanges.slice(0, 3).join("; ")}${rollCallRecentChanges.length > 3 ? "; ..." : ""}`]
+        : [])
     ].join("\n"),
     900
   );
+}
+
+function diffRollCallRecentWatchRows(previousValue: string | null, currentValue: string): string[] {
+  const previousRows = parseRollCallRecentWatchRows(previousValue);
+  const currentRows = parseRollCallRecentWatchRows(currentValue);
+  if (!previousRows.size || !currentRows.size) {
+    return [];
+  }
+
+  return [...currentRows.entries()].flatMap(([dateEt, currentStatus]) => {
+    const previousStatus = previousRows.get(dateEt);
+    return previousStatus !== undefined && previousStatus !== currentStatus
+      ? [`${dateEt}: ${previousStatus} -> **${currentStatus}**`]
+      : [];
+  });
+}
+
+function parseRollCallRecentWatchRows(value: string | null): Map<string, string> {
+  const rows = new Map<string, string>();
+  if (!value) {
+    return rows;
+  }
+
+  for (const match of value.matchAll(/^(\d{4}-\d{2}-\d{2}):\s*(.+)$/gm)) {
+    rows.set(match[1], match[2].trim());
+  }
+  return rows;
 }
 
 function formatMtWashingtonWindQuickRead(currentValue: string, previousValue: string | null): string {
