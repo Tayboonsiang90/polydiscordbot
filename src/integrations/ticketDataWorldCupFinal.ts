@@ -87,6 +87,7 @@ export function formatTicketDataWorldCupValue(snapshot: TicketDataWorldCupSnapsh
   return [
     "Metric: TicketData World Cup Final get-in ticket price",
     `Final status: ${snapshot.finalStatus}`,
+    `Final price published: ${snapshot.finalGetInPrice === null ? "no" : "yes"}`,
     `Final Get-In Price: ${formatPrice(snapshot.finalGetInPrice)}`,
     `Current get-in price: ${formatPrice(snapshot.currentGetInPrice)}`,
     `Market bracket: ${snapshot.marketBracket}`,

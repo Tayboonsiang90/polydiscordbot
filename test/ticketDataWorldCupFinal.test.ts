@@ -40,6 +40,39 @@ describe("TicketData World Cup Final adapter", () => {
     expect(snapshot.finalStatus).toBe("final");
   });
 
+  it("parses final-state TicketData pages like event 89460960", () => {
+    const snapshot = extractTicketDataWorldCupSnapshot(
+      [
+        "Title: San Antonio Spurs at New York Knicks (NBA Finals Game 4 New York Home Game 2) Tickets | Price History & Forecasts",
+        "URL Source: https://www.ticketdata.com/events/89460960",
+        "Markdown Content:",
+        "Final Get-In Price",
+        "",
+        "$3406",
+        "",
+        "per ticket (including fees)",
+        "",
+        "For the cheapest pair of tickets",
+        "",
+        "Final 3 Day Price Change",
+        "",
+        "66%",
+        "",
+        "Get-In Price fell from $10018 to $3406 over the final 3 days before the event"
+      ].join("\n"),
+      "TicketData via r.jina.ai reader"
+    );
+
+    expect(snapshot.eventTitle).toBe(
+      "San Antonio Spurs at New York Knicks (NBA Finals Game 4 New York Home Game 2) Tickets | Price History & Forecasts"
+    );
+    expect(snapshot.finalGetInPrice).toBe(3406);
+    expect(snapshot.currentGetInPrice).toBeNull();
+    expect(snapshot.marketBracket).toBe("< $6,000");
+    expect(snapshot.finalStatus).toBe("final");
+    expect(formatTicketDataWorldCupValue(snapshot)).toContain("Final price published: yes");
+  });
+
   it("maps ticket price brackets", () => {
     expect(getTicketPriceBracket(5999)).toBe("< $6,000");
     expect(getTicketPriceBracket(6000)).toBe("$6,000-$6,500");
@@ -85,6 +118,7 @@ describe("TicketData World Cup Final adapter", () => {
     expect(shouldAlertOnTicketDataWorldCupChange(previous, sameBracket)).toBe(false);
     expect(shouldAlertOnTicketDataWorldCupChange(previous, nextBracket)).toBe(true);
     expect(shouldAlertOnTicketDataWorldCupChange(nextBracket, final)).toBe(true);
+    expect(shouldAlertOnTicketDataWorldCupChange(previous, final)).toBe(true);
   });
 
   it("polls every minute during the final-price window", () => {
