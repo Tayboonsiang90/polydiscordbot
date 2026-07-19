@@ -4,6 +4,7 @@ import { parseSettingsJson } from "../settingsJson.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.the-numbers.com";
+const boxOfficeMojoUrl = "https://www.boxofficemojo.com";
 const renderedSourcePrefix = "https://r.jina.ai/http://";
 const gammaEventsUrl = "https://gamma-api.polymarket.com/events";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
@@ -41,6 +42,8 @@ export type BoxOfficeWeekendMarket = {
   bracketLabels: string[];
   endAt: string | null;
   movieUrl: string | null;
+  boxOfficeMojoTitleUrl: string | null;
+  boxOfficeMojoReleaseUrl: string | null;
   addedAt: string;
 };
 
@@ -49,6 +52,34 @@ export type BoxOfficeDailyRow = {
   rank: string;
   gross: number | null;
   rawGross: string;
+};
+
+export type BoxOfficeMojoSearchResult = {
+  title: string;
+  year: number | null;
+  titleUrl: string;
+};
+
+export type BoxOfficeMojoDailyRow = {
+  date: string;
+  dailyGross: number;
+  toDateGross: number;
+  estimated: boolean;
+};
+
+type BoxOfficeMojoSnapshot = {
+  titleUrl: string | null;
+  releaseUrl: string | null;
+  domesticGross: number | null;
+  openingGross: number | null;
+  totalGross: number | null;
+  status: "pending" | "partial" | "complete" | "error";
+  reportedWindowDays: number;
+  expectedWindowDays: number;
+  estimatedRows: number;
+  currentBracket: string | null;
+  rows: BoxOfficeMojoDailyRow[];
+  error?: string;
 };
 
 type BoxOfficeWeekendSettings = {
@@ -94,6 +125,7 @@ type WeekendSnapshot = {
   previewGross: number | null;
   rows: BoxOfficeDailyRow[];
   currentBracket: string | null;
+  boxOfficeMojo: BoxOfficeMojoSnapshot | null;
   error?: string;
 };
 
@@ -108,7 +140,7 @@ export const boxOfficeWeekendsAdapter: WebsiteAdapter = {
   alertRoleEmoji: "🎬",
   getPollIntervalMinutes: () => 5,
   getPollIntervalReason: () =>
-    "5-minute The Numbers polling; alerts only when a tracked weekend market becomes complete and bondable, or its complete bracket changes.",
+    "5-minute The Numbers and BoxOfficeMojo polling; alerts only when a tracked weekend market becomes complete/bondable, its complete bracket changes, or BoxOfficeMojo updates after a baseline exists.",
   getErrorNoticeWindowMinutes: () => 30,
   shouldAlertOnChange: shouldAlertOnBoxOfficeStateChange,
   async refreshSettings(integration: Integration, options?: { force?: boolean }): Promise<string> {
@@ -220,6 +252,8 @@ export function normalizeBoxOfficeGammaEvent(event: GammaEvent, now = new Date()
     bracketLabels: parseBoxOfficeBracketLabels(event.markets ?? []),
     endAt,
     movieUrl: buildTheNumbersMovieUrlCandidates(title, releaseYear)[0] ?? null,
+    boxOfficeMojoTitleUrl: null,
+    boxOfficeMojoReleaseUrl: null,
     addedAt: (parseGammaDate(event.startDate) ?? parseGammaDate(event.creationDate) ?? parseGammaDate(event.createdAt) ?? now).toISOString()
   };
 }
@@ -247,7 +281,7 @@ export function formatBoxOfficeWeekendValue(snapshots: WeekendSnapshot[], previo
   const lines = [
     "Metric: The Numbers domestic weekend box office",
     `Tracked active markets: ${snapshots.length}`,
-    "Alert rule: alerts only when a market becomes complete and bondable, or its complete bracket changes.",
+    "Alert rule: alerts when a market becomes complete/bondable, its complete bracket changes, or BoxOfficeMojo updates that movie.",
     "Data rule: Daily rows; opening weekends include preview row when present.",
     "Movies:"
   ];
@@ -262,7 +296,9 @@ export function formatBoxOfficeWeekendValue(snapshots: WeekendSnapshot[], previo
 
   lines.push(`Bondable: ${formatBoxOfficeBondableState(snapshots, previousBondable)}`);
   lines.push(`State: ${formatBoxOfficeState(snapshots)}`);
+  lines.push(`BoxOfficeMojo State: ${formatBoxOfficeMojoState(snapshots)}`);
   lines.push(`Resolution: ${sourceUrl}`);
+  lines.push(`Secondary: ${boxOfficeMojoUrl}`);
   return lines.join("\n");
 }
 
@@ -286,6 +322,16 @@ export function shouldAlertOnBoxOfficeStateChange(previousValue: string | null, 
 
     if (previousValueForKey !== value) {
       return true;
+    }
+  }
+
+  const previousMojoState = extractBoxOfficeMojoStateMap(previousValue);
+  const currentMojoState = extractBoxOfficeMojoStateMap(currentValue);
+  if (previousMojoState.size > 0) {
+    for (const [key, value] of currentMojoState) {
+      if (previousMojoState.get(key) !== value) {
+        return true;
+      }
     }
   }
 
@@ -329,12 +375,33 @@ export function extractBoxOfficeStateMap(value: string | null): Map<string, stri
   return state;
 }
 
+export function extractBoxOfficeMojoStateMap(value: string | null): Map<string, string> {
+  const state = new Map<string, string>();
+  if (!value) {
+    return state;
+  }
+
+  for (const match of value.matchAll(/^BoxOfficeMojo State:\s*(.+)$/gm)) {
+    if (match[1].trim() === "none") {
+      continue;
+    }
+    for (const entry of match[1].split(";")) {
+      const [key, stateValue] = entry.split("=").map((part) => part.trim());
+      if (key && stateValue) {
+        state.set(key, stateValue);
+      }
+    }
+  }
+  return state;
+}
+
 async function fetchWeekendSnapshot(market: BoxOfficeWeekendMarket): Promise<WeekendSnapshot> {
+  const boxOfficeMojo = fetchBoxOfficeMojoSnapshot(market).catch((error) => buildBoxOfficeMojoErrorSnapshot(market, error));
   try {
     const page = await fetchTheNumbersMovieMarkdown(market);
     const rows = parseDailyBoxOfficeRows(page.markdown);
     const snapshot = buildWeekendSnapshot(market, rows, page.url);
-    return snapshot;
+    return { ...snapshot, boxOfficeMojo: await boxOfficeMojo };
   } catch (error) {
     return {
       market,
@@ -346,6 +413,7 @@ async function fetchWeekendSnapshot(market: BoxOfficeWeekendMarket): Promise<Wee
       previewGross: null,
       rows: [],
       currentBracket: null,
+      boxOfficeMojo: await boxOfficeMojo,
       error: error instanceof Error ? error.message : String(error)
     };
   }
@@ -381,8 +449,206 @@ export function buildWeekendSnapshot(
     expectedWindowDays,
     previewGross: previewRow?.gross ?? null,
     rows: includedRows,
-    currentBracket: status === "pending" ? null : findCurrentBracketLabel(totalGross, market.bracketLabels)
+    currentBracket: status === "pending" ? null : findCurrentBracketLabel(totalGross, market.bracketLabels),
+    boxOfficeMojo: null
   };
+}
+
+export function parseBoxOfficeMojoSearchResults(markdown: string): BoxOfficeMojoSearchResult[] {
+  const results: BoxOfficeMojoSearchResult[] = [];
+  const seen = new Set<string>();
+  const resultPattern = /\[([^\]\n]+)\]\((https:\/\/www\.boxofficemojo\.com\/title\/tt\d+\/?[^)]*)\)\s+\((\d{4})\)/g;
+  for (const match of markdown.matchAll(resultPattern)) {
+    const titleUrl = stripUrlQuery(match[2]);
+    if (seen.has(titleUrl)) {
+      continue;
+    }
+
+    seen.add(titleUrl);
+    results.push({
+      title: normalizeText(match[1]),
+      year: Number(match[3]),
+      titleUrl
+    });
+  }
+  return results;
+}
+
+export function parseBoxOfficeMojoDomesticSummary(markdown: string): {
+  releaseUrl: string;
+  releaseDate: string | null;
+  openingGross: number | null;
+  domesticGross: number | null;
+} | null {
+  const row = markdown.match(
+    /\|\s*\[Domestic\]\((https:\/\/www\.boxofficemojo\.com\/release\/rl\d+\/?[^)]*)\)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/i
+  );
+  if (!row) {
+    return null;
+  }
+
+  return {
+    releaseUrl: stripUrlQuery(row[1]),
+    releaseDate: parseBoxOfficeMojoDate(row[2]),
+    openingGross: parseDollarAmount(row[3]),
+    domesticGross: parseDollarAmount(row[4])
+  };
+}
+
+export function parseBoxOfficeMojoDailyRows(markdown: string, fallbackYear: number | null): BoxOfficeMojoDailyRow[] {
+  const rows: BoxOfficeMojoDailyRow[] = [];
+  const rowPattern = /^\[([A-Za-z]{3,9}\s+\d{1,2})\]\([^)]+\)\[[A-Za-z]+\]\([^)]+\)(.+)$/gm;
+  for (const match of markdown.matchAll(rowPattern)) {
+    const date = parseBoxOfficeMojoDate(`${match[1]}, ${fallbackYear ?? new Date().getUTCFullYear()}`);
+    if (!date) {
+      continue;
+    }
+
+    const amounts = [...match[2].matchAll(/\$([0-9,]+)/g)].map((amount) => Number(amount[1].replace(/,/g, "")));
+    if (amounts.length < 2) {
+      continue;
+    }
+
+    rows.push({
+      date,
+      dailyGross: amounts[0],
+      toDateGross: amounts[amounts.length - 1],
+      estimated: /\btrue\s*$/i.test(match[2].trim())
+    });
+  }
+  return rows;
+}
+
+function parseBoxOfficeMojoDate(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = normalizeText(value).match(/([A-Za-z]{3,9})\s+(\d{1,2}),\s*(20\d{2})/);
+  if (!match) {
+    return null;
+  }
+
+  const month = monthNumber(match[1]);
+  return month ? toIsoDate(Number(match[3]), month, Number(match[2])) : null;
+}
+
+function stripUrlQuery(value: string): string {
+  try {
+    const url = new URL(value);
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value.split("?")[0].split("#")[0];
+  }
+}
+
+function buildBoxOfficeMojoSnapshot(
+  market: BoxOfficeWeekendMarket,
+  input: {
+    titleUrl: string | null;
+    releaseUrl: string | null;
+    domesticGross: number | null;
+    openingGross: number | null;
+    rows: BoxOfficeMojoDailyRow[];
+  }
+): BoxOfficeMojoSnapshot {
+  const expectedWindowDays = countInclusiveDates(market.startDate, market.endDate);
+  const windowRows = input.rows.filter((row) => isDateInRange(row.date, market.startDate, market.endDate));
+  const totalGross = windowRows.reduce((sum, row) => sum + row.dailyGross, 0);
+  const status =
+    windowRows.length === 0 || totalGross <= 0
+      ? "pending"
+      : windowRows.length >= expectedWindowDays
+        ? "complete"
+        : "partial";
+
+  return {
+    titleUrl: input.titleUrl,
+    releaseUrl: input.releaseUrl,
+    domesticGross: input.domesticGross,
+    openingGross: input.openingGross,
+    totalGross: status === "pending" ? null : totalGross,
+    status,
+    reportedWindowDays: windowRows.length,
+    expectedWindowDays,
+    estimatedRows: windowRows.filter((row) => row.estimated).length,
+    currentBracket: status === "pending" ? null : findCurrentBracketLabel(totalGross, market.bracketLabels),
+    rows: windowRows
+  };
+}
+
+async function fetchBoxOfficeMojoSnapshot(market: BoxOfficeWeekendMarket): Promise<BoxOfficeMojoSnapshot> {
+  const titleUrl = market.boxOfficeMojoTitleUrl ?? (await fetchBoxOfficeMojoTitleUrl(market));
+  const titleMarkdown = await fetchRenderedMarkdown(titleUrl, 20_000);
+  const summary = parseBoxOfficeMojoDomesticSummary(titleMarkdown);
+  if (!summary) {
+    throw new Error(`Could not parse BoxOfficeMojo domestic summary for ${market.title}`);
+  }
+
+  const releaseUrl = market.boxOfficeMojoReleaseUrl ?? summary.releaseUrl;
+  const releaseMarkdown = await fetchRenderedMarkdown(releaseUrl, 20_000);
+  const rows = parseBoxOfficeMojoDailyRows(
+    releaseMarkdown,
+    market.releaseYear ?? parseYearFromDate(summary.releaseDate) ?? parseYearFromDate(market.startDate)
+  );
+  return buildBoxOfficeMojoSnapshot(market, {
+    titleUrl,
+    releaseUrl,
+    domesticGross: summary.domesticGross,
+    openingGross: summary.openingGross,
+    rows
+  });
+}
+
+async function fetchBoxOfficeMojoTitleUrl(market: BoxOfficeWeekendMarket): Promise<string> {
+  const searchUrl = `${boxOfficeMojoUrl}/search/?q=${encodeURIComponent(market.title)}`;
+  const markdown = await fetchRenderedMarkdown(searchUrl, 20_000);
+  const result = selectBoxOfficeMojoSearchResult(parseBoxOfficeMojoSearchResults(markdown), market);
+  if (!result) {
+    throw new Error(`Could not match BoxOfficeMojo title for ${market.title}${market.releaseYear ? ` (${market.releaseYear})` : ""}`);
+  }
+  return result.titleUrl;
+}
+
+function selectBoxOfficeMojoSearchResult(
+  results: BoxOfficeMojoSearchResult[],
+  market: BoxOfficeWeekendMarket
+): BoxOfficeMojoSearchResult | null {
+  const title = normalizeMovieTitleForMatch(market.title);
+  const sameYear = results.filter((result) => !market.releaseYear || result.year === market.releaseYear);
+  return (
+    sameYear.find((result) => normalizeMovieTitleForMatch(result.title) === title) ??
+    sameYear.find((result) => isLikelySameMovieTitle(result.title, market.title)) ??
+    null
+  );
+}
+
+function buildBoxOfficeMojoErrorSnapshot(market: BoxOfficeWeekendMarket, error: unknown): BoxOfficeMojoSnapshot {
+  return {
+    titleUrl: market.boxOfficeMojoTitleUrl,
+    releaseUrl: market.boxOfficeMojoReleaseUrl,
+    domesticGross: null,
+    openingGross: null,
+    totalGross: null,
+    status: "error",
+    reportedWindowDays: 0,
+    expectedWindowDays: countInclusiveDates(market.startDate, market.endDate),
+    estimatedRows: 0,
+    currentBracket: null,
+    rows: [],
+    error: error instanceof Error ? error.message : String(error)
+  };
+}
+
+async function fetchRenderedMarkdown(url: string, timeoutMs: number): Promise<string> {
+  const renderedUrl = `${renderedSourcePrefix}${url}`;
+  const response = await fetchWithTimeout(renderedUrl, { headers: renderedRequestHeaders }, timeoutMs);
+  if (!response.ok) {
+    throw new Error(`${url} returned HTTP ${response.status}`);
+  }
+  return response.text();
 }
 
 async function fetchTheNumbersMovieMarkdown(market: BoxOfficeWeekendMarket): Promise<{ markdown: string; url: string }> {
@@ -468,12 +734,13 @@ function formatWeekendSnapshotLine(snapshot: WeekendSnapshot, previousBondable: 
   const dates = market.startDate && market.endDate ? `${shortDate(market.startDate)}-${shortDate(market.endDate)}` : "dates ?";
   const preview = snapshot.previewGross !== null ? ` + P ${formatMillions(snapshot.previewGross)}` : "";
   const bracket = snapshot.currentBracket ? `, bracket ${snapshot.currentBracket}` : "";
+  const mojo = formatBoxOfficeMojoSummary(snapshot.boxOfficeMojo);
   return [
     "-",
     `${compactMovieLabel(market)}:`,
     amountStatus,
     `(${snapshot.reportedWindowDays}/${snapshot.expectedWindowDays} days${preview})`,
-    `${dates}${bracket}`
+    `${dates}${bracket}${mojo}`
   ].join(" ");
 }
 
@@ -511,6 +778,47 @@ function formatBoxOfficeState(snapshots: WeekendSnapshot[]): string {
       return `${key}=${value}`;
     })
     .join("; ");
+}
+
+function formatBoxOfficeMojoState(snapshots: WeekendSnapshot[]): string {
+  const entries = snapshots.flatMap((snapshot) => {
+    const value = getBoxOfficeMojoStateValue(snapshot.boxOfficeMojo);
+    return value ? [`${shortStateKey(snapshot.market.slug)}=${value}`] : [];
+  });
+  return entries.length ? entries.join("; ") : "none";
+}
+
+function getBoxOfficeMojoStateValue(snapshot: BoxOfficeMojoSnapshot | null): string | null {
+  if (!snapshot || snapshot.status === "error") {
+    return null;
+  }
+
+  return [
+    snapshot.totalGross ?? 0,
+    snapshot.reportedWindowDays,
+    snapshot.status,
+    snapshot.estimatedRows,
+    snapshot.domesticGross ?? 0,
+    snapshot.openingGross ?? 0
+  ].join(":");
+}
+
+function formatBoxOfficeMojoSummary(snapshot: BoxOfficeMojoSnapshot | null): string {
+  if (!snapshot) {
+    return "";
+  }
+
+  if (snapshot.status === "error") {
+    return `; BOM error: ${truncateText(snapshot.error ?? "unavailable", 90)}`;
+  }
+
+  if (snapshot.totalGross === null) {
+    return `; BOM ${snapshot.status} (${snapshot.reportedWindowDays}/${snapshot.expectedWindowDays} days)`;
+  }
+
+  const estimate = snapshot.estimatedRows > 0 ? `, ${snapshot.estimatedRows} estimated` : "";
+  const bracket = snapshot.currentBracket ? `, bracket ${snapshot.currentBracket}` : "";
+  return `; BOM ${formatMillions(snapshot.totalGross)} ${snapshot.status} (${snapshot.reportedWindowDays}/${snapshot.expectedWindowDays} days${estimate}${bracket})`;
 }
 
 function isCompleteBoxOfficeState(value: string | undefined): boolean {
@@ -737,6 +1045,8 @@ function buildFallbackBoxOfficeWeekendMarket(url: string, now: Date): BoxOfficeW
     bracketLabels: [],
     endAt: null,
     movieUrl: buildTheNumbersMovieUrlCandidates(title, releaseYear)[0] ?? null,
+    boxOfficeMojoTitleUrl: null,
+    boxOfficeMojoReleaseUrl: null,
     addedAt: now.toISOString()
   };
 }
@@ -779,6 +1089,8 @@ function normalizeBoxOfficeWeekendMarkets(value: unknown): BoxOfficeWeekendMarke
         bracketLabels: Array.isArray(market.bracketLabels) ? market.bracketLabels.filter(isNonEmptyString) : [],
         endAt: typeof market.endAt === "string" ? market.endAt : null,
         movieUrl: typeof market.movieUrl === "string" ? market.movieUrl : null,
+        boxOfficeMojoTitleUrl: typeof market.boxOfficeMojoTitleUrl === "string" ? market.boxOfficeMojoTitleUrl : null,
+        boxOfficeMojoReleaseUrl: typeof market.boxOfficeMojoReleaseUrl === "string" ? market.boxOfficeMojoReleaseUrl : null,
         addedAt: typeof market.addedAt === "string" ? market.addedAt : new Date(0).toISOString()
       }
     ];
@@ -800,6 +1112,8 @@ function upsertBoxOfficeWeekendMarketRecord(markets: BoxOfficeWeekendMarket[], m
       endDate: market.endDate ?? existing.endDate,
       endAt: market.endAt ?? existing.endAt,
       movieUrl: market.movieUrl ?? existing.movieUrl,
+      boxOfficeMojoTitleUrl: market.boxOfficeMojoTitleUrl ?? existing.boxOfficeMojoTitleUrl,
+      boxOfficeMojoReleaseUrl: market.boxOfficeMojoReleaseUrl ?? existing.boxOfficeMojoReleaseUrl,
       bracketLabels: uniqueStrings([...(existing.bracketLabels ?? []), ...(market.bracketLabels ?? [])]),
       addedAt: existing.addedAt
     };
@@ -935,6 +1249,32 @@ function compactMovieLabel(market: BoxOfficeWeekendMarket): string {
   return `${market.title}${market.releaseYear ? ` ${market.releaseYear}` : ""} ${suffix}`;
 }
 
+function isLikelySameMovieTitle(left: string, right: string): boolean {
+  const leftTitle = normalizeMovieTitleForMatch(left);
+  const rightTitle = normalizeMovieTitleForMatch(right);
+  if (!leftTitle || !rightTitle) {
+    return false;
+  }
+  if (leftTitle.includes(rightTitle) || rightTitle.includes(leftTitle)) {
+    return true;
+  }
+
+  const leftTokens = new Set(leftTitle.split(" ").filter((token) => token.length > 1));
+  const rightTokens = rightTitle.split(" ").filter((token) => token.length > 1);
+  return rightTokens.length > 0 && rightTokens.every((token) => leftTokens.has(token));
+}
+
+function normalizeMovieTitleForMatch(value: string): string {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/\b(the|a|an)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function formatMillions(value: number): string {
   return `$${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}M`;
 }
@@ -979,6 +1319,10 @@ function capitalizeWord(value: string): string {
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function truncateText(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
 }
 
 function padNumber(value: number): string {

@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildWeekendSnapshot,
   extractBoxOfficeBondableMap,
+  extractBoxOfficeMojoStateMap,
   extractBoxOfficeStateMap,
   formatBoxOfficeWeekendValue,
   normalizeBoxOfficeGammaEvent,
+  parseBoxOfficeMojoDailyRows,
+  parseBoxOfficeMojoDomesticSummary,
+  parseBoxOfficeMojoSearchResults,
   parseDailyBoxOfficeRows,
   shouldAlertOnBoxOfficeStateChange
 } from "../src/integrations/boxOfficeWeekends.js";
@@ -63,6 +67,8 @@ describe("Box Office weekend adapter", () => {
         bracketLabels: ["<29m", "29-34m", "34-39m"],
         endAt: "2026-07-13T12:00:00.000Z",
         movieUrl: "https://www.the-numbers.com/movie/Moana-%282026%29",
+        boxOfficeMojoTitleUrl: null,
+        boxOfficeMojoReleaseUrl: null,
         addedAt: "2026-07-01T00:00:00.000Z"
       },
       rows,
@@ -78,6 +84,38 @@ describe("Box Office weekend adapter", () => {
       previewGross: 4_500_000,
       currentBracket: "29-34m"
     });
+  });
+
+  it("parses BoxOfficeMojo search, title, and daily release pages", () => {
+    const search = parseBoxOfficeMojoSearchResults(`
+* [Moana](https://www.boxofficemojo.com/title/tt27419466/?ref_=bo_se_r_1) (2026)
+* [Moana 2](https://www.boxofficemojo.com/title/tt13622970/?ref_=bo_se_r_2) (2024)
+`);
+    const summary = parseBoxOfficeMojoDomesticSummary(`
+| Area | Release Date | Opening | Gross |
+| --- | --- | --- | --- |
+| [Domestic](https://www.boxofficemojo.com/release/rl486245121/?ref_=bo_tt_gr_1) | Jul 10, 2026 | $43,142,824 | $68,581,410 |
+`);
+    const rows = parseBoxOfficeMojoDailyRows(`
+[Jul 10](https://www.boxofficemojo.com/date/2026-07-10/)[Friday](https://www.boxofficemojo.com/date/2026-07-10/weekly/)1$18,510,043--3,875$4,776$18,510,043 1 false
+[Jul 11](https://www.boxofficemojo.com/date/2026-07-11/)[Saturday](https://www.boxofficemojo.com/date/2026-07-11/weekly/)1$16,000,000-13.6%3,875$4,129$34,510,043 2 true
+`, 2026);
+
+    expect(search[0]).toEqual({
+      title: "Moana",
+      year: 2026,
+      titleUrl: "https://www.boxofficemojo.com/title/tt27419466/"
+    });
+    expect(summary).toEqual({
+      releaseUrl: "https://www.boxofficemojo.com/release/rl486245121/",
+      releaseDate: "2026-07-10",
+      openingGross: 43_142_824,
+      domesticGross: 68_581_410
+    });
+    expect(rows).toEqual([
+      { date: "2026-07-10", dailyGross: 18_510_043, toDateGross: 18_510_043, estimated: false },
+      { date: "2026-07-11", dailyGross: 16_000_000, toDateGross: 34_510_043, estimated: true }
+    ]);
   });
 
   it("alerts only when a market becomes bondable", () => {
@@ -99,6 +137,17 @@ describe("Box Office weekend adapter", () => {
     expect(shouldAlertOnBoxOfficeStateChange(currentBondable, "Bondable: abc=34-39m\nState: abc=35000000:3:complete")).toBe(true);
   });
 
+  it("alerts on BoxOfficeMojo state changes after an initial baseline exists", () => {
+    const initial = "BoxOfficeMojo State: none";
+    const baseline = "BoxOfficeMojo State: abc=10000000:1:partial:1:25000000:0";
+    const changed = "BoxOfficeMojo State: abc=18000000:2:partial:1:35000000:0";
+
+    expect(shouldAlertOnBoxOfficeStateChange(initial, baseline)).toBe(false);
+    expect(shouldAlertOnBoxOfficeStateChange(baseline, baseline)).toBe(false);
+    expect(shouldAlertOnBoxOfficeStateChange(baseline, changed)).toBe(true);
+    expect(extractBoxOfficeMojoStateMap(changed).get("abc")).toBe("18000000:2:partial:1:35000000:0");
+  });
+
   it("keeps prior bondable bracket visible during transient fetch errors", () => {
     const value = formatBoxOfficeWeekendValue(
       [
@@ -115,6 +164,8 @@ describe("Box Office weekend adapter", () => {
             bracketLabels: ["<29m", "29-34m", "34-39m"],
             endAt: "2026-07-13T12:00:00.000Z",
             movieUrl: "https://www.the-numbers.com/movie/Moana-%282026%29",
+            boxOfficeMojoTitleUrl: null,
+            boxOfficeMojoReleaseUrl: null,
             addedAt: "2026-07-01T00:00:00.000Z"
           },
           sourceUrl: "https://www.the-numbers.com/movie/Moana-%282026%29",
@@ -125,6 +176,7 @@ describe("Box Office weekend adapter", () => {
           previewGross: null,
           rows: [],
           currentBracket: null,
+          boxOfficeMojo: null,
           error: "fetch failed"
         }
       ],

@@ -1934,6 +1934,9 @@ function isLowValueAlertLine(key: string): boolean {
     "Search URL",
     "Raw",
     "State",
+    "Bondable",
+    "BoxOfficeMojo State",
+    "Secondary",
     "Links"
   ]).has(key.trim());
 }
