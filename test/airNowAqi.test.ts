@@ -100,9 +100,31 @@ describe("AirNow AQI adapters", () => {
     expect(value).toContain("Hit thresholds: 60, 90, 120, 150");
   });
 
-  it("alerts stadium AQI only when the high-water mark increases", () => {
+  it("alerts stadium AQI when current source readings update before or during the game", () => {
     expect(shouldAlertOnAirNowStadiumChange(null, "Highest tracked AQI: 154")).toBe(false);
-    expect(shouldAlertOnAirNowStadiumChange("Highest tracked AQI: 154", "Highest tracked AQI: 154")).toBe(false);
-    expect(shouldAlertOnAirNowStadiumChange("Highest tracked AQI: 154", "Highest tracked AQI: 160")).toBe(true);
+    expect(
+      shouldAlertOnAirNowStadiumChange(
+        "Highest tracked AQI: not started\nAlert key: highest=none|current=61@07/19/26 08:00 EDT@840340170008|thresholds=none",
+        "Highest tracked AQI: not started\nAlert key: highest=none|current=61@07/19/26 08:00 EDT@840340170008|thresholds=none"
+      )
+    ).toBe(false);
+    expect(
+      shouldAlertOnAirNowStadiumChange(
+        "Highest tracked AQI: not started\nAlert key: highest=none|current=61@07/19/26 08:00 EDT@840340170008|thresholds=none",
+        "Highest tracked AQI: not started\nAlert key: highest=none|current=64@07/19/26 09:00 EDT@840340170008|thresholds=none"
+      )
+    ).toBe(true);
+    expect(
+      shouldAlertOnAirNowStadiumChange(
+        "Highest tracked AQI: 154\nAlert key: highest=154|current=154@07/19/26 15:00 EDT@840340170008|thresholds=60,90,120,150",
+        "Highest tracked AQI: 160\nAlert key: highest=160|current=160@07/19/26 16:00 EDT@840340170008|thresholds=60,90,120,150"
+      )
+    ).toBe(true);
+    expect(
+      shouldAlertOnAirNowStadiumChange(
+        "Highest tracked AQI: 160\nAlert key: highest=160|current=160@07/19/26 16:00 EDT@840340170008|thresholds=60,90,120,150",
+        "Highest tracked AQI: 160\nAlert key: highest=160|current=ignored-after-window|thresholds=60,90,120,150"
+      )
+    ).toBe(false);
   });
 });

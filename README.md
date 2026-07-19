@@ -27,7 +27,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `airnow-columbus-aqi` | `/monitor` | `#columbusaqi` | `Columbus AQI Alerts` | `🌫️` | Monitors AirNow finalized Columbus Daily AQI for PM2.5 rows for the July 17-21 below-100 markets. |
 | `airnow-nyc-aqi` | `/monitor` | `#nycaqi` | `NYC AQI Alerts` | `🌫️` | Monitors AirNow finalized New York City Region Daily AQI for PM2.5 rows for the July 17-21 below-100 markets. |
 | `airnow-philadelphia-aqi` | `/monitor` | `#phillyaqi` | `Philadelphia AQI Alerts` | `🌫️` | Monitors AirNow finalized Philadelphia Daily AQI for PM2.5 rows for the July 17-21 below-100 markets. |
-| `airnow-stadium-aqi` | `/monitor` | `#stadiumaqi` | `Stadium AQI Alerts` | `🌫️` | Monitors AirNow East Rutherford current PM2.5 AQI near MetLife Stadium and alerts when the World Cup Final high-water mark increases. |
+| `airnow-stadium-aqi` | `/monitor` | `#stadiumaqi` | `Stadium AQI Alerts` | `🌫️` | Monitors AirNow East Rutherford current PM2.5 AQI near MetLife Stadium, alerts on current source updates before/during the final, and tracks the in-window high-water mark. |
 | `apple-artist-song-releases` | `/monitor` | `#songreleases` | `Artist Song Release Alerts` | `🎶` | Monitors Apple Music/iTunes for new 2026 songs by unresolved artists parsed from the Polymarket market. |
 | `apple-artist-album-releases` | `/monitor` | `#albumreleases` | `Artist Album Release Alerts` | `💿` | Monitors Apple Music/iTunes for new 2026 albums by unresolved artists parsed from the Polymarket market. |
 | `arena-ai-no-style-control` | `/monitor` | `#arenaai` | `Arena AI Alerts` | `🤖` | Monitors the top 5 models on Arena AI's overall no-style-control leaderboard and seeds the July 25, August 1, and end-of-August markets. |

@@ -391,7 +391,16 @@ export function shouldAlertOnAirNowStadiumChange(previousValue: string | null, c
   }
   const previousHighest = extractHighestAqi(previousValue);
   const currentHighest = extractHighestAqi(currentValue);
-  return currentHighest !== null && (previousHighest === null || currentHighest > previousHighest);
+  if (currentHighest !== null && (previousHighest === null || currentHighest > previousHighest)) {
+    return true;
+  }
+
+  const currentReadingKey = extractStadiumCurrentReadingKey(currentValue);
+  if (!currentReadingKey || currentReadingKey === "ignored-after-window") {
+    return false;
+  }
+
+  return extractStadiumCurrentReadingKey(previousValue) !== currentReadingKey;
 }
 
 function extractHistoricalValuesForArea(
@@ -459,7 +468,9 @@ function formatDailyAlertKey(report: AirNowDailyAqiReport): string {
 }
 
 function formatStadiumAlertKey(report: AirNowStadiumAqiReport): string {
-  return `highest=${report.highestAqi ?? "none"}|thresholds=${report.hitThresholds.join(",") || "none"}`;
+  const currentReadingKey =
+    report.status === "game window ended" ? "ignored-after-window" : formatCurrentReadingAlertKey(report.currentReading);
+  return `highest=${report.highestAqi ?? "none"}|current=${currentReadingKey}|thresholds=${report.hitThresholds.join(",") || "none"}`;
 }
 
 function extractAlertKey(value: string | null): string | null {
@@ -473,6 +484,19 @@ function extractHighestAqi(value: string | null): number | null {
   }
   const numberValue = Number(match[1]);
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function extractStadiumCurrentReadingKey(value: string | null): string | null {
+  const alertKey = extractAlertKey(value);
+  return alertKey?.match(/(?:^|\|)current=([^|]+)/)?.[1]?.trim() ?? null;
+}
+
+function formatCurrentReadingAlertKey(reading: AirNowCurrentAqiReading | null): string {
+  if (!reading) {
+    return "none";
+  }
+
+  return `${reading.aqi}@${reading.validDate} ${reading.time || "no-time"} ${reading.timezone}@${reading.siteId}`;
 }
 
 function getStadiumPollIntervalMinutes(now: Date): number {
