@@ -315,6 +315,64 @@ describe("NYT front page adapter", () => {
     expect(result.activeUrl).toBe("https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-may-25-may-31");
   });
 
+  it("discovers the current NYT market from Gamma series fallback when public search is stale", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const target = String(url);
+        if (target.includes("/public-search")) {
+          return {
+            ok: true,
+            json: async () => ({
+              events: [
+                {
+                  slug: "what-will-the-nyt-front-page-headlines-say-this-week-july-13-july-19-20260710201146834",
+                  title: "What will the NYT front-page headlines say this week? (July 13 - July 19)",
+                  active: true,
+                  closed: false
+                }
+              ]
+            })
+          };
+        }
+
+        return {
+          ok: true,
+          json: async () => [
+            {
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-july-20-july-26-20260718184724813",
+              title: "What will the NYT front-page headlines say this week? (July 20 - July 26)",
+              active: true,
+              closed: false
+            }
+          ]
+        };
+      })
+    );
+
+    const result = await refreshNytFrontPagePolymarketQueue(
+      {
+        settingsJson: JSON.stringify({
+          polymarketMarkets: [
+            {
+              url: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-13-july-19-20260710201146834",
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-july-13-july-19-20260710201146834",
+              startAt: "2026-07-13T04:00:00.000Z",
+              endAt: "2026-07-20T03:59:00.000Z",
+              addedAt: "2026-07-13T04:00:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-13-july-19-20260710201146834"
+      } as Integration,
+      new Date("2026-07-20T08:00:00.000Z")
+    );
+
+    expect(result.activeUrl).toBe(
+      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-20-july-26-20260718184724813"
+    );
+  });
+
   it("keeps a legacy stored URL as fallback after that week expires", async () => {
     vi.stubGlobal(
       "fetch",

@@ -18,6 +18,9 @@ const defaultPolymarketUrl =
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const nytMarketSearchQuery = "NYT front page headlines";
+const nytSeriesSlug = "nyt-headlines";
+const nytTagSlug = "new-york-times";
+const nytTagId = "103236";
 const strikeRefreshIntervalMs = 5 * 60_000;
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
@@ -47,6 +50,7 @@ type GammaSearchEvent = {
   title?: unknown;
   active?: unknown;
   closed?: unknown;
+  archived?: unknown;
 };
 
 type GammaMarket = {
@@ -345,24 +349,76 @@ function shouldDiscoverNytMarkets(settings: NytFrontPageSettings, now: Date): bo
 }
 
 async function fetchNytMarketSearchCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const candidates = new Map<string, { slug: string; url: string }>();
+  const errors: string[] = [];
+  for (const url of buildNytGammaDiscoveryUrls()) {
+    try {
+      for (const candidate of await fetchNytMarketCandidatesFromUrl(url, now)) {
+        candidates.set(candidate.slug, candidate);
+      }
+    } catch (error) {
+      errors.push(`${url}: ${formatErrorMessage(error)}`);
+    }
+  }
+
+  if (candidates.size > 0 || errors.length === 0) {
+    return [...candidates.values()].sort((left, right) => compareNytMarketCandidates(left, right, now));
+  }
+
+  throw new Error(`Polymarket Gamma NYT discovery failed: ${errors.join("; ")}`);
+}
+
+function buildNytGammaDiscoveryUrls(): string[] {
   const searchUrl = new URL(gammaSearchUrl);
   searchUrl.searchParams.set("q", nytMarketSearchQuery);
   searchUrl.searchParams.set("events_status", "active");
   searchUrl.searchParams.set("limit_per_type", "10");
 
-  const response = await fetchWithTimeout(searchUrl.toString(), {
-    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  const seriesUrl = new URL(gammaApiUrl);
+  seriesUrl.searchParams.set("series_slug", nytSeriesSlug);
+  seriesUrl.searchParams.set("active", "true");
+  seriesUrl.searchParams.set("closed", "false");
+  seriesUrl.searchParams.set("limit", "20");
+
+  const tagSlugUrl = new URL(gammaApiUrl);
+  tagSlugUrl.searchParams.set("tag_slug", nytTagSlug);
+  tagSlugUrl.searchParams.set("active", "true");
+  tagSlugUrl.searchParams.set("closed", "false");
+  tagSlugUrl.searchParams.set("limit", "20");
+
+  const tagIdUrl = new URL(gammaApiUrl);
+  tagIdUrl.searchParams.set("tag_id", nytTagId);
+  tagIdUrl.searchParams.set("active", "true");
+  tagIdUrl.searchParams.set("closed", "false");
+  tagIdUrl.searchParams.set("limit", "20");
+
+  return [searchUrl.toString(), seriesUrl.toString(), tagSlugUrl.toString(), tagIdUrl.toString()];
+}
+
+async function fetchNytMarketCandidatesFromUrl(url: string, now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const response = await fetchWithTimeout(url, {
+    headers: { accept: "application/json", "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
   });
   if (!response.ok) {
     throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
   }
 
-  const payload = (await response.json()) as GammaSearchResponse;
-  return (payload.events ?? []).map((event) => normalizeNytSearchEvent(event, now)).filter((candidate) => candidate !== null);
+  const payload = (await response.json()) as GammaSearchResponse | GammaSearchEvent[];
+  return extractGammaSearchEvents(payload).map((event) => normalizeNytSearchEvent(event, now)).filter((candidate) => candidate !== null);
+}
+
+function extractGammaSearchEvents(payload: GammaSearchResponse | GammaSearchEvent[]): GammaSearchEvent[] {
+  return Array.isArray(payload) ? payload : payload.events ?? [];
 }
 
 function normalizeNytSearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
-  if (event.active === false || event.closed === true || !isNonEmptyString(event.slug) || !isNonEmptyString(event.title)) {
+  if (
+    event.active === false ||
+    event.closed === true ||
+    event.archived === true ||
+    !isNonEmptyString(event.slug) ||
+    !isNonEmptyString(event.title)
+  ) {
     return null;
   }
 
@@ -377,6 +433,14 @@ function normalizeNytSearchEvent(event: GammaSearchEvent, now: Date): { slug: st
 
   const url = `https://polymarket.com/event/${event.slug}`;
   return parsePolymarketDateRangeWindow(url, now) ? { slug: event.slug, url } : null;
+}
+
+function compareNytMarketCandidates(left: { url: string }, right: { url: string }, now: Date): number {
+  const leftWindow = parsePolymarketDateRangeWindow(left.url, now);
+  const rightWindow = parsePolymarketDateRangeWindow(right.url, now);
+  const leftTime = leftWindow?.startAt ? Date.parse(leftWindow.startAt) : Number.MAX_SAFE_INTEGER;
+  const rightTime = rightWindow?.startAt ? Date.parse(rightWindow.startAt) : Number.MAX_SAFE_INTEGER;
+  return leftTime - rightTime || left.url.localeCompare(right.url);
 }
 
 function parseNytDiscoverySettings(settingsJson: string | null): NytFrontPageSettings {
