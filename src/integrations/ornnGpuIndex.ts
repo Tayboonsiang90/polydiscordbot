@@ -81,19 +81,8 @@ export function createOrnnGpuIndexAdapter(config: OrnnGpuIndexConfig): WebsiteAd
     },
     shouldAlertOnChange: shouldAlertOnOrnnGpuValueChange,
     async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
-      const response = await fetchWithTimeout(buildOrnnGpuApiUrl(config.gpuName), {
-        headers: {
-          accept: "application/json",
-          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`ORNN ${config.gpuName} index endpoint returned HTTP ${response.status}`);
-      }
-
       const value = extractLatestFinalizedOrnnGpuValue(
-        await response.json(),
+        await fetchOrnnGpuIndexHistory(config.gpuName),
         config.gpuName,
         integration ? getActiveOrnnGpuMarkets(integration, new Date()) : []
       );
@@ -193,11 +182,46 @@ export function normalizeOrnnGpuMarketSearchEvent(
 }
 
 export function buildOrnnGpuApiUrl(gpuName: string): string {
-  return `${apiBaseUrl}/${encodeURIComponent(toOrnnApiGpuName(gpuName))}/index-history`;
+  return buildOrnnGpuApiUrlForApiName(toOrnnApiGpuName(gpuName));
 }
 
 function toOrnnApiGpuName(gpuName: string): string {
   return gpuName.toUpperCase() === "H100" ? "H100 SXM" : gpuName;
+}
+
+async function fetchOrnnGpuIndexHistory(gpuName: string): Promise<unknown> {
+  const attempted: string[] = [];
+  for (const apiGpuName of getOrnnApiGpuNameCandidates(gpuName)) {
+    const url = buildOrnnGpuApiUrlForApiName(apiGpuName);
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+      }
+    });
+
+    if (response.ok) {
+      return response.json();
+    }
+
+    attempted.push(`${apiGpuName}: HTTP ${response.status} ${await readResponsePreview(response)}`);
+  }
+
+  throw new Error(`ORNN ${gpuName} index endpoint failed (${attempted.join("; ")})`);
+}
+
+function buildOrnnGpuApiUrlForApiName(apiGpuName: string): string {
+  return `${apiBaseUrl}/${encodeURIComponent(apiGpuName)}/index-history`;
+}
+
+function getOrnnApiGpuNameCandidates(gpuName: string): string[] {
+  const preferred = toOrnnApiGpuName(gpuName);
+  return gpuName.toUpperCase() === "H100" ? [preferred, "H100"] : [preferred];
+}
+
+async function readResponsePreview(response: Response): Promise<string> {
+  const text = await response.text().catch(() => "");
+  return text ? `- ${text.replace(/\s+/g, " ").trim().slice(0, 200)}` : "";
 }
 
 export function extractLatestFinalizedOrnnGpuValue(

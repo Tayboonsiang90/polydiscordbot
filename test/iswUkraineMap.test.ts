@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractIswUkraineMapNotice, extractIswUkraineMapValue } from "../src/integrations/iswUkraineMap.js";
+import {
+  extractIswUkraineMapNotice,
+  extractIswUkraineMapNoticeFromStoryData,
+  extractIswUkraineMapValue
+} from "../src/integrations/iswUkraineMap.js";
 
 const sampleHtml = `
   <html>
@@ -26,5 +30,30 @@ describe("ISW Ukraine map adapter", () => {
       "Notice: ISW has completed updating our frontline geometry as of June 24, 2026, 5:00 PM ET."
     );
     expect(extractIswUkraineMapValue(sampleHtml)).toContain("Map status: Assessed Control of Terrain in Ukraine as of June 24, 2026, 5:00 PM ET");
+  });
+
+  it("extracts the notice from ArcGIS StoryMap item data", () => {
+    expect(
+      extractIswUkraineMapNoticeFromStoryData({
+        nodes: {
+          "n-uMjGA4": {
+            type: "text",
+            data: {
+              text: "ISW has completed updating our frontline geometry as of July 20, 2026 4:00 PM ET. The map is finalized for July 20, 2026."
+            }
+          },
+          "n-Otrveq": {
+            type: "text",
+            data: {
+              text: "Assessed Control of Terrain in Ukraine \nas of July 20, 2026, 4:00 PM ET"
+            }
+          }
+        }
+      })
+    ).toEqual({
+      notice: "ISW has completed updating our frontline geometry as of July 20, 2026 4:00 PM ET. The map is finalized for July 20, 2026.",
+      assessedMapText: "Assessed Control of Terrain in Ukraine as of July 20, 2026, 4:00 PM ET",
+      publishedAt: null
+    });
   });
 });
