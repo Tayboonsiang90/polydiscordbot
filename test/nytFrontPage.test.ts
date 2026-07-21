@@ -6,6 +6,7 @@ import {
   findNytStrikeTermBoxes,
   formatNytHistoricalIssueRows,
   getNytFrontPageMarketIssueDates,
+  normalizeNytPolymarketEventUrl,
   nytFrontPageAdapter,
   parseNytFrontPageSettings,
   refreshNytFrontPageSettings,
@@ -236,6 +237,23 @@ describe("NYT front page adapter", () => {
         new Date("2026-05-31T12:00:00.000Z")
       )
     ).toEqual(["2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-05-30", "2026-05-31"]);
+  });
+
+  it("normalizes nested NYT outcome URLs to the parent weekly event URL", () => {
+    const nestedUrl =
+      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-20-july-26-20260718184724813/will-ai-or-artificial-intelligence-be-in-the-headlines-this-week-20260718184512816";
+    expect(normalizeNytPolymarketEventUrl(nestedUrl)).toBe(
+      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-20-july-26-20260718184724813"
+    );
+    expect(getNytFrontPageMarketIssueDates(nestedUrl, new Date("2026-07-21T00:00:00.000Z"))).toEqual([
+      "2026-07-20",
+      "2026-07-21",
+      "2026-07-22",
+      "2026-07-23",
+      "2026-07-24",
+      "2026-07-25",
+      "2026-07-26"
+    ]);
   });
 
   it("formats historical NYT checked dates with weekdays and no-match rows", () => {

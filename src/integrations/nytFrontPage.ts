@@ -161,7 +161,9 @@ export async function refreshNytFrontPageSettings(
 ): Promise<Record<string, unknown> & NytFrontPageSettings> {
   const resolvedQueue = await refreshNytFrontPagePolymarketQueue(integration, now);
   const settings = parseRawSettings(resolvedQueue.settingsJson);
-  const polymarketUrl = resolvedQueue.activeUrl ?? getNytLegacyFallbackPolymarketUrl(integration, resolvedQueue.settingsJson);
+  const polymarketUrl = normalizeNytPolymarketEventUrl(
+    resolvedQueue.activeUrl ?? getNytLegacyFallbackPolymarketUrl(integration, resolvedQueue.settingsJson)
+  );
   if (!polymarketUrl) {
     return clearNytStrikeCache(settings);
   }
@@ -237,18 +239,20 @@ export async function refreshNytFrontPagePolymarketQueue(
 }
 
 function seedNytCurrentPolymarketUrl(integration: Integration, now: Date): Integration {
+  const normalizedPolymarketUrl = normalizeNytPolymarketEventUrl(integration.polymarketUrl) ?? integration.polymarketUrl;
   const settings = parseRawSettings(integration.settingsJson);
   if (
     Array.isArray(settings.polymarketMarkets) ||
-    !integration.polymarketUrl ||
-    !parsePolymarketDateRangeWindow(integration.polymarketUrl, now)
+    !normalizedPolymarketUrl ||
+    !parsePolymarketDateRangeWindow(normalizedPolymarketUrl, now)
   ) {
     return integration;
   }
 
-  const resolved = upsertPolymarketQueueUrl(integration, integration.polymarketUrl, now);
+  const normalizedIntegration = { ...integration, polymarketUrl: normalizedPolymarketUrl };
+  const resolved = upsertPolymarketQueueUrl(normalizedIntegration, normalizedPolymarketUrl, now);
   return {
-    ...integration,
+    ...normalizedIntegration,
     settingsJson: resolved.settingsJson,
     polymarketUrl: resolved.activeUrl
   };
@@ -256,14 +260,14 @@ function seedNytCurrentPolymarketUrl(integration: Integration, now: Date): Integ
 
 function getNytActivePolymarketUrl(settings: NytFrontPageSettings, integration?: Integration): string | undefined {
   if (settings.nytParsedFromUrl) {
-    return settings.nytParsedFromUrl;
+    return normalizeNytPolymarketEventUrl(settings.nytParsedFromUrl);
   }
 
   if (integration && Array.isArray(parseRawSettings(integration.settingsJson).polymarketMarkets)) {
     return undefined;
   }
 
-  return integration?.polymarketUrl ?? defaultPolymarketUrl;
+  return normalizeNytPolymarketEventUrl(integration?.polymarketUrl ?? defaultPolymarketUrl);
 }
 
 function getNytLegacyFallbackPolymarketUrl(integration: Integration, settingsJson: string | null): string | null {
@@ -271,7 +275,7 @@ function getNytLegacyFallbackPolymarketUrl(integration: Integration, settingsJso
     return null;
   }
 
-  return integration.polymarketUrl ?? defaultPolymarketUrl;
+  return normalizeNytPolymarketEventUrl(integration.polymarketUrl ?? defaultPolymarketUrl) ?? null;
 }
 
 function clearNytStrikeCache(settings: Record<string, unknown> & NytFrontPageSettings): Record<string, unknown> & NytFrontPageSettings {
@@ -294,7 +298,8 @@ export function parseNytFrontPageSettings(settingsJson: string | null): NytFront
 }
 
 export async function fetchNytFrontPageGammaStrikeTerms(polymarketUrl: string): Promise<string[]> {
-  const slug = getPolymarketSlug(polymarketUrl);
+  const normalizedUrl = normalizeNytPolymarketEventUrl(polymarketUrl) ?? polymarketUrl;
+  const slug = getPolymarketSlug(normalizedUrl);
   if (!slug) {
     throw new Error(`Could not parse Polymarket slug from ${polymarketUrl}`);
   }
@@ -650,7 +655,8 @@ export function formatNytHistoricalIssueRows(posts: EventMonitorPost[]): string 
 }
 
 export function getNytFrontPageMarketIssueDates(polymarketUrl: string, now = new Date()): string[] {
-  const window = parsePolymarketDateRangeWindow(polymarketUrl, now);
+  const normalizedUrl = normalizeNytPolymarketEventUrl(polymarketUrl) ?? polymarketUrl;
+  const window = parsePolymarketDateRangeWindow(normalizedUrl, now);
   if (!window) {
     return [];
   }
@@ -666,6 +672,20 @@ export function getNytFrontPageMarketIssueDates(polymarketUrl: string, now = new
   }
 
   return dates;
+}
+
+export function normalizeNytPolymarketEventUrl(polymarketUrl: string | null | undefined): string | undefined {
+  if (!isNonEmptyString(polymarketUrl)) {
+    return undefined;
+  }
+
+  const eventPathMatch = polymarketUrl.match(/^https?:\/\/(?:www\.)?polymarket\.com\/event\/([^/?#]+)(?:\/[^?#]+)?(?:[?#].*)?$/i);
+  const eventSlug = eventPathMatch?.[1];
+  if (eventSlug?.startsWith("what-will-the-nyt-front-page-headlines-say-this-week-")) {
+    return `https://polymarket.com/event/${eventSlug}`;
+  }
+
+  return polymarketUrl;
 }
 
 async function fetchNytFrontPagePostForDate(
