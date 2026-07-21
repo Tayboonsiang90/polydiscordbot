@@ -51,6 +51,7 @@ export const iswUkraineMapAdapter: WebsiteAdapter = {
   getPollIntervalMinutes: () => 1,
   getPollIntervalReason: () => "Fixed 1-minute check for ISW StoryMaps frontline geometry notice changes",
   getErrorNoticeWindowMinutes: () => 30,
+  shouldAlertOnChange: iswUkraineMapShouldAlertOnChange,
   async fetchCurrentValue(): Promise<AdapterValue> {
     const value = await fetchIswUkraineMapValue();
     return {
@@ -61,6 +62,14 @@ export const iswUkraineMapAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export function iswUkraineMapShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+  if (!previousValue) {
+    return false;
+  }
+
+  return comparableIswUkraineMapValue(previousValue) !== comparableIswUkraineMapValue(currentValue);
+}
 
 function extractIswUkraineMapNoticeFromTextFields(textFields: string[], publishedAt: string | null): IswUkraineMapNotice {
   const notice = textFields.find((text) => /ISW\b/i.test(text) && /frontline geometry/i.test(text));
@@ -183,6 +192,14 @@ function stripHtml(value: string): string {
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function comparableIswUkraineMapValue(value: string): string {
+  return value
+    .split("\n")
+    .map(normalizeText)
+    .filter((line) => line && !/^Story published at:/i.test(line) && !/^Resolution:/i.test(line))
+    .join("\n");
 }
 
 function escapeRegExp(value: string): string {

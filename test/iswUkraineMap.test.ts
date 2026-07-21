@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   extractIswUkraineMapNotice,
   extractIswUkraineMapNoticeFromStoryData,
-  extractIswUkraineMapValue
+  extractIswUkraineMapValue,
+  iswUkraineMapShouldAlertOnChange
 } from "../src/integrations/iswUkraineMap.js";
 
 const sampleHtml = `
@@ -55,5 +56,35 @@ describe("ISW Ukraine map adapter", () => {
       assessedMapText: "Assessed Control of Terrain in Ukraine as of July 20, 2026, 4:00 PM ET",
       publishedAt: null
     });
+  });
+
+  it("does not alert when only optional StoryMaps publish metadata appears or disappears", () => {
+    const withoutPublishedAt = [
+      "Notice: ISW updates frontline geometry based on available open-source information starting at 9:00 AM Eastern Time.",
+      "Map status: Assessed Control of Terrain in Ukraine as of July 20, 2026, 4:00 PM ET",
+      "Resolution: https://storymaps.arcgis.com/stories/36a7f6a6f5a9448496de641cf64bd375"
+    ].join("\n");
+    const withPublishedAt = [
+      "Notice: ISW updates frontline geometry based on available open-source information starting at 9:00 AM Eastern Time.",
+      "Map status: Assessed Control of Terrain in Ukraine as of July 20, 2026, 4:00 PM ET",
+      "Story published at: Jul 21, 2026, 08:41:57 ET",
+      "Resolution: https://storymaps.arcgis.com/stories/36a7f6a6f5a9448496de641cf64bd375"
+    ].join("\n");
+
+    expect(iswUkraineMapShouldAlertOnChange(withoutPublishedAt, withPublishedAt)).toBe(false);
+    expect(iswUkraineMapShouldAlertOnChange(withPublishedAt, withoutPublishedAt)).toBe(false);
+  });
+
+  it("alerts when the actual notice or map status changes", () => {
+    const previous = [
+      "Notice: ISW updates frontline geometry based on available open-source information starting at 9:00 AM Eastern Time.",
+      "Map status: Assessed Control of Terrain in Ukraine as of July 20, 2026, 4:00 PM ET"
+    ].join("\n");
+    const current = [
+      "Notice: ISW has completed updating our frontline geometry as of July 21, 2026, 5:00 PM ET. The map is finalized for July 21, 2026.",
+      "Map status: Assessed Control of Terrain in Ukraine as of July 21, 2026, 5:00 PM ET"
+    ].join("\n");
+
+    expect(iswUkraineMapShouldAlertOnChange(previous, current)).toBe(true);
   });
 });
