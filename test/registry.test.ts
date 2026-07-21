@@ -42,6 +42,7 @@ const expectedCommandIds = [
   ["claudeavg", "claude-code-commits-average"],
   ["claudecommits", "claude-code-commits"],
   ["claudedown", "claude-downtime"],
+  ["cubaoutage", "cloudflare-cuba-outage"],
   ["cloudflare", "cloudflare-critical-incidents"],
   ["companyrank", "companies-market-cap-top10"],
   ["arb", "cross-platform-arbitrage"],
@@ -212,6 +213,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("trumptruth").getPollIntervalMinutes?.({} as never)).toBe(10 / 60);
     expect(getAdapterByCommandName("claudeavg").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudecommits").supportsStrikes).toBe(true);
+    expect(getAdapterByCommandName("cubaoutage").getPollIntervalMinutes?.({} as never)).toBe(1);
+    expect(getAdapterByCommandName("cubaoutage").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("umaproposals").searchTags).toBeDefined();
     expect(getAdapterByCommandName("umaproposals").updateTagFilters).toBeDefined();
     expect(getAdapterByCommandName("umadispute").updateAddressLabels).toBeDefined();

@@ -29,6 +29,7 @@ import { censusDurableGoodsAdapter } from "./censusDurableGoods.js";
 import { claudeCodeCommitsAdapter } from "./claudeCodeCommits.js";
 import { claudeCodeCommitsAverageAdapter } from "./claudeCodeCommitsAverage.js";
 import { claudeDowntimeAdapter } from "./claudeDowntime.js";
+import { cloudflareCubaOutageAdapter } from "./cloudflareCubaOutage.js";
 import { cloudflareCriticalAdapter } from "./cloudflareCritical.js";
 import { companiesMarketCapAdapter } from "./companiesMarketCap.js";
 import { crossPlatformArbitrageAdapter } from "./crossPlatformArbitrage.js";
@@ -162,6 +163,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [claudeCodeCommitsAverageAdapter.id, claudeCodeCommitsAverageAdapter],
   [claudeCodeCommitsAdapter.id, claudeCodeCommitsAdapter],
   [claudeDowntimeAdapter.id, claudeDowntimeAdapter],
+  [cloudflareCubaOutageAdapter.id, cloudflareCubaOutageAdapter],
   [cloudflareCriticalAdapter.id, cloudflareCriticalAdapter],
   [companiesMarketCapAdapter.id, companiesMarketCapAdapter],
   [crossPlatformArbitrageAdapter.id, crossPlatformArbitrageAdapter],
