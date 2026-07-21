@@ -242,6 +242,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("fluhosp").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never, new Date("2026-05-28T17:00:00.000Z"))).toBe(60);
     expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T17:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("fdic").refreshSettings).toBeDefined();
+    expect(getAdapterByCommandName("fdic").upsertPolymarketMarket).toBeDefined();
     expect(getAdapterByCommandName("measles").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("measles").upsertPolymarketMarket).toBeDefined();
     expect(getAdapterByCommandName("mrbeastgaming").getPollIntervalMinutes?.({} as never)).toBe(1);
