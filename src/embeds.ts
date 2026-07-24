@@ -1177,7 +1177,8 @@ function formatPriorityValue(label: string, url?: string, betmoarUrl?: string): 
 }
 
 function formatMarkdownLink(label: string, url: string): string {
-  return `[${label.replace(/\\/g, "\\\\").replace(/\]/g, "\\]")}](${url})`;
+  const safeLabel = label.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim() || "Link";
+  return `[${safeLabel.replace(/\\/g, "\\\\").replace(/\]/g, "\\]")}](${url})`;
 }
 
 function formatMarketTags(marketTags: string[], matchedTags: string[]): string {
@@ -1219,28 +1220,32 @@ function normalizeTagText(value: string): string {
 
 function formatLinks(integration: Integration): string {
   const polymarketLines = formatPolymarketLinks(integration);
-  return truncateEmbedValue([
-    `Resolution: ${integration.sourceUrl}`,
-    ...polymarketLines
-  ].join("\n"));
+  const resolutionLink = `🔗 ${formatMarkdownLink("Resolution", integration.sourceUrl)}`;
+  if (polymarketLines.length === 0) {
+    return resolutionLink;
+  }
+  if (polymarketLines.length === 1) {
+    return truncateEmbedValue(`${resolutionLink} · ${polymarketLines[0]}`);
+  }
+  return truncateEmbedValue([resolutionLink, ...polymarketLines].join("\n"));
 }
 
 function formatEventLinks(integration: Integration, post: EventMonitorPost): string {
   const polymarketUrl = post.polymarketUrl ?? integration.polymarketUrl;
   return [
-    `Original: ${post.url}`,
-    ...(polymarketUrl ? [`Polymarket: ${polymarketUrl}`] : [])
-  ].join("\n");
+    `🔗 ${formatMarkdownLink("Original", post.url)}`,
+    ...(polymarketUrl ? [formatMarkdownLink("Polymarket", polymarketUrl)] : [])
+  ].join(" · ");
 }
 
 function formatPolymarketLinks(integration: Integration): string[] {
   const markets = extractPolymarketLinkEntries(integration);
   if (markets.length === 0) {
-    return integration.polymarketUrl ? [`Polymarket: ${integration.polymarketUrl}`] : [];
+    return integration.polymarketUrl ? [formatMarkdownLink("Polymarket", integration.polymarketUrl)] : [];
   }
 
   if (markets.length === 1) {
-    return [`Polymarket: ${markets[0].url}`];
+    return [formatMarkdownLink("Polymarket", markets[0].url)];
   }
 
   const groupedMarkets = groupPolymarketLinks(markets);
@@ -1249,10 +1254,13 @@ function formatPolymarketLinks(integration: Integration): string[] {
     if (group.markets.length === 0) {
       continue;
     }
-    lines.push(`${group.label}:`);
-    lines.push(...group.markets.map((market, index) => `${index + 1}. ${market.url}`));
+    lines.push(formatPolymarketLinkGroup(group.label, group.markets));
   }
   return lines;
+}
+
+function formatPolymarketLinkGroup(label: string, markets: PolymarketLinkEntry[]): string {
+  return `${label}: ${markets.map((market) => formatMarkdownLink(market.label, market.url)).join(" · ")}`;
 }
 
 type PolymarketLinkStatus = "active" | "upcoming" | "undated" | "expired";

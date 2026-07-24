@@ -289,7 +289,7 @@ describe("adapter commands", () => {
         expect.objectContaining({
           name: "Links",
           value:
-            "Resolution: https://www.bonbast.com/graph/usd\nPolymarket: https://polymarket.com/event/will-usd-hit-iranian-rials-by-may-31"
+            "🔗 [Resolution](https://www.bonbast.com/graph/usd) · [Polymarket](https://polymarket.com/event/will-usd-hit-iranian-rials-by-may-31)"
         })
       ])
     );
@@ -558,7 +558,7 @@ describe("adapter commands", () => {
     expect(embed.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Quick read", value: expect.stringContaining("**Current total:** 214.0 mm → **227.2 mm**") }),
-        expect.objectContaining({ name: "Links", value: expect.stringContaining("Resolution: https://www.bonbast.com/graph/usd") })
+        expect.objectContaining({ name: "Links", value: expect.stringContaining("[Resolution](https://www.bonbast.com/graph/usd)") })
       ])
     );
     expect(embed.fields?.some((field) => field.name === "Current snapshot")).toBe(false);
@@ -714,7 +714,7 @@ describe("adapter commands", () => {
     expect(embed.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Quick read", value: "_No compact summary available._" }),
-        expect.objectContaining({ name: "Links", value: expect.stringContaining("Polymarket: https://polymarket.com/event/will-usd-hit-iranian-rials-by-may-31") })
+        expect.objectContaining({ name: "Links", value: expect.stringContaining("[Polymarket](https://polymarket.com/event/will-usd-hit-iranian-rials-by-may-31)") })
       ])
     );
     expect(embed.fields?.some((field) => field.name === "Current snapshot")).toBe(false);
@@ -821,14 +821,14 @@ describe("adapter commands", () => {
     }).toJSON();
 
     const links = embed.fields?.find((field) => field.name === "Links")?.value;
-    expect(links).toContain("Resolution: https://www.the-numbers.com/");
+    expect(links).toContain("[Resolution](https://www.the-numbers.com/)");
     expect(links).toContain("Polymarkets:");
     expect(links).toContain("Active window:");
-    expect(links).toContain("1. https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962");
+    expect(links).toContain("](https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962)");
     expect(links).toContain("Upcoming:");
-    expect(links).toContain("1. https://polymarket.com/event/moana-2026-opening-weekend-box-office-20260706135043555");
+    expect(links).toContain("](https://polymarket.com/event/moana-2026-opening-weekend-box-office-20260706135043555)");
     expect(links).toContain("Expired:");
-    expect(links).toContain("1. https://polymarket.com/event/evil-dead-burn-opening-weekend-box-office-20260706163531731");
+    expect(links).toContain("](https://polymarket.com/event/evil-dead-burn-opening-weekend-box-office-20260706163531731)");
     expect(links).not.toContain("Polymarket: https://polymarket.com/event/toy-story-5-4th-weekend-box-office-20260708231025962");
   });
 
@@ -1163,7 +1163,7 @@ describe("adapter commands", () => {
     ).toJSON();
     const links = detailsEmbed.fields?.find((field) => field.name === "Links")?.value;
 
-    expect(links).toBe("Original: https://github.com/UMA-rocks/voting-committees/pull/47#pullrequestreview-22");
+    expect(links).toBe("🔗 [Original](https://github.com/UMA-rocks/voting-committees/pull/47#pullrequestreview-22)");
     expect(links).not.toContain("Polymarket");
   });
 
