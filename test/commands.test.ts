@@ -914,7 +914,7 @@ describe("adapter commands", () => {
     expect(embed.fields).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Polymarket" })]));
   });
 
-  it("builds event alerts with a prominent strike and Truth Social link button", () => {
+  it("builds event alerts with a prominent strike, Truth Social link, and ignore button", () => {
     const post: EventMonitorPost = {
       id: "123",
       type: "Truth",
@@ -937,9 +937,13 @@ describe("adapter commands", () => {
         expect.objectContaining({ name: "Truth Social", value: post.url })
       ])
     );
-    expect(payload.components[0].toJSON()).toMatchObject({
-      components: [expect.objectContaining({ label: "Open Truth", style: 5, url: post.url })]
-    });
+    const components = payload.components[0].toJSON().components ?? [];
+    expect(components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Open Truth", style: 5, url: post.url }),
+        expect.objectContaining({ label: "Ignore strike", style: 4 })
+      ])
+    );
   });
 
   it("formats strike search results with timeframe and source search link", () => {

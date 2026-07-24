@@ -17,17 +17,28 @@ import {
   buildAddressLabelsEmbed,
   buildEventPostDetailsEmbed,
   buildEventPostMessagePayload,
+  buildEventStrikeIgnoreModalCustomId,
+  eventStrikeIgnoreTermsInputId,
   parseAddressLabelButtonCustomId,
   parseAddressLabelModalCustomId,
   parseEventDetailsCustomId,
-  parseEventRefreshCustomId
+  parseEventRefreshCustomId,
+  parseEventStrikeIgnoreButtonCustomId,
+  parseEventStrikeIgnoreModalCustomId
 } from "./embeds.js";
 import type { EventMonitorPost } from "./integrations/types.js";
+import { ignoreTrumpTruthStrikeTerms } from "./integrations/trumpTruth.js";
 
 export async function handleEventDetailsButton(
   interaction: ButtonInteraction,
   database: BotDatabase
 ): Promise<boolean> {
+  const strikeIgnore = parseEventStrikeIgnoreButtonCustomId(interaction.customId);
+  if (strikeIgnore) {
+    await handleStrikeIgnoreButton(interaction, database, strikeIgnore);
+    return true;
+  }
+
   const addressLabel = parseAddressLabelButtonCustomId(interaction.customId);
   if (addressLabel) {
     const labelSupport = getAddressLabelSupport(database, addressLabel.integrationId);
@@ -140,6 +151,12 @@ export async function handleEventDetailsModalSubmit(
   interaction: ModalSubmitInteraction,
   database: BotDatabase
 ): Promise<boolean> {
+  const strikeIgnore = parseEventStrikeIgnoreModalCustomId(interaction.customId);
+  if (strikeIgnore) {
+    await handleStrikeIgnoreModalSubmit(interaction, database, strikeIgnore);
+    return true;
+  }
+
   const parsed = parseAddressLabelModalCustomId(interaction.customId);
   if (!parsed) {
     return false;
@@ -183,6 +200,78 @@ export async function handleEventDetailsModalSubmit(
   return true;
 }
 
+async function handleStrikeIgnoreButton(
+  interaction: ButtonInteraction,
+  database: BotDatabase,
+  parsed: { integrationId: number; eventId: string }
+): Promise<void> {
+  const support = getStrikeIgnoreSupport(database, parsed.integrationId);
+  if (!support.supported) {
+    await interaction.reply({ content: support.message, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const alert = database.getEventAlert(parsed.integrationId, parsed.eventId);
+  if (!alert?.post.matchedTerms.length) {
+    await interaction.reply({
+      content: "This alert has no matched strike terms to ignore.",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  await interaction.showModal(buildStrikeIgnoreModal(parsed, alert.post.matchedTerms));
+}
+
+async function handleStrikeIgnoreModalSubmit(
+  interaction: ModalSubmitInteraction,
+  database: BotDatabase,
+  parsed: { integrationId: number; eventId: string }
+): Promise<void> {
+  const support = getStrikeIgnoreSupport(database, parsed.integrationId);
+  if (!support.supported) {
+    await interaction.reply({ content: support.message, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const terms = parseStrikeIgnoreInput(interaction.fields.getTextInputValue(eventStrikeIgnoreTermsInputId));
+  if (!terms.length) {
+    await interaction.reply({ content: "No strike terms were provided.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const integration = database.getIntegrationById(parsed.integrationId);
+  const result = ignoreTrumpTruthStrikeTerms(integration, terms);
+  const updatedIntegration =
+    result.settingsJson !== integration.settingsJson
+      ? database.setSettingsJson(integration.id, result.settingsJson)
+      : integration;
+
+  const alert = database.getEventAlert(parsed.integrationId, parsed.eventId);
+  if (alert) {
+    const updatedPost = removeIgnoredTermsFromPost(alert.post, result.ignoredTerms);
+    database.updateEventAlertPost(updatedIntegration.id, alert.eventId, updatedPost);
+    const payload = buildEventPostMessagePayload(updatedIntegration, updatedPost);
+    if (interaction.message) {
+      await interaction.message.edit({
+        content: payload.content ?? null,
+        embeds: payload.embeds,
+        components: payload.components,
+        allowedMentions: { parse: [] }
+      });
+    }
+  }
+
+  await interaction.reply({
+    content: [
+      `Ignored false-positive strike term(s): ${result.ignoredTerms.join(", ")}.`,
+      result.activeMarketUrl ? `Scope: ${result.activeMarketUrl}` : "Scope: active Trump Truth market.",
+      "Future Trump Truth checks will not count these terms for this market."
+    ].join("\n"),
+    flags: MessageFlags.Ephemeral
+  });
+}
+
 function getAddressLabelSupport(database: BotDatabase, integrationId: number): { supported: true } | { supported: false; message: string } {
   let integration;
   try {
@@ -202,6 +291,53 @@ function getAddressLabelSupport(database: BotDatabase, integrationId: number): {
   return adapter.updateAddressLabels
     ? { supported: true }
     : { supported: false, message: "This alert does not support address labels." };
+}
+
+function getStrikeIgnoreSupport(database: BotDatabase, integrationId: number): { supported: true } | { supported: false; message: string } {
+  let integration;
+  try {
+    integration = database.getIntegrationById(integrationId);
+  } catch {
+    return { supported: false, message: "This old alert points to an integration row that no longer exists. Use a newer alert button instead." };
+  }
+
+  return integration.adapterId === "trump-truth"
+    ? { supported: true }
+    : { supported: false, message: "This alert does not support strike false-positive ignores." };
+}
+
+function buildStrikeIgnoreModal(parsed: { integrationId: number; eventId: string }, matchedTerms: string[]): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(buildEventStrikeIgnoreModalCustomId(parsed.integrationId, parsed.eventId))
+    .setTitle("Ignore false-positive strike")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId(eventStrikeIgnoreTermsInputId)
+          .setLabel("Terms to ignore for this market")
+          .setPlaceholder("Example: AI, Wait for AI")
+          .setValue(matchedTerms.join(", "))
+          .setMinLength(1)
+          .setMaxLength(300)
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      )
+    );
+}
+
+function parseStrikeIgnoreInput(value: string): string[] {
+  return [...new Set(value.split(/[,;\n]/).map((term) => term.trim()).filter(Boolean))];
+}
+
+function removeIgnoredTermsFromPost(post: EventMonitorPost, ignoredTerms: string[]): EventMonitorPost {
+  const ignored = new Set(ignoredTerms.map((term) => term.trim().toLowerCase()));
+  const matchedTerms = post.matchedTerms.filter((term) => !ignored.has(term.trim().toLowerCase()));
+  return {
+    ...post,
+    alertTitle: matchedTerms.length ? post.alertTitle : "Trump Truth Social - New post",
+    matchedTerms,
+    strikeTerms: post.strikeTerms.filter((term) => !ignored.has(term.trim().toLowerCase()))
+  };
 }
 
 function buildAddressLabelModal(parsed: { integrationId: number; role: "proposer" | "disputer"; address: string }): ModalBuilder {

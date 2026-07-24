@@ -413,6 +413,7 @@ Trump Truth also supports:
 
 The `strikes` command force-refreshes Gamma-derived strike terms and then displays the currently active unresolved terms.
 The Trump Truth `search` command refreshes settings, searches the Trump Truth archive for a word or phrase inside the active weekly market's ET timeframe, and returns matching posts plus the source search URL.
+Trump Truth strike alerts include an `Ignore strike` button for false positives. The button opens a small term list modal, stores the ignored term on the active weekly market in `settingsJson`, edits the original alert to remove the strike state, and excludes that term from future matching for that market only.
 
 UMA Proposal Alerts also supports:
 
@@ -544,7 +545,7 @@ Old per-integration alert roles from before the category-role model are not reus
 - Elon X uses XCancel/Nitter-style public HTML pages such as `https://xcancel.com/elonmusk`, `https://nitter.kareem.one/elonmusk`, and `/elonmusk/with_replies` because direct X API polling requires paid credentials. It parses own posts, replies, quote-post text, repost labels, timestamps, and still-image links; quoted-post and repost text do not count for text strikes, and reposts are suppressed entirely from notifications. Set `ELON_X_NITTER_BASE_URLS` to swap or add public frontends if XCancel blocks the Pi; set `ELON_X_NITTER_FEEDS` to add RSS fallback URLs when an HTML frontend is blocked.
 - Trump Schedule monitors Roll Call's Factba.se calendar for today's ET public schedule, stores a compact daily digest with lid/travel/press/remarks flags, and polls every 15 minutes during 7:00 AM-10:00 PM ET.
 - Trump Truth tries the direct Truth Social statuses API only when `TRUTH_SOCIAL_COOKIE` is configured, using the optional `TRUTH_SOCIAL_USER_AGENT` from the same Pi/VPN browser session. If direct Truth Social is blocked or unconfigured, it falls back to the reachable `https://www.trumpstruth.org/feed` and `https://www.trumpstruth.org/` archive sources; alerts include original Truth Social URLs and an Open Truth link button for verification.
-- Trump Truth parses weekly Polymarket strike terms into `settingsJson`, stores the latest seen Truth Social post ID in `lastValue`, checks archive image descriptions, alt text, and basic OCR output for image-only strike review, auto-discovers upcoming weekly markets, supports active-window archive search with `/trumptruth search`, posts non-strike feed updates without a role ping, and only role-tags strike hits.
+- Trump Truth parses weekly Polymarket strike terms into `settingsJson`, stores the latest seen Truth Social post ID in `lastValue`, checks archive image descriptions, alt text, and basic OCR output for image-only strike review, auto-discovers upcoming weekly markets, supports active-window archive search with `/trumptruth search`, supports per-market false-positive strike ignores from the alert button, posts non-strike feed updates without a role ping, and only role-tags strike hits.
 - TSA passengers parses the date range from the active Polymarket URL slug, sums official TSA daily checkpoint throughput rows for that range, and auto-discovers upcoming weekly TSA markets into the shared queue.
 - Generic dated Polymarket queueing lives in `src/polymarketQueue.ts`; prefer it over adapter-specific queue fields unless the adapter needs extra parsed market state.
 

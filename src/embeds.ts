@@ -35,6 +35,8 @@ const warningColor = 0xf1c40f;
 const errorColor = 0xe74c3c;
 const eventDetailsCustomIdPrefix = "event-details:";
 const eventRefreshCustomIdPrefix = "event-refresh:";
+const eventStrikeIgnoreButtonCustomIdPrefix = "event-strike-ignore:";
+const eventStrikeIgnoreModalCustomIdPrefix = "event-strike-ignore-modal:";
 const addressLabelButtonCustomIdPrefix = "address-label:";
 const addressLabelModalCustomIdPrefix = "address-label-modal:";
 const addressPattern = /^0x[0-9a-fA-F]{40}$/;
@@ -62,6 +64,7 @@ const arenaAiAdapterIds = new Set([
   "arena-ai-chinese-company"
 ]);
 export const addressLabelModalNameInputId = "address-label-name";
+export const eventStrikeIgnoreTermsInputId = "event-strike-ignore-terms";
 export type AddressLabelButtonRole = "proposer" | "disputer";
 
 export type StatusPollingInfo = {
@@ -662,6 +665,18 @@ export function parseEventRefreshCustomId(customId: string): { integrationId: nu
   return Number.isSafeInteger(integrationId) && integrationId > 0 && eventId ? { integrationId, eventId } : null;
 }
 
+export function parseEventStrikeIgnoreButtonCustomId(customId: string): { integrationId: number; eventId: string } | null {
+  return parseEventActionCustomId(customId, eventStrikeIgnoreButtonCustomIdPrefix);
+}
+
+export function parseEventStrikeIgnoreModalCustomId(customId: string): { integrationId: number; eventId: string } | null {
+  return parseEventActionCustomId(customId, eventStrikeIgnoreModalCustomIdPrefix);
+}
+
+export function buildEventStrikeIgnoreModalCustomId(integrationId: number, eventId: string): string {
+  return `${eventStrikeIgnoreModalCustomIdPrefix}${integrationId}:${eventId}`;
+}
+
 export function parseAddressLabelButtonCustomId(
   customId: string
 ): { integrationId: number; role: AddressLabelButtonRole; address: string } | null {
@@ -898,6 +913,7 @@ function buildEventPostComponents(integration: Integration, post: EventMonitorPo
   return [
     buildEventSourceLinkRow(post.url, post.buttonLabel, [
       buildEventDetailsButton(integration, post),
+      buildEventStrikeIgnoreButton(integration, post),
       ...buildEventAddressLabelButtons(integration, post)
     ])
   ];
@@ -934,6 +950,22 @@ function buildEventDetailsButton(integration: Integration, post: EventMonitorPos
     .setCustomId(customId)
     .setLabel(isRefreshable ? "Refresh data" : "Show more")
     .setStyle(ButtonStyle.Secondary);
+}
+
+function buildEventStrikeIgnoreButton(integration: Integration, post: EventMonitorPost): ButtonBuilder | null {
+  if (integration.adapterId !== "trump-truth" || !post.matchedTerms.length) {
+    return null;
+  }
+
+  const customId = `${eventStrikeIgnoreButtonCustomIdPrefix}${integration.id}:${post.id}`;
+  if (customId.length > 100) {
+    return null;
+  }
+
+  return new ButtonBuilder()
+    .setCustomId(customId)
+    .setLabel("Ignore strike")
+    .setStyle(ButtonStyle.Danger);
 }
 
 function isRefreshableUmaAddressPost(integration: Integration, post: EventMonitorPost): boolean {
@@ -977,6 +1009,22 @@ function buildAddressLabelButton(integration: Integration, role: AddressLabelBut
     .setCustomId(customId)
     .setLabel(role === "proposer" ? "Label proposer" : "Label disputer")
     .setStyle(ButtonStyle.Secondary);
+}
+
+function parseEventActionCustomId(customId: string, prefix: string): { integrationId: number; eventId: string } | null {
+  if (!customId.startsWith(prefix)) {
+    return null;
+  }
+
+  const payload = customId.slice(prefix.length);
+  const separatorIndex = payload.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex === payload.length - 1) {
+    return null;
+  }
+
+  const integrationId = Number(payload.slice(0, separatorIndex));
+  const eventId = payload.slice(separatorIndex + 1);
+  return Number.isSafeInteger(integrationId) && integrationId > 0 && eventId ? { integrationId, eventId } : null;
 }
 
 function parseAddressLabelCustomId(

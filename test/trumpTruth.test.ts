@@ -20,6 +20,7 @@ import {
   parseTrumpTruthSettings,
   refreshTrumpTruthSettings,
   isPostInTrumpTruthMarketWindow,
+  ignoreTrumpTruthStrikeTerms,
   upsertTrumpTruthPolymarketMarket
 } from "../src/integrations/trumpTruth.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -215,6 +216,50 @@ describe("Trump Truth strike parser", () => {
     expect(settings.strikeTerms).toEqual(["Trust"]);
     expect(settings.parsedFromUrl).toBe("https://polymarket.com/event/what-will-trump-post-this-week-may-11-may-17");
     expect(getActiveTrumpTruthMarket(settings.markets ?? [], new Date("2026-05-06T12:00:00.000Z"))?.activeStrikeTerms).toEqual(["King"]);
+  });
+
+  it("stores false-positive ignored terms on the active weekly market", () => {
+    const result = ignoreTrumpTruthStrikeTerms(
+      {
+        settingsJson: JSON.stringify({
+          markets: [
+            {
+              url: "https://polymarket.com/event/what-will-trump-post-this-week-may-4-may-10",
+              slug: "what-will-trump-post-this-week-may-4-may-10",
+              startAt: "2026-05-04T04:00:00.000Z",
+              endAt: "2026-05-11T03:59:00.000Z",
+              strikeTerms: ["AI", "King"],
+              resolvedTerms: [],
+              activeStrikeTerms: ["AI", "King"]
+            }
+          ]
+        }),
+        polymarketUrl: "https://polymarket.com/event/what-will-trump-post-this-week-may-4-may-10"
+      } as Integration,
+      ["ai"],
+      new Date("2026-05-06T12:00:00.000Z")
+    );
+    const settings = parseTrumpTruthSettings(result.settingsJson, new Date("2026-05-06T12:00:00.000Z"));
+
+    expect(result.ignoredTerms).toEqual(["AI"]);
+    expect(settings.ignoredStrikeTerms).toEqual(["AI"]);
+    expect(settings.strikeTerms).toEqual(["King"]);
+    expect(settings.markets?.[0]).toMatchObject({
+      ignoredStrikeTerms: ["AI"],
+      activeStrikeTerms: ["King"]
+    });
+    expect(normalizeTrumpTruthArchiveItem(
+      {
+        id: "123",
+        archiveUrl: "https://www.trumpstruth.org/statuses/1",
+        originalUrl: "https://truthsocial.com/@realDonaldTrump/123",
+        originalId: "123",
+        postedAt: new Date("2026-05-06T03:10:26.000Z"),
+        html: "<p>Wait for AI</p>",
+        title: "Post"
+      },
+      settings.strikeTerms ?? []
+    ).matchedTerms).toEqual([]);
   });
 
   it("upserts new weekly markets while preserving older stored markets", async () => {

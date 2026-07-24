@@ -29,6 +29,7 @@ const ocrTextCache = new Map<string, string>();
 
 export type TrumpTruthSettings = {
   strikeTerms?: string[];
+  ignoredStrikeTerms?: string[];
   parsedFromUrl?: string;
   lastParsedAt?: string;
   lastDiscoveryAt?: string;
@@ -43,6 +44,7 @@ export type TrumpTruthMarket = {
   strikeTerms: string[];
   resolvedTerms: string[];
   activeStrikeTerms: string[];
+  ignoredStrikeTerms?: string[];
   lastParsedAt?: string;
 };
 
@@ -237,6 +239,7 @@ export function parseTrumpTruthSettings(settingsJson: string | null, now = new D
 
     return {
       strikeTerms: Array.isArray(settings.strikeTerms) ? settings.strikeTerms.filter(isNonEmptyString) : undefined,
+      ignoredStrikeTerms: Array.isArray(settings.ignoredStrikeTerms) ? settings.ignoredStrikeTerms.filter(isNonEmptyString) : undefined,
       parsedFromUrl: typeof settings.parsedFromUrl === "string" ? settings.parsedFromUrl : undefined,
       lastParsedAt: typeof settings.lastParsedAt === "string" ? settings.lastParsedAt : undefined,
       lastDiscoveryAt: typeof settings.lastDiscoveryAt === "string" ? settings.lastDiscoveryAt : undefined
@@ -254,6 +257,39 @@ export async function fetchPolymarketStrikeTerms(url: string): Promise<string[]>
 
   const html = await response.text();
   return extractPolymarketStrikeTerms(html);
+}
+
+export function ignoreTrumpTruthStrikeTerms(
+  integration: Integration,
+  terms: string[],
+  now = new Date()
+): { settingsJson: string; ignoredTerms: string[]; activeMarketUrl: string | undefined } {
+  const cleanedTerms = sortTerms(terms.map((term) => term.trim()).filter(isNonEmptyString));
+  if (!cleanedTerms.length) {
+    throw new Error("No strike terms provided to ignore.");
+  }
+
+  const settings = ensureTrumpTruthMarkets(
+    parseTrumpTruthSettings(integration.settingsJson, now),
+    integration.polymarketUrl ?? defaultPolymarketUrl,
+    now
+  );
+  const activeMarket = getActiveTrumpTruthMarket(settings.markets ?? [], now);
+  if (!activeMarket) {
+    throw new Error("No active Trump Truth market is configured for strike ignores.");
+  }
+
+  const canonicalTerms = canonicalizeStrikeTerms(cleanedTerms, activeMarket.strikeTerms);
+  const markets = (settings.markets ?? []).map((market) =>
+    market.slug === activeMarket.slug
+      ? applyIgnoredTermsToMarket(market, uniqueTerms([...(market.ignoredStrikeTerms ?? []), ...canonicalTerms]))
+      : market
+  );
+  return {
+    settingsJson: JSON.stringify(withActiveTrumpTruthMarket({ ...settings, markets }, now)),
+    ignoredTerms: canonicalTerms,
+    activeMarketUrl: activeMarket.url
+  };
 }
 
 async function fetchTrumpTruthGammaMarket(url: string, now: Date): Promise<TrumpTruthMarket> {
@@ -411,6 +447,7 @@ function ensureTrumpTruthMarkets(settings: TrumpTruthSettings, fallbackUrl: stri
         strikeTerms: settings.strikeTerms ?? [],
         resolvedTerms: [],
         activeStrikeTerms: settings.strikeTerms ?? [],
+        ignoredStrikeTerms: settings.ignoredStrikeTerms ?? [],
         lastParsedAt: settings.lastParsedAt
       }
     ]
@@ -422,6 +459,7 @@ function withActiveTrumpTruthMarket(settings: TrumpTruthSettings, now: Date): Tr
   return {
     ...settings,
     strikeTerms: activeMarket?.activeStrikeTerms ?? settings.strikeTerms,
+    ignoredStrikeTerms: activeMarket?.ignoredStrikeTerms ?? settings.ignoredStrikeTerms,
     parsedFromUrl: activeMarket?.url ?? settings.parsedFromUrl,
     lastParsedAt: activeMarket?.lastParsedAt ?? settings.lastParsedAt
   };
@@ -430,10 +468,12 @@ function withActiveTrumpTruthMarket(settings: TrumpTruthSettings, now: Date): Tr
 function upsertMarket(settings: TrumpTruthSettings, market: TrumpTruthMarket, now: Date): TrumpTruthSettings {
   const markets = [...(settings.markets ?? [])];
   const existingIndex = markets.findIndex((candidate) => candidate.slug === market.slug);
+  const ignoredTerms = existingIndex === -1 ? [] : markets[existingIndex].ignoredStrikeTerms ?? [];
+  const marketWithIgnores = applyIgnoredTermsToMarket({ ...market, ignoredStrikeTerms: ignoredTerms }, ignoredTerms);
   if (existingIndex === -1) {
-    markets.push(market);
+    markets.push(marketWithIgnores);
   } else {
-    markets[existingIndex] = market;
+    markets[existingIndex] = marketWithIgnores;
   }
 
   markets.sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime());
@@ -455,7 +495,7 @@ function normalizeStoredMarket(value: unknown): TrumpTruthMarket | null {
     return null;
   }
 
-  return {
+  const normalized = {
     url: market.url,
     slug: market.slug,
     startAt: market.startAt,
@@ -463,8 +503,35 @@ function normalizeStoredMarket(value: unknown): TrumpTruthMarket | null {
     strikeTerms: Array.isArray(market.strikeTerms) ? sortTerms(market.strikeTerms.filter(isNonEmptyString)) : [],
     resolvedTerms: Array.isArray(market.resolvedTerms) ? sortTerms(market.resolvedTerms.filter(isNonEmptyString)) : [],
     activeStrikeTerms: Array.isArray(market.activeStrikeTerms) ? sortTerms(market.activeStrikeTerms.filter(isNonEmptyString)) : [],
+    ignoredStrikeTerms: Array.isArray(market.ignoredStrikeTerms) ? sortTerms(market.ignoredStrikeTerms.filter(isNonEmptyString)) : [],
     lastParsedAt: typeof market.lastParsedAt === "string" ? market.lastParsedAt : undefined
   };
+  return applyIgnoredTermsToMarket(normalized, normalized.ignoredStrikeTerms);
+}
+
+function applyIgnoredTermsToMarket(market: TrumpTruthMarket, ignoredTerms: string[] = []): TrumpTruthMarket {
+  const ignoredStrikeTerms = canonicalizeStrikeTerms(ignoredTerms, market.strikeTerms);
+  return {
+    ...market,
+    ignoredStrikeTerms,
+    activeStrikeTerms: sortTerms(market.activeStrikeTerms.filter((term) => !containsTerm(ignoredStrikeTerms, term)))
+  };
+}
+
+function canonicalizeStrikeTerms(terms: string[], canonicalTerms: string[]): string[] {
+  return uniqueTerms(
+    terms
+      .map((term) => canonicalTerms.find((candidate) => termsEqual(candidate, term)) ?? term.trim())
+      .filter(isNonEmptyString)
+  );
+}
+
+function containsTerm(terms: string[], term: string): boolean {
+  return terms.some((candidate) => termsEqual(candidate, term));
+}
+
+function termsEqual(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 function shouldRefreshMarket(market: TrumpTruthMarket, now: Date): boolean {
@@ -1422,6 +1489,22 @@ function padNumber(value: number): string {
 
 function sortTerms(terms: string[]): string[] {
   return [...new Set(terms)].sort((left, right) => left.localeCompare(right));
+}
+
+function uniqueTerms(terms: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const term of terms.map((value) => value.trim()).filter(isNonEmptyString)) {
+    const key = term.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(term);
+  }
+
+  return unique.sort((left, right) => left.localeCompare(right));
 }
 
 function isNonEmptyString(value: unknown): value is string {
