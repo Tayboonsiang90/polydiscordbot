@@ -180,7 +180,39 @@ function extractRateLine(value: string | null): string | null {
 
 function isTransientPbocNetworkError(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes("eai_again");
+  const codes = collectErrorCodes(error).map((code) => code.toLowerCase());
+  const transientCodes = new Set([
+    "eai_again",
+    "econnaborted",
+    "econnrefused",
+    "econnreset",
+    "ehostunreach",
+    "etimedout",
+    "und_err_connect_timeout"
+  ]);
+
+  return (
+    codes.some((code) => transientCodes.has(code)) ||
+    message.includes("eai_again") ||
+    message.includes("connect timeout") ||
+    message.includes("connection reset") ||
+    message.includes("econnaborted") ||
+    message.includes("econnrefused") ||
+    message.includes("ehostunreach") ||
+    message.includes("etimedout") ||
+    message.includes("timed out") ||
+    message.includes("und_err_connect_timeout")
+  );
+}
+
+function collectErrorCodes(error: unknown): string[] {
+  if (!error || typeof error !== "object") {
+    return [];
+  }
+
+  const record = error as { code?: unknown; cause?: unknown };
+  const codes = typeof record.code === "string" ? [record.code] : [];
+  return [...codes, ...collectErrorCodes(record.cause)];
 }
 
 function delay(ms: number): Promise<void> {

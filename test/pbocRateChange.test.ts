@@ -95,4 +95,26 @@ describe("PBoC rate change adapter", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
+
+  it("adds a PBoC-level retry after temporary connect timeouts", async () => {
+    vi.useFakeTimers();
+    const timeoutError = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("Connect Timeout Error"), { code: "UND_ERR_CONNECT_TIMEOUT" })
+    });
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(timeoutError)
+      .mockRejectedValueOnce(timeoutError)
+      .mockRejectedValueOnce(timeoutError)
+      .mockResolvedValueOnce(new Response("ok"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const assertion = expect(fetchPbocUrl("https://www.pbc.gov.cn/en/3688110/3688181/index.html", [0])).resolves.toMatchObject({
+      ok: true
+    });
+    await vi.runAllTimersAsync();
+    await assertion;
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
 });
