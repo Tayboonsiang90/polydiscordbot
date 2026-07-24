@@ -106,6 +106,7 @@ const expectedCommandIds = [
   ["powerball", "powerball-jackpot"],
   ["pumpgo", "pump-fun-go"],
   ["mentions", "polymarket-mention-markets"],
+  ["mentionsschedule", "polymarket-mention-schedule"],
   ["umaclarifications", "polymarket-clarifications"],
   ["umadispute", "polymarket-disputes"],
   ["umaproposals", "polymarket-proposals"],

@@ -1444,6 +1444,8 @@ function formatAlertQuickReadFields(
         ? formatPowerballJackpotQuickRead(currentValue, previousValue)
       : integration.adapterId === "silver-trump-approval"
         ? formatSilverTrumpApprovalQuickRead(currentValue, previousValue)
+      : integration.adapterId === "polymarket-mention-schedule"
+        ? formatPolymarketMentionScheduleQuickRead(currentValue)
       : formatGenericQuickRead(previousValue, currentValue);
 
   return value ? [{ name: "Quick read", value, inline: false }] : [];
@@ -1686,6 +1688,29 @@ function formatNetflixTop10QuickRead(currentValue: string): string {
   ];
 
   return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatPolymarketMentionScheduleQuickRead(currentValue: string): string {
+  const targetDate = extractValueLine(currentValue, "Tomorrow SGT date");
+  const marketCount = extractValueLine(currentValue, "Markets scheduled");
+  const scheduleRows = extractScheduleRows(currentValue).slice(0, 8);
+  const lines = [
+    ...(targetDate ? [`**Tomorrow SGT date:** ${targetDate}`] : []),
+    ...(marketCount ? [`**Markets scheduled:** ${marketCount}`] : []),
+    ...(scheduleRows.length ? ["**Schedule:**", ...scheduleRows] : ["**Schedule:** none"])
+  ];
+
+  return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function extractScheduleRows(value: string): string[] {
+  const lines = value.split(/\r?\n/).map((line) => line.trim());
+  const startIndex = lines.findIndex((line) => line === "Schedule:");
+  if (startIndex === -1) {
+    return [];
+  }
+
+  return lines.slice(startIndex + 1).filter((line) => /^\d+\.\s+/.test(line));
 }
 
 function diffSilverApprovalTrackedRows(previousValue: string | null, currentValue: string): string[] {

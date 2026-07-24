@@ -83,6 +83,7 @@ import { parclNycHomeValueAdapter } from "./parclNycHomeValue.js";
 import { pbocRateChangeAdapter } from "./pbocRateChange.js";
 import { polymarketClarificationsAdapter } from "./polymarketClarifications.js";
 import { polymarketDisputesAdapter } from "./polymarketDisputes.js";
+import { polymarketMentionScheduleAdapter } from "./polymarketMentionSchedule.js";
 import { polymarketMentionMarketsAdapter } from "./polymarketNewMarkets.js";
 import { polymarketProposalsAdapter } from "./polymarketProposals.js";
 import { polymarketResolvableAdapter } from "./polymarketResolvable.js";
@@ -216,6 +217,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [pbocRateChangeAdapter.id, pbocRateChangeAdapter],
   [polymarketClarificationsAdapter.id, polymarketClarificationsAdapter],
   [polymarketDisputesAdapter.id, polymarketDisputesAdapter],
+  [polymarketMentionScheduleAdapter.id, polymarketMentionScheduleAdapter],
   [polymarketMentionMarketsAdapter.id, polymarketMentionMarketsAdapter],
   [polymarketProposalsAdapter.id, polymarketProposalsAdapter],
   [polymarketResolvableAdapter.id, polymarketResolvableAdapter],
