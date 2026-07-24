@@ -325,7 +325,10 @@ function hasSilverApprovalTrackedRowChange(previousValue: string | null, current
     return false;
   }
 
-  return [...currentRows.entries()].some(([label, current]) => previousRows.has(label) && previousRows.get(label) !== current);
+  return [...currentRows.entries()].some(([label, current]) => {
+    const previous = previousRows.get(label);
+    return Boolean(previous && extractTrackedApprovalComparable(previous) !== extractTrackedApprovalComparable(current));
+  });
 }
 
 function extractSilverApprovalTrackedRows(value: string | null): Map<string, string> {
@@ -349,6 +352,11 @@ function extractSilverApprovalTrackedRows(value: string | null): Map<string, str
   }
 
   return rows;
+}
+
+function extractTrackedApprovalComparable(row: string): string {
+  const match = row.match(/=\s*(-?\d+(?:\.\d+)?)%\s+approval/i);
+  return match ? `${Number.parseFloat(match[1]).toFixed(1)}% approval` : row.trim();
 }
 
 function extractSilverApprovalAlertStates(value: string | null): string[] {

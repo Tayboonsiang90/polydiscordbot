@@ -134,6 +134,31 @@ describe("Silver Bulletin Trump approval adapter", () => {
     expect(silverTrumpApprovalShouldAlertOnChange(current, current)).toBe(false);
   });
 
+  it("does not alert when only tracked-row disapproval jitters", () => {
+    const previous = [
+      "Metric: Silver Bulletin Trump approval markets",
+      "Active markets: 2",
+      "",
+      "Tracked market 1: Trump approval Up or Down this week?",
+      "Metric: Silver Bulletin Trump approval Up/Down",
+      "Reference dates: 2026-07-17 vs 2026-07-24",
+      "Status: tentative; waiting for a data point after 2026-07-24 to finalize",
+      "Result: Tentative Down",
+      "Tracked approval rows: First 2026-07-17: 2026-07-17 = 39.6% approval, 57.0% disapproval | Second 2026-07-24: 2026-07-24 = 38.8% approval, 58.1% disapproval",
+      "",
+      "Tracked market 2: Trump approval rating on July 24?",
+      "Metric: Silver Bulletin Trump approval rating",
+      "Target date: 2026-07-24",
+      "Target status: published; waiting for next data point to finalize",
+      "Approval: 38.8%",
+      "Disapproval: 58.2%",
+      "Tracked approval rows: Target 2026-07-24: 2026-07-24 = 38.8% approval, 58.1% disapproval"
+    ].join("\n");
+    const current = previous.replace(/58\.1% disapproval/g, "58.2% disapproval");
+
+    expect(silverTrumpApprovalShouldAlertOnChange(previous, current)).toBe(false);
+  });
+
   it("does not alert once just because old stored values lack tracked rows", () => {
     const previous = [
       "Metric: Silver Bulletin Trump approval rating",

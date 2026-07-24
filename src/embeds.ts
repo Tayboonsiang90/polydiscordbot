@@ -1778,7 +1778,7 @@ function diffSilverApprovalTrackedRows(previousValue: string | null, currentValu
 
   return [...currentRows.entries()].flatMap(([label, current]) => {
     const previous = previousRows.get(label);
-    if (!previous || previous === current) {
+    if (!previous || extractSilverApprovalComparable(previous) === extractSilverApprovalComparable(current)) {
       return [];
     }
 
@@ -1807,6 +1807,11 @@ function extractSilverApprovalTrackedRows(value: string | null): Map<string, str
   }
 
   return rows;
+}
+
+function extractSilverApprovalComparable(row: string): string {
+  const match = row.match(/=\s*(-?\d+(?:\.\d+)?)%\s+approval/i);
+  return match ? `${Number.parseFloat(match[1]).toFixed(1)}% approval` : row.trim();
 }
 
 function formatUfoFilesQuickRead(currentValue: string, previousValue: string | null): string {

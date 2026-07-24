@@ -507,6 +507,32 @@ describe("adapter commands", () => {
     expect(quickRead).toContain("**Approval:** 40.2%");
   });
 
+  it("does not show Silver approval revisions for disapproval-only row changes", () => {
+    const previousValue = [
+      "Metric: Silver Bulletin Trump approval rating",
+      "Market: Trump approval rating on July 24?",
+      "Target date: 2026-07-24",
+      "Target status: published; waiting for next data point to finalize",
+      "Approval: 38.8%",
+      "Disapproval: 58.1%",
+      "Tracked approval rows: Target 2026-07-24: 2026-07-24 = 38.8% approval, 58.1% disapproval"
+    ].join("\n");
+    const currentValue = previousValue
+      .replace("Disapproval: 58.1%", "Disapproval: 58.2%")
+      .replace("58.1% disapproval", "58.2% disapproval");
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "silver-trump-approval", displayName: "Silver Trump Approval" },
+      previousValue,
+      previousCheckedAt: "2026-07-24T16:00:00.000Z",
+      currentValue,
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).not.toContain("Approval revisions");
+  });
+
   it("puts Full Lid before-cutoff status first in alert embeds", () => {
     const currentValue = [
       "Date ET: 2026-07-13",
