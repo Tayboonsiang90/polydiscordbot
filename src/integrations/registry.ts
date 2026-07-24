@@ -15,6 +15,7 @@ import { bankOfIsraelDecisionAdapter } from "./bankOfIsraelDecision.js";
 import { basedRevenueAdapter } from "./basedRevenue.js";
 import { beaCurrentReleasesAdapter } from "./beaCurrentReleases.js";
 import { biJisdorAdapter } from "./biJisdor.js";
+import { bigBrotherEpisodesAdapter } from "./bigBrotherEpisodes.js";
 import { billboard200Adapter } from "./billboard200.js";
 import { billboardHot100Adapter } from "./billboardHot100.js";
 import { blsCpiReleasesAdapter } from "./blsCpiReleases.js";
@@ -150,6 +151,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [basedRevenueAdapter.id, basedRevenueAdapter],
   [beaCurrentReleasesAdapter.id, beaCurrentReleasesAdapter],
   [biJisdorAdapter.id, biJisdorAdapter],
+  [bigBrotherEpisodesAdapter.id, bigBrotherEpisodesAdapter],
   [billboard200Adapter.id, billboard200Adapter],
   [billboardHot100Adapter.id, billboardHot100Adapter],
   [blsCpiReleasesAdapter.id, blsCpiReleasesAdapter],
