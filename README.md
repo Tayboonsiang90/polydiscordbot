@@ -112,7 +112,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `treasury-mts-deficit` | `/monitor` | `#treasurymts` | `Treasury MTS Alerts` | `🧾` | Monitors FiscalData Monthly Treasury Statement table 1 current-month deficit/surplus rows and alerts when a new report month or amount appears. |
 | `trump-getty-photos` | `/monitor` | `#trumpgetty` | `Trump Getty Alerts` | `📸` | Monitors Getty tagged editorial Donald Trump photo coverage by day using the public Getty search page reader fallback. |
 | `trump-schedule` | `/monitor` | `#trumpschedule` | `Trump Schedule Alerts` | `🗓️` | General Roll Call Factbase daily Trump schedule feed with compact change alerts and no default Polymarket URL. |
-| `trump-truth` | `/monitor` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Fast-polls Trump's Truth archive every 10 seconds, races RSS plus homepage cards, details only newly relevant @realDonaldTrump posts, and parses weekly Polymarket strike terms. |
+| `trump-truth` | `/monitor` | `#trumptruth` | `Trump Truth Alerts` | `📰` | Fast-polls Trump posts every 10 seconds, tries direct Truth Social when a browser-session cookie is configured, falls back to Trump's Truth archive RSS/homepage, and parses weekly Polymarket strike terms. |
 | `tsa-passengers` | `/monitor` | `#tsa` | `TSA Passenger Alerts` | `✈️` | Sums TSA daily checkpoint throughputs for the date range parsed from the Polymarket URL. |
 | `umich-consumer-sentiment` | `/monitor` | `#umichsentiment` | `UMich Sentiment Alerts` | `📊` | Monitors UMich Surveys of Consumers final monthly Index of Consumer Sentiment, auto-discovers monthly markets, and polls fast around the scheduled release. |
 | `ufo-files` | `/monitor` | `#ufofiles` | `UFO Files Alerts` | `🛸` | Monitors official U.S. government UFO/UAP file inventories across NARA, AARO, and FBI sources for added or changed file links. |
@@ -238,13 +238,15 @@ No archived integrations currently.
    WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://nitter.net/WhiteHouse/rss,https://xcancel.com/WhiteHouse/rss
    ELON_X_NITTER_BASE_URLS=https://xcancel.com,https://nitter.kareem.one
    ELON_X_NITTER_FEEDS=https://xcancel.com/elonmusk/rss
+   TRUTH_SOCIAL_COOKIE=...
+   TRUTH_SOCIAL_USER_AGENT=...
    HENDON_MOB_COOKIE=...
    HENDON_MOB_USER_AGENT=...
    MARINETRAFFIC_HORMUZ_ALPHA_URL=...
    MARINETRAFFIC_BAB_ALPHA_URL=...
    ```
 
-   `DUNE_API_KEY` is required for `#basedrevenue` and `#ethgasmonthly`. `CLOUDFLARE_RADAR_API_TOKEN` is required for `#cubaoutage` because the public Radar page is Cloudflare-protected from direct bot fetches; create a Cloudflare API token with Radar read access. `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback. `HENDON_MOB_COOKIE` and `HENDON_MOB_USER_AGENT` are optional for `#pokermoney`; use them only when The Hendon Mob blocks direct bot fetches, and copy them from a normal browser session on the same Pi/VPN egress IP.
+   `DUNE_API_KEY` is required for `#basedrevenue` and `#ethgasmonthly`. `CLOUDFLARE_RADAR_API_TOKEN` is required for `#cubaoutage` because the public Radar page is Cloudflare-protected from direct bot fetches; create a Cloudflare API token with Radar read access. `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback. `TRUTH_SOCIAL_COOKIE` and `TRUTH_SOCIAL_USER_AGENT` are optional for `#trumptruth`; use them only when direct Truth Social works in a normal browser on the same Pi/VPN egress IP. `HENDON_MOB_COOKIE` and `HENDON_MOB_USER_AGENT` are optional for `#pokermoney`; use them only when The Hendon Mob blocks direct bot fetches, and copy them from a normal browser session on the same Pi/VPN egress IP.
 
 3. Register slash commands for your test server:
 
@@ -541,7 +543,7 @@ Old per-integration alert roles from before the category-role model are not reus
 - Tesla deliveries monitors Tesla production and delivery press releases through the matching official SEC 8-K exhibit because direct local requests to `ir.tesla.com/press` are Akamai-blocked; it auto-discovers active quarterly Polymarket delivery markets into the shared queue.
 - Elon X uses XCancel/Nitter-style public HTML pages such as `https://xcancel.com/elonmusk`, `https://nitter.kareem.one/elonmusk`, and `/elonmusk/with_replies` because direct X API polling requires paid credentials. It parses own posts, replies, quote-post text, repost labels, timestamps, and still-image links; quoted-post and repost text do not count for text strikes, and reposts are suppressed entirely from notifications. Set `ELON_X_NITTER_BASE_URLS` to swap or add public frontends if XCancel blocks the Pi; set `ELON_X_NITTER_FEEDS` to add RSS fallback URLs when an HTML frontend is blocked.
 - Trump Schedule monitors Roll Call's Factba.se calendar for today's ET public schedule, stores a compact daily digest with lid/travel/press/remarks flags, and polls every 15 minutes during 7:00 AM-10:00 PM ET.
-- Trump Truth uses the reachable `https://www.trumpstruth.org/feed` and `https://www.trumpstruth.org/` archive sources because direct Truth Social access is Cloudflare-blocked locally; alerts include original Truth Social URLs and an Open Truth link button for verification.
+- Trump Truth tries the direct Truth Social statuses API only when `TRUTH_SOCIAL_COOKIE` is configured, using the optional `TRUTH_SOCIAL_USER_AGENT` from the same Pi/VPN browser session. If direct Truth Social is blocked or unconfigured, it falls back to the reachable `https://www.trumpstruth.org/feed` and `https://www.trumpstruth.org/` archive sources; alerts include original Truth Social URLs and an Open Truth link button for verification.
 - Trump Truth parses weekly Polymarket strike terms into `settingsJson`, stores the latest seen Truth Social post ID in `lastValue`, checks archive image descriptions, alt text, and basic OCR output for image-only strike review, auto-discovers upcoming weekly markets, supports active-window archive search with `/trumptruth search`, posts non-strike feed updates without a role ping, and only role-tags strike hits.
 - TSA passengers parses the date range from the active Polymarket URL slug, sums official TSA daily checkpoint throughput rows for that range, and auto-discovers upcoming weekly TSA markets into the shared queue.
 - Generic dated Polymarket queueing lives in `src/polymarketQueue.ts`; prefer it over adapter-specific queue fields unless the adapter needs extra parsed market state.

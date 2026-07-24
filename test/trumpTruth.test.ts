@@ -11,7 +11,9 @@ import {
   normalizeTrumpTruthArchiveItem,
   normalizeTruthSocialStatus,
   buildTrumpTruthArchiveSearchUrl,
+  buildTruthSocialRequestHeaders,
   parseTrumpTruthMarketWindow,
+  parseDirectTruthSocialStatuses,
   parseTrumpTruthArchiveFeed,
   parseTrumpTruthArchiveHomePage,
   parseTrumpTruthArchiveSearchResults,
@@ -30,6 +32,8 @@ vi.mock("tesseract.js", () => ({
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("Trump Truth strike parser", () => {
@@ -522,6 +526,45 @@ describe("Trump Truth archive feed", () => {
     });
   });
 
+  it("builds direct Truth Social browser-session request headers", () => {
+    vi.stubEnv("TRUTH_SOCIAL_COOKIE", "cf_clearance=abc; auth_token=def");
+    vi.stubEnv("TRUTH_SOCIAL_USER_AGENT", "Mozilla/5.0 Real Browser");
+
+    expect(buildTruthSocialRequestHeaders()).toMatchObject({
+      accept: "application/json, text/html;q=0.9,*/*;q=0.8",
+      "accept-language": "en-US,en;q=0.9",
+      "user-agent": "Mozilla/5.0 Real Browser",
+      cookie: "cf_clearance=abc; auth_token=def"
+    });
+  });
+
+  it("parses direct Truth Social API posts with media attachments", () => {
+    const items = parseDirectTruthSocialStatuses(
+      JSON.stringify([
+        {
+          id: "116936532955860241",
+          url: "https://truthsocial.com/@realDonaldTrump/116936532955860241",
+          created_at: "2026-07-17T17:38:00.000Z",
+          content: "<p>Hello King</p>",
+          account: { acct: "realDonaldTrump" },
+          media_attachments: [{ type: "image", url: "https://static-assets.truthsocial.com/image.jpg" }]
+        }
+      ])
+    );
+
+    expect(items[0]).toMatchObject({
+      id: "116936532955860241",
+      archiveUrl: "https://truthsocial.com/@realDonaldTrump/116936532955860241",
+      originalUrl: "https://truthsocial.com/@realDonaldTrump/116936532955860241",
+      originalId: "116936532955860241"
+    });
+    expect(normalizeTrumpTruthArchiveItem(items[0], ["King"])).toMatchObject({
+      text: "Hello King",
+      matchedTerms: ["King"],
+      imageUrls: ["https://static-assets.truthsocial.com/image.jpg"]
+    });
+  });
+
   it("parses archive homepage cards as a fast post source", () => {
     const items = parseTrumpTruthArchiveHomePage(`
       <div class="status" data-status-url="https://www.trumpstruth.org/statuses/40095 ">
@@ -927,6 +970,64 @@ describe("Trump Truth archive feed", () => {
       id: "123",
       text: "Hello King",
       matchedTerms: ["King"]
+    });
+  });
+
+  it("tries direct Truth Social before archive fallbacks when a browser-session cookie exists", async () => {
+    vi.stubEnv("TRUTH_SOCIAL_COOKIE", "cf_clearance=abc");
+    vi.stubEnv("TRUTH_SOCIAL_USER_AGENT", "Mozilla/5.0 Real Browser");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: "116936532955860241",
+              url: "https://truthsocial.com/@realDonaldTrump/116936532955860241",
+              created_at: "2026-07-17T17:38:00.000Z",
+              content: "<p>Hello King</p>",
+              account: { acct: "realDonaldTrump" },
+              media_attachments: [{ type: "image", url: "https://static-assets.truthsocial.com/image.jpg" }]
+            }
+          ])
+      })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await trumpTruthAdapter.fetchEventUpdates!({
+      lastValue: "116936532955860241",
+      settingsJson: JSON.stringify({
+        lastDiscoveryAt: "2100-01-01T00:00:00.000Z",
+        markets: [
+          {
+            url: "https://polymarket.com/event/what-will-trump-post-this-week-july-13-july-19-20260710174050678",
+            slug: "what-will-trump-post-this-week-july-13-july-19-20260710174050678",
+            startAt: "2026-07-13T04:00:00.000Z",
+            endAt: "2100-01-01T00:00:00.000Z",
+            strikeTerms: ["King"],
+            resolvedTerms: [],
+            activeStrikeTerms: ["King"],
+            lastParsedAt: "2100-01-01T00:00:00.000Z"
+          }
+        ]
+      }),
+      polymarketUrl: "https://polymarket.com/event/what-will-trump-post-this-week-july-13-july-19-20260710174050678"
+    } as Integration);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/v1/accounts/107780257626128497/statuses");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: expect.objectContaining({
+        cookie: "cf_clearance=abc",
+        "user-agent": "Mozilla/5.0 Real Browser"
+      })
+    });
+    expect(result.posts[0]).toMatchObject({
+      id: "116936532955860241",
+      text: "Hello King",
+      matchedTerms: ["King"],
+      imageUrls: ["https://static-assets.truthsocial.com/image.jpg"]
     });
   });
 

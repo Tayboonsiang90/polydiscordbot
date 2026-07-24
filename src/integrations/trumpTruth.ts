@@ -5,9 +5,12 @@ import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlug, parseManualEasternDateTime } from "../marketEnd.js";
 
 const sourceUrl = "https://truthsocial.com/@realDonaldTrump";
+const truthSocialStatusesUrl =
+  "https://truthsocial.com/api/v1/accounts/107780257626128497/statuses?exclude_replies=false&with_muted=true&limit=20";
 const archiveHomeUrl = "https://www.trumpstruth.org/";
 const archiveFeedUrl = "https://www.trumpstruth.org/feed";
 const archiveSearchUrl = "https://www.trumpstruth.org/search";
+const defaultUserAgent = "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1";
 const defaultPolymarketUrl = "https://polymarket.com/event/what-will-trump-post-this-week-may-4-may-10";
 const maxPosts = 20;
 const fastPollIntervalMinutes = 10 / 60;
@@ -167,7 +170,7 @@ export async function searchTrumpTruthStrikeTerm(integration: Integration, term:
 
   const searchUrl = buildTrumpTruthArchiveSearchUrl(cleanedTerm, new Date(window.startAt), new Date(window.endAt));
   const response = await fetchWithTimeout(searchUrl, {
-    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+    headers: { "user-agent": defaultUserAgent }
   });
   if (!response.ok) {
     throw new Error(`Trump's Truth archive search returned HTTP ${response.status}`);
@@ -244,7 +247,7 @@ export function parseTrumpTruthSettings(settingsJson: string | null, now = new D
 }
 
 export async function fetchPolymarketStrikeTerms(url: string): Promise<string[]> {
-  const response = await fetchWithTimeout(url, { headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" } });
+  const response = await fetchWithTimeout(url, { headers: { "user-agent": defaultUserAgent } });
   if (!response.ok) {
     throw new Error(`Polymarket returned HTTP ${response.status}`);
   }
@@ -260,7 +263,7 @@ async function fetchTrumpTruthGammaMarket(url: string, now: Date): Promise<Trump
   }
 
   const response = await fetchWithTimeout(`${gammaApiUrl}?slug=${encodeURIComponent(window.slug)}`, {
-    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+    headers: { "user-agent": defaultUserAgent }
   });
   if (!response.ok) {
     throw new Error(`Polymarket Gamma returned HTTP ${response.status}`);
@@ -353,7 +356,7 @@ async function fetchTrumpTruthMarketSearchCandidates(now: Date): Promise<Array<{
   }
 
   const response = await fetchWithTimeout(searchUrl.toString(), {
-    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+    headers: { "user-agent": defaultUserAgent }
   });
   if (!response.ok) {
     throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
@@ -577,6 +580,38 @@ export function normalizeTruthSocialStatus(status: TruthSocialStatus, strikeTerm
   };
 }
 
+export function buildTruthSocialRequestHeaders(): Record<string, string> {
+  const userAgent = process.env.TRUTH_SOCIAL_USER_AGENT?.trim() || defaultUserAgent;
+  const cookie = process.env.TRUTH_SOCIAL_COOKIE?.trim();
+  const headers: Record<string, string> = {
+    accept: "application/json, text/html;q=0.9,*/*;q=0.8",
+    "accept-language": "en-US,en;q=0.9",
+    "user-agent": userAgent
+  };
+  if (cookie) {
+    headers.cookie = cookie;
+  }
+  return headers;
+}
+
+export function parseDirectTruthSocialStatuses(json: string): TrumpTruthArchiveItem[] {
+  let statuses: unknown;
+  try {
+    statuses = JSON.parse(json);
+  } catch {
+    throw new Error("Truth Social API returned non-JSON response");
+  }
+
+  if (!Array.isArray(statuses)) {
+    throw new Error("Truth Social API returned an unexpected response shape");
+  }
+
+  return statuses
+    .map((status) => normalizeDirectTruthSocialStatus(status as TruthSocialStatus))
+    .filter((item): item is TrumpTruthArchiveItem => item !== null)
+    .slice(0, maxPosts);
+}
+
 export function normalizeTrumpTruthArchiveItem(item: TrumpTruthArchiveItem, strikeTerms: string[]): EventMonitorPost {
   const text = extractPostText(item.html);
   const imageUrls = extractImageUrls(item.html);
@@ -698,13 +733,19 @@ export function parseTrumpTruthArchiveSearchResults(html: string, term: string):
 }
 
 async function fetchTrumpTruthArchiveItems(lastSeenId: string | null = null): Promise<TrumpTruthArchiveItem[]> {
-  const sourceResults = await Promise.allSettled([fetchTrumpTruthArchiveFeedItems(), fetchTrumpTruthArchiveHomeItems()]);
+  const sourceFetches = hasTruthSocialBrowserSession()
+    ? [fetchDirectTruthSocialItems(), fetchTrumpTruthArchiveFeedItems(), fetchTrumpTruthArchiveHomeItems()]
+    : [fetchTrumpTruthArchiveFeedItems(), fetchTrumpTruthArchiveHomeItems()];
+  const sourceResults = await Promise.allSettled(sourceFetches);
   const items = sourceResults
     .flatMap((result) => result.status === "fulfilled" ? result.value : [])
     .sort((left, right) => right.postedAt.getTime() - left.postedAt.getTime());
   const dedupedItems = dedupeArchiveItems(items).slice(0, maxPosts);
   if (!dedupedItems.length) {
-    throw new Error("Trump's Truth archive returned no posts");
+    const failedSources = sourceResults
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason));
+    throw new Error(`Trump Truth sources returned no posts${failedSources.length ? `: ${failedSources.join("; ")}` : ""}`);
   }
 
   const detailTargets = selectArchiveItemsForDetail(dedupedItems, lastSeenId);
@@ -718,10 +759,29 @@ async function fetchTrumpTruthArchiveItems(lastSeenId: string | null = null): Pr
   return dedupedItems.map((item) => detailTargetIds.has(getArchiveItemKey(item)) ? detailById.get(getArchiveItemKey(item)) ?? item : item);
 }
 
+async function fetchDirectTruthSocialItems(): Promise<TrumpTruthArchiveItem[]> {
+  const response = await fetchWithTimeout(truthSocialStatusesUrl, {
+    headers: buildTruthSocialRequestHeaders()
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    if (isTruthSocialCloudflareBlock(body)) {
+      throw new Error("Direct Truth Social returned a Cloudflare block; refresh TRUTH_SOCIAL_COOKIE from the same Pi/VPN browser session");
+    }
+    throw new Error(`Direct Truth Social returned HTTP ${response.status}`);
+  }
+  if (isTruthSocialCloudflareBlock(body)) {
+    throw new Error("Direct Truth Social returned a Cloudflare challenge; refresh TRUTH_SOCIAL_COOKIE from the same Pi/VPN browser session");
+  }
+
+  return parseDirectTruthSocialStatuses(body);
+}
+
 async function fetchTrumpTruthArchiveFeedItems(): Promise<TrumpTruthArchiveItem[]> {
   const response = await fetchWithTimeout(archiveFeedUrl, {
     headers: {
-      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1",
+      "user-agent": defaultUserAgent,
       accept: "application/rss+xml, application/xml, text/xml"
     }
   });
@@ -737,7 +797,7 @@ async function fetchTrumpTruthArchiveFeedItems(): Promise<TrumpTruthArchiveItem[
 async function fetchTrumpTruthArchiveHomeItems(): Promise<TrumpTruthArchiveItem[]> {
   const response = await fetchWithTimeout(archiveHomeUrl, {
     headers: {
-      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1",
+      "user-agent": defaultUserAgent,
       accept: "text/html,application/xhtml+xml"
     }
   });
@@ -783,10 +843,14 @@ function getArchiveItemKey(item: TrumpTruthArchiveItem): string {
 }
 
 async function fetchArchiveDetailIfNeeded(item: TrumpTruthArchiveItem): Promise<TrumpTruthArchiveItem> {
+  if (normalizeTruthSocialPostUrl(item.archiveUrl)) {
+    return item;
+  }
+
   try {
     const response = await fetchWithTimeout(
       item.archiveUrl,
-      { headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" } },
+      { headers: { "user-agent": defaultUserAgent } },
       archiveDetailTimeoutMs
     );
     if (!response.ok) {
@@ -798,6 +862,69 @@ async function fetchArchiveDetailIfNeeded(item: TrumpTruthArchiveItem): Promise<
   } catch {
     return item;
   }
+}
+
+function hasTruthSocialBrowserSession(): boolean {
+  return Boolean(process.env.TRUTH_SOCIAL_COOKIE?.trim());
+}
+
+function normalizeDirectTruthSocialStatus(status: TruthSocialStatus): TrumpTruthArchiveItem | null {
+  const isReTruth = Boolean(status.reblog);
+  const displayStatus = status.reblog ?? status;
+  const id = status.id ?? displayStatus.id ?? "";
+  const postedAtValue = status.created_at ?? displayStatus.created_at;
+  if (!id || !postedAtValue) {
+    return null;
+  }
+
+  const originalUrl =
+    normalizeTruthSocialPostUrl(status.url ?? status.uri ?? displayStatus.url ?? displayStatus.uri) ?? `${sourceUrl}/${id}`;
+  const originalId = extractTruthSocialPostId(originalUrl) || id;
+  const content = displayStatus.content ?? "";
+  const mediaHtml = getTruthSocialMediaUrls(displayStatus)
+    .map((url) => `<img src="${escapeHtmlAttribute(url)}">`)
+    .join("");
+  const account = displayStatus.account?.acct ?? displayStatus.account?.username ?? "";
+
+  return {
+    id,
+    archiveUrl: originalUrl,
+    originalUrl,
+    originalId,
+    postedAt: new Date(postedAtValue),
+    html: `${content}${mediaHtml}`,
+    title: isReTruth ? `ReTruth ${account ? `@${account}` : ""}` : normalizeText(htmlToText(content)) || "Truth",
+    isReTruth
+  };
+}
+
+function getTruthSocialMediaUrls(status: TruthSocialStatus): string[] {
+  return (
+    status.media_attachments
+      ?.filter((attachment) => attachment.type === "image")
+      .flatMap((attachment) => [attachment.url, attachment.preview_url])
+      .filter(isNonEmptyString) ?? []
+  );
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function isTruthSocialCloudflareBlock(body: string): boolean {
+  const text = body.toLowerCase();
+  return (
+    text.includes("cloudflare") ||
+    text.includes("cf-error-details") ||
+    text.includes("cf-chl") ||
+    text.includes("attention required") ||
+    text.includes("sorry, you have been blocked") ||
+    text.includes("just a moment")
+  );
 }
 
 function normalizeArchiveUrl(value: string | undefined): string | null {
@@ -923,7 +1050,9 @@ function buildTrumpTruthCheckFields(
     },
     {
       name: "Source note",
-      value: "The bot reads Trump's Truth archive feed, not direct Truth Social. If the latest archive post is old, the archive source has not published newer posts yet.",
+      value: hasTruthSocialBrowserSession()
+        ? "The bot tries direct Truth Social first with the configured browser-session cookie, then falls back to Trump's Truth archive."
+        : "The bot reads Trump's Truth archive feed/homepage because direct Truth Social is not configured. If the latest post is old, the archive source has not published newer posts yet.",
       inline: false
     }
   ];
@@ -1175,7 +1304,7 @@ async function recognizeImageText(imageUrl: string): Promise<string> {
   }
 
   try {
-    const response = await fetchWithTimeout(imageUrl, { headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" } });
+    const response = await fetchWithTimeout(imageUrl, { headers: { "user-agent": defaultUserAgent } });
     if (!response.ok) {
       return "";
     }
