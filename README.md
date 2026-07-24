@@ -76,7 +76,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `ornn-h200-index` | `/monitor` | `#ornnh200` | `ORNN H200 Alerts` | `🖥️` | Monitors finalized ORNN H200 Index daily chart values and auto-discovers concurrent active H200 GPU rental-price markets. |
 | `paid-app-store` | `/monitor` | `#paidappstore` | `Paid App Store Alerts` | `💰` | Shows the US iPhone App Store Top Paid Apps top 5, alerts only when the top 2 change, and auto-discovers daily Paid App Store markets. |
 | `paris-heat-wave` | `/monitor` | `#parisheat` | `Paris Heat Alerts` | `🌡️` | Monitors Wunderground Paris-Le Bourget daily high temperatures and alerts when qualifying >=35°C heat-wave days or streak status changes. |
-| `hendon-mob-money-list` | `/monitor` | `#pokermoney` | `Poker Money List Alerts` | `🃏` | Monitors The Hendon Mob 2026 Money List hourly and alerts only when the top 3 rank order changes. |
+| `hendon-mob-money-list` | `/monitor` | `#pokermoney` | `Poker Money List Alerts` | `🃏` | Monitors The Hendon Mob 2026 Money List hourly, supports optional browser-session cookie/UA when Cloudflare blocks direct fetches, and alerts only when the top 3 rank order changes. |
 | `parcl-dc-home-value` | `/monitor` | `#dchomevalue` | `DC Home Value Alerts` | `🏠` | Monitors Parcl DC Metro Sales Price Index data and calculates the June 30 median home-value settlement. |
 | `parcl-nyc-home-value` | `/monitor` | `#nychomevalue` | `NYC Home Value Alerts` | `🏙️` | Monitors Parcl NYC Sales Price Index data and calculates the June 30 median home-value settlement. |
 | `pboc-rate-change` | `/monitor` | `#pboc` | `PBoC Rate Alerts` | `🏦` | Monitors PBoC official announcements for extracted operation-rate changes in the June rate-change market. |
@@ -238,11 +238,13 @@ No archived integrations currently.
    WHITE_HOUSE_TWEETS_NITTER_FEEDS=https://nitter.net/WhiteHouse/rss,https://xcancel.com/WhiteHouse/rss
    ELON_X_NITTER_BASE_URLS=https://xcancel.com,https://nitter.kareem.one
    ELON_X_NITTER_FEEDS=https://xcancel.com/elonmusk/rss
+   HENDON_MOB_COOKIE=...
+   HENDON_MOB_USER_AGENT=...
    MARINETRAFFIC_HORMUZ_ALPHA_URL=...
    MARINETRAFFIC_BAB_ALPHA_URL=...
    ```
 
-   `DUNE_API_KEY` is required for `#basedrevenue` and `#ethgasmonthly`. `CLOUDFLARE_RADAR_API_TOKEN` is required for `#cubaoutage` because the public Radar page is Cloudflare-protected from direct bot fetches; create a Cloudflare API token with Radar read access. `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback.
+   `DUNE_API_KEY` is required for `#basedrevenue` and `#ethgasmonthly`. `CLOUDFLARE_RADAR_API_TOKEN` is required for `#cubaoutage` because the public Radar page is Cloudflare-protected from direct bot fetches; create a Cloudflare API token with Radar read access. `/trumpgetty` does not use Getty API credentials. It reads the public Getty search page through the reader fallback. `HENDON_MOB_COOKIE` and `HENDON_MOB_USER_AGENT` are optional for `#pokermoney`; use them only when The Hendon Mob blocks direct bot fetches, and copy them from a normal browser session on the same Pi/VPN egress IP.
 
 3. Register slash commands for your test server:
 

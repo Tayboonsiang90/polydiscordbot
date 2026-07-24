@@ -79,25 +79,21 @@ export const hendonMobMoneyListAdapter: WebsiteAdapter = {
   async fetchCurrentValue(): Promise<AdapterValue> {
     const fetchUrl = getHendonMobSourceUrl();
     const response = await fetchWithTimeout(fetchUrl, {
-      headers: {
-        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "accept-language": "en-US,en;q=0.9",
-        "user-agent": userAgent
-      }
+      headers: buildHendonMobRequestHeaders()
     });
     const body = await response.text();
 
     if (!response.ok) {
       if (isCloudflareChallenge(body)) {
         throw new Error(
-          `Hendon Mob returned HTTP ${response.status} with a Cloudflare/browser verification page. Official source: ${sourceUrl}`
+          `Hendon Mob returned HTTP ${response.status} with a Cloudflare/browser verification page. ${getHendonMobCloudflareHelp()}`
         );
       }
       throw new Error(`Hendon Mob returned HTTP ${response.status}`);
     }
 
     if (isCloudflareChallenge(body)) {
-      throw new Error(`Hendon Mob returned a Cloudflare/browser verification page. Official source: ${sourceUrl}`);
+      throw new Error(`Hendon Mob returned a Cloudflare/browser verification page. ${getHendonMobCloudflareHelp()}`);
     }
 
     const value = formatHendonMobMoneyListValue(extractHendonMobMoneyListRows(body, 10), fetchUrl);
@@ -189,6 +185,31 @@ export function buildHendonMobTopThreeSignature(value: string | null): string {
 function getHendonMobSourceUrl(): string {
   const configuredUrl = process.env.HENDON_MOB_MONEY_LIST_SOURCE_URL?.trim();
   return configuredUrl || sourceUrl;
+}
+
+export function buildHendonMobRequestHeaders(): Record<string, string> {
+  const configuredUserAgent = process.env.HENDON_MOB_USER_AGENT?.trim();
+  const cookie = process.env.HENDON_MOB_COOKIE?.trim();
+  const headers: Record<string, string> = {
+    accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "accept-language": "en-US,en;q=0.9",
+    "user-agent": configuredUserAgent || userAgent
+  };
+
+  if (cookie) {
+    headers.cookie = cookie;
+  }
+
+  return headers;
+}
+
+function getHendonMobCloudflareHelp(): string {
+  const hasCookie = Boolean(process.env.HENDON_MOB_COOKIE?.trim());
+  if (hasCookie) {
+    return `Configured HENDON_MOB_COOKIE was rejected or expired. Refresh it from a normal browser session on the same Pi/VPN egress IP. Official source: ${sourceUrl}`;
+  }
+
+  return `Set HENDON_MOB_COOKIE and HENDON_MOB_USER_AGENT from a normal browser session on the same Pi/VPN egress IP, then restart the bot. Official source: ${sourceUrl}`;
 }
 
 function extractRank(text: string): number | null {

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  buildHendonMobRequestHeaders,
   buildHendonMobTopThreeSignature,
   extractHendonMobMoneyListRows,
   formatHendonMobMoneyListValue,
@@ -39,6 +40,10 @@ const sampleHtml = `
 `;
 
 describe("Hendon Mob Money List adapter", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("parses Hendon Mob money-list rows", () => {
     const rows = extractHendonMobMoneyListRows(sampleHtml, 3);
 
@@ -79,5 +84,15 @@ describe("Hendon Mob Money List adapter", () => {
 
   it("polls hourly", () => {
     expect(hendonMobMoneyListAdapter.getPollIntervalMinutes?.({} as never)).toBe(60);
+  });
+
+  it("can reuse a normal browser session cookie and user agent", () => {
+    vi.stubEnv("HENDON_MOB_COOKIE", "cf_clearance=abc; other=value");
+    vi.stubEnv("HENDON_MOB_USER_AGENT", "Mozilla/5.0 Real Browser");
+
+    expect(buildHendonMobRequestHeaders()).toMatchObject({
+      cookie: "cf_clearance=abc; other=value",
+      "user-agent": "Mozilla/5.0 Real Browser"
+    });
   });
 });
