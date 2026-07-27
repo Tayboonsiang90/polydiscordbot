@@ -6,6 +6,7 @@ import {
   findNytStrikeTermBoxes,
   formatNytHistoricalIssueRows,
   getNytFrontPageMarketIssueDates,
+  getNytPolymarketUrlForIssueDate,
   normalizeNytPolymarketEventUrl,
   nytFrontPageAdapter,
   parseNytFrontPageSettings,
@@ -254,6 +255,118 @@ describe("NYT front page adapter", () => {
       "2026-07-25",
       "2026-07-26"
     ]);
+  });
+
+  it("maps an early PressReader edition to its upcoming weekly market by issue date", () => {
+    const upcomingUrl =
+      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-27-august-2-20260724154704322";
+    expect(
+      getNytPolymarketUrlForIssueDate(
+        [
+          {
+            url: "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-20-july-26-20260718184724813",
+            slug: "what-will-the-nyt-front-page-headlines-say-this-week-july-20-july-26-20260718184724813",
+            startAt: "2026-07-20T04:00:00.000Z",
+            endAt: "2026-07-27T03:59:00.000Z",
+            addedAt: "2026-07-20T04:00:00.000Z"
+          },
+          {
+            url: upcomingUrl,
+            slug: "what-will-the-nyt-front-page-headlines-say-this-week-july-27-august-2-20260724154704322",
+            startAt: "2026-07-27T04:00:00.000Z",
+            endAt: "2026-08-03T03:59:00.000Z",
+            addedAt: "2026-07-24T20:06:00.000Z"
+          }
+        ],
+        "2026-07-27"
+      )
+    ).toBe(upcomingUrl);
+  });
+
+  it("uses an upcoming market's strikes as soon as its dated edition is published", async () => {
+    const previousUrl =
+      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-20-july-26-20260718184724813";
+    const upcomingUrl =
+      "https://polymarket.com/event/what-will-the-nyt-front-page-headlines-say-this-week-july-27-august-2-20260724154704322";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const target = String(input);
+        if (target === "https://nytimes.pressreader.com/the-new-york-times/") {
+          return new Response("<h1>The New York Times - July 27, 2026</h1>", { status: 200 });
+        }
+        if (target.startsWith("https://gamma-api.polymarket.com/events?slug=")) {
+          return Response.json([
+            {
+              markets: [
+                {
+                  question: 'Will the NYT front page headlines say "Fear" this week?',
+                  closed: false
+                }
+              ]
+            }
+          ]);
+        }
+        if (target === "https://nytimes.pressreader.com/the-new-york-times/20260727/page/1") {
+          return new Response(
+            `
+              <meta property="article:published_time" content="2026-07-27" />
+              <script type="application/ld+json">
+                ${JSON.stringify({
+                  "@graph": [
+                    { "@type": "PublicationIssue", datePublished: "2026-07-27" },
+                    { "@type": "NewsArticle", headline: "Industries Fear New Trade Curbs" }
+                  ]
+                })}
+              </script>
+            `,
+            { status: 200 }
+          );
+        }
+        throw new Error(`Unexpected URL: ${target}`);
+      })
+    );
+
+    const result = await nytFrontPageAdapter.fetchEventUpdates!(
+      {
+        settingsJson: JSON.stringify({
+          nytStrikeTerms: ["Senate"],
+          nytParsedFromUrl: previousUrl,
+          polymarketMarkets: [
+            {
+              url: previousUrl,
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-july-20-july-26-20260718184724813",
+              startAt: "2026-07-20T04:00:00.000Z",
+              endAt: "2026-07-27T03:59:00.000Z",
+              addedAt: "2026-07-20T04:00:00.000Z"
+            },
+            {
+              url: upcomingUrl,
+              slug: "what-will-the-nyt-front-page-headlines-say-this-week-july-27-august-2-20260724154704322",
+              startAt: "2026-07-27T04:00:00.000Z",
+              endAt: "2026-08-03T03:59:00.000Z",
+              addedAt: "2026-07-24T20:06:00.000Z"
+            }
+          ]
+        }),
+        polymarketUrl: previousUrl
+      } as Integration
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      nytLatestIssueDate?: string;
+      nytParsedFromUrl?: string;
+      nytStrikeTerms?: string[];
+    };
+
+    expect(result.polymarketUrl).toBe(previousUrl);
+    expect(result.strikeTerms).toEqual(["Fear"]);
+    expect(result.posts[0].matchedTerms).toEqual(["Fear"]);
+    expect(result.posts[0].polymarketUrl).toBe(upcomingUrl);
+    expect(settings).toMatchObject({
+      nytLatestIssueDate: "2026-07-27",
+      nytParsedFromUrl: upcomingUrl,
+      nytStrikeTerms: ["Fear"]
+    });
   });
 
   it("formats historical NYT checked dates with weekdays and no-match rows", () => {

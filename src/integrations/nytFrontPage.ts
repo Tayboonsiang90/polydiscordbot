@@ -33,6 +33,7 @@ export type NytFrontPageSettings = {
   nytStrikeTerms?: string[];
   nytParsedFromUrl?: string;
   nytLastParsedAt?: string;
+  nytLatestIssueDate?: string;
   polymarketMarkets?: PolymarketQueueMarket[];
   lastNytDiscoveryAt?: string;
 };
@@ -120,18 +121,44 @@ export const nytFrontPageAdapter: WebsiteAdapter = {
     return { value, rawValue: value, unit: "NYT New York print front page", observedAt: new Date() };
   },
   async fetchEventUpdates(integration: Integration, options?: EventMonitorOptions): Promise<EventMonitorResult> {
-    const settings = parseNytFrontPageSettings(integration.settingsJson);
-    const strikeTerms = settings.nytStrikeTerms ?? [];
-    const polymarketUrl = getNytActivePolymarketUrl(settings, integration);
+    const settings = parseNytDiscoverySettings(integration.settingsJson);
+    const issueDate = await fetchLatestIssueDate();
+    const issuePolymarketUrl = getNytPolymarketUrlForIssueDate(settings.polymarketMarkets, issueDate);
+    let strikeTerms = settings.nytStrikeTerms ?? [];
+    let polymarketUrl = getNytActivePolymarketUrl(settings, integration);
+    let nextSettings: Record<string, unknown> & NytFrontPageSettings = {
+      ...settings,
+      nytLatestIssueDate: issueDate
+    };
+    if (issuePolymarketUrl) {
+      polymarketUrl = issuePolymarketUrl;
+      if (normalizeNytPolymarketEventUrl(settings.nytParsedFromUrl) !== issuePolymarketUrl) {
+        strikeTerms = await fetchNytFrontPageGammaStrikeTerms(issuePolymarketUrl);
+        nextSettings = {
+          ...nextSettings,
+          nytStrikeTerms: strikeTerms,
+          nytParsedFromUrl: issuePolymarketUrl,
+          nytLastParsedAt: new Date().toISOString()
+        };
+      }
+    }
+    const settingsJson = JSON.stringify(nextSettings);
+    const clockPolymarketUrl = normalizeNytPolymarketEventUrl(integration.polymarketUrl);
     if (options?.historicalCheck) {
-      return fetchHistoricalNytFrontPageCheck(strikeTerms, polymarketUrl);
+      const result = await fetchHistoricalNytFrontPageCheck(strikeTerms, polymarketUrl);
+      return {
+        ...result,
+        settingsJson,
+        polymarketUrl: clockPolymarketUrl
+      };
     }
 
-    const post = await fetchLatestNytFrontPagePost(strikeTerms, polymarketUrl);
+    const post = await fetchNytFrontPagePostForDate(issueDate, strikeTerms, polymarketUrl);
     return {
       posts: [post],
       strikeTerms,
-      polymarketUrl,
+      polymarketUrl: clockPolymarketUrl,
+      settingsJson,
       observedAt: new Date()
     };
   },
@@ -160,9 +187,10 @@ export async function refreshNytFrontPageSettings(
   now = new Date()
 ): Promise<Record<string, unknown> & NytFrontPageSettings> {
   const resolvedQueue = await refreshNytFrontPagePolymarketQueue(integration, now);
-  const settings = parseRawSettings(resolvedQueue.settingsJson);
+  const settings = parseNytDiscoverySettings(resolvedQueue.settingsJson);
+  const issuePolymarketUrl = getNytPolymarketUrlForIssueDate(settings.polymarketMarkets, settings.nytLatestIssueDate);
   const polymarketUrl = normalizeNytPolymarketEventUrl(
-    resolvedQueue.activeUrl ?? getNytLegacyFallbackPolymarketUrl(integration, resolvedQueue.settingsJson)
+    issuePolymarketUrl ?? resolvedQueue.activeUrl ?? getNytLegacyFallbackPolymarketUrl(integration, resolvedQueue.settingsJson)
   );
   if (!polymarketUrl) {
     return clearNytStrikeCache(settings);
@@ -487,6 +515,25 @@ function normalizeNytQueueMarkets(value: unknown): PolymarketQueueMarket[] {
       }
     ];
   });
+}
+
+export function getNytPolymarketUrlForIssueDate(
+  markets: PolymarketQueueMarket[] | undefined,
+  issueDate: string | undefined
+): string | undefined {
+  if (!issueDate || !/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+    return undefined;
+  }
+
+  return normalizeNytQueueMarkets(markets)
+    .filter((market) => {
+      if (!market.startAt || !market.endAt) {
+        return false;
+      }
+
+      return issueDate >= formatEasternDate(new Date(market.startAt)) && issueDate <= formatEasternDate(new Date(market.endAt));
+    })
+    .sort((left, right) => Date.parse(right.startAt ?? "") - Date.parse(left.startAt ?? ""))[0]?.url;
 }
 
 function hasQueuedFutureMarket(markets: PolymarketQueueMarket[], now: Date): boolean {
@@ -1051,6 +1098,11 @@ function getEasternDateParts(date: Date): { year: number; month: number; day: nu
     month: Number(values.month),
     day: Number(values.day)
   };
+}
+
+function formatEasternDate(date: Date): string {
+  const parts = getEasternDateParts(date);
+  return `${parts.year}-${padNumber(parts.month)}-${padNumber(parts.day)}`;
 }
 
 function formatUtcDate(date: Date): string {
