@@ -10,7 +10,7 @@ import {
   buildPolymarketClarificationPostFromLog,
   buildPolymarketPendingClarificationPostFromTransaction,
   getPolymarketClarificationRpcUrls,
-  getPolymarketClarificationWsUrl,
+  getPolymarketClarificationWsUrls,
   hasSeenClarificationTx,
   parseHexQuantity,
   parsePolymarketClarificationSettings,
@@ -43,9 +43,9 @@ type EditableMessage = {
 };
 
 export class UmaAlertSubscriber {
-  private websocket: WebSocket | null = null;
-  private reconnectTimer: NodeJS.Timeout | null = null;
-  private pingTimer: NodeJS.Timeout | null = null;
+  private readonly websockets = new Map<string, WebSocket>();
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
+  private readonly pingTimers = new Map<string, NodeJS.Timeout>();
   private stopped = false;
   private readonly inFlightLogIds = new Set<string>();
   private warnedHashOnlyPending = false;
@@ -59,38 +59,42 @@ export class UmaAlertSubscriber {
   start(): void {
     this.stopped = false;
     try {
-      this.connect();
+      const integration = this.database.getIntegrationByAdapter(this.config.discordGuildId, adapterId);
+      const settings = parsePolymarketClarificationSettings(integration?.settingsJson ?? null);
+      for (const wsUrl of getPolymarketClarificationWsUrls(settings)) {
+        this.connect(wsUrl);
+      }
     } catch (error) {
       console.error("UMA alert WebSocket connect failed:", formatError(error));
-      this.scheduleReconnect();
     }
   }
 
   stop(): void {
     this.stopped = true;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+    for (const reconnectTimer of this.reconnectTimers.values()) {
+      clearTimeout(reconnectTimer);
     }
-    this.stopKeepalive();
-    this.websocket?.close();
-    this.websocket = null;
+    this.reconnectTimers.clear();
+    for (const wsUrl of this.pingTimers.keys()) {
+      this.stopKeepalive(wsUrl);
+    }
+    for (const websocket of this.websockets.values()) {
+      websocket.close();
+    }
+    this.websockets.clear();
   }
 
-  private connect(): void {
+  private connect(wsUrl: string): void {
     if (this.stopped) {
       return;
     }
 
-    const integration = this.database.getIntegrationByAdapter(this.config.discordGuildId, adapterId);
-    const settings = parsePolymarketClarificationSettings(integration?.settingsJson ?? null);
-    const wsUrl = getPolymarketClarificationWsUrl(settings);
     const websocket = new WebSocket(wsUrl);
     const connectedAtMs = Date.now();
-    this.websocket = websocket;
+    this.websockets.set(wsUrl, websocket);
 
     websocket.on("open", () => {
-      this.startKeepalive(websocket);
+      this.startKeepalive(wsUrl, websocket);
       websocket.send(
         JSON.stringify({
           jsonrpc: "2.0",
@@ -105,19 +109,22 @@ export class UmaAlertSubscriber {
           ]
         })
       );
-      websocket.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: 2,
-          method: "eth_subscribe",
-          params: buildPendingTransactionSubscriptionParams(wsUrl)
-        })
-      );
+      const pendingParams = buildPendingTransactionSubscriptionParams(wsUrl);
+      if (pendingParams) {
+        websocket.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 2,
+            method: "eth_subscribe",
+            params: pendingParams
+          })
+        );
+      }
       console.log(`UMA alert WebSocket subscribe requested via ${wsUrl}`);
     });
 
     websocket.on("message", (data) => {
-      void this.handleMessage(data).catch((error) => {
+      void this.handleMessage(data, websocket).catch((error) => {
         console.error("UMA alert WebSocket message failed:", formatError(error));
       });
     });
@@ -127,9 +134,9 @@ export class UmaAlertSubscriber {
     });
 
     websocket.on("close", (code, reason) => {
-      this.stopKeepalive();
-      if (this.websocket === websocket) {
-        this.websocket = null;
+      this.stopKeepalive(wsUrl);
+      if (this.websockets.get(wsUrl) === websocket) {
+        this.websockets.delete(wsUrl);
       }
       if (!this.stopped) {
         console.warn(
@@ -137,14 +144,14 @@ export class UmaAlertSubscriber {
             `(code ${code}${formatCloseReason(reason)}); reconnecting`
         );
       }
-      this.scheduleReconnect();
+      this.scheduleReconnect(wsUrl);
     });
   }
 
-  private startKeepalive(websocket: WebSocket): void {
-    this.stopKeepalive();
-    this.pingTimer = setInterval(() => {
-      if (this.websocket !== websocket || websocket.readyState !== WebSocket.OPEN) {
+  private startKeepalive(wsUrl: string, websocket: WebSocket): void {
+    this.stopKeepalive(wsUrl);
+    const pingTimer = setInterval(() => {
+      if (this.websockets.get(wsUrl) !== websocket || websocket.readyState !== WebSocket.OPEN) {
         return;
       }
 
@@ -155,40 +162,43 @@ export class UmaAlertSubscriber {
         websocket.terminate();
       }
     }, websocketPingIntervalMs);
-    this.pingTimer.unref();
+    pingTimer.unref();
+    this.pingTimers.set(wsUrl, pingTimer);
   }
 
-  private stopKeepalive(): void {
-    if (!this.pingTimer) {
+  private stopKeepalive(wsUrl: string): void {
+    const pingTimer = this.pingTimers.get(wsUrl);
+    if (!pingTimer) {
       return;
     }
 
-    clearInterval(this.pingTimer);
-    this.pingTimer = null;
+    clearInterval(pingTimer);
+    this.pingTimers.delete(wsUrl);
   }
 
-  private scheduleReconnect(): void {
-    if (this.stopped || this.reconnectTimer) {
+  private scheduleReconnect(wsUrl: string): void {
+    if (this.stopped || this.reconnectTimers.has(wsUrl)) {
       return;
     }
 
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
+    const reconnectTimer = setTimeout(() => {
+      this.reconnectTimers.delete(wsUrl);
       try {
-        this.connect();
+        this.connect(wsUrl);
       } catch (error) {
         console.error("UMA alert WebSocket reconnect failed:", formatError(error));
-        this.scheduleReconnect();
+        this.scheduleReconnect(wsUrl);
       }
     }, reconnectDelayMs);
-    this.reconnectTimer.unref();
+    reconnectTimer.unref();
+    this.reconnectTimers.set(wsUrl, reconnectTimer);
   }
 
-  private async handleMessage(data: unknown): Promise<void> {
+  private async handleMessage(data: unknown, websocket: WebSocket): Promise<void> {
     const message = parseSubscriptionMessage(data);
     if (message.error) {
       console.error(`UMA alert WebSocket subscription error: ${message.error.message ?? "unknown error"}`);
-      this.websocket?.close();
+      websocket.close();
       return;
     }
 
@@ -442,7 +452,7 @@ function isEditableMessage(message: unknown): message is EditableMessage {
   return Boolean(message && typeof message === "object" && "edit" in message && typeof message.edit === "function");
 }
 
-export function buildPendingTransactionSubscriptionParams(wsUrl: string): unknown[] {
+export function buildPendingTransactionSubscriptionParams(wsUrl: string): unknown[] | null {
   if (isAlchemyWsUrl(wsUrl)) {
     return [
       "alchemy_pendingTransactions",
@@ -453,7 +463,7 @@ export function buildPendingTransactionSubscriptionParams(wsUrl: string): unknow
     ];
   }
 
-  return ["newPendingTransactions", true];
+  return null;
 }
 
 function isAlchemyWsUrl(wsUrl: string): boolean {

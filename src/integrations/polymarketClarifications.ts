@@ -163,15 +163,28 @@ export async function fetchPolymarketClarificationUpdates(
   const logsResult = fromBlock <= toBlock
     ? await fetchAncillaryDataUpdateLogs(rpcUrls, fromBlock, toBlock, activeRpcUrl)
     : { result: [], rpcUrl: activeRpcUrl };
-  const rawLogs = logsResult.result;
-  const logs = rawLogs.filter(isUsableClarificationLog);
-  const malformedLogCount = rawLogs.length - logs.length;
+  let rawLogs = logsResult.result;
   activeRpcUrl = logsResult.rpcUrl;
+  let liveTailRange: string | undefined;
+  if (!scanPlan.skippedToLiveHead && toBlock < confirmedLatestBlock) {
+    const liveTailFromBlock = Math.max(toBlock + 1, confirmedLatestBlock - scanPlan.maxScanBlocks + 1);
+    const liveLogsResult = await fetchAncillaryDataUpdateLogs(
+      rpcUrls,
+      liveTailFromBlock,
+      confirmedLatestBlock,
+      activeRpcUrl
+    );
+    rawLogs = [...rawLogs, ...liveLogsResult.result];
+    activeRpcUrl = liveLogsResult.rpcUrl;
+    liveTailRange = `${liveTailFromBlock} to ${confirmedLatestBlock}`;
+  }
+  const usableLogs = rawLogs.filter(isUsableClarificationLog);
+  const malformedLogCount = rawLogs.length - usableLogs.length;
   const backfillMode = formatEthGetLogsBackfillMode(scanPlan);
   const detailsByQuestionId = new Map<string, QuestionDetails | null>();
   const posts: EventMonitorPost[] = [];
 
-  for (const log of logs) {
+  for (const log of usableLogs) {
     if (hasSeenClarificationTx(settings.eventSeenPostIds, log.transactionHash)) {
       continue;
     }
@@ -204,8 +217,9 @@ export async function fetchPolymarketClarificationUpdates(
     }),
     checkTitle: "UMA alert check",
     checkFields: [
-      { name: "Clarifications in scanned range", value: String(logs.length), inline: true },
+      { name: "Clarifications in scanned range", value: String(usableLogs.length), inline: true },
       { name: "Scanned blocks", value: fromBlock <= toBlock ? `${fromBlock} to ${toBlock}` : "already at latest block", inline: false },
+      ...(liveTailRange ? [{ name: "Live-tail safety scan", value: liveTailRange, inline: false }] : []),
       { name: "Confirmed head", value: String(confirmedLatestBlock), inline: true },
       ...(malformedLogCount > 0 ? [{ name: "Malformed logs skipped", value: String(malformedLogCount), inline: true }] : []),
       ...(backfillMode ? [{ name: "Backfill mode", value: backfillMode, inline: false }] : []),
@@ -414,7 +428,16 @@ export function getPolymarketClarificationRpcUrls(settings: PolymarketClarificat
 }
 
 export function getPolymarketClarificationWsUrl(settings: PolymarketClarificationSettings = {}): string {
-  return firstNonEmptyString(settings.wsUrl, process.env.POLYGON_WS_URL) ?? defaultPolygonWsUrl;
+  return getPolymarketClarificationWsUrls(settings)[0];
+}
+
+export function getPolymarketClarificationWsUrls(settings: PolymarketClarificationSettings = {}): string[] {
+  const configured = [
+    ...splitRpcUrls(settings.wsUrl),
+    ...splitRpcUrls(process.env.POLYGON_WS_URLS),
+    ...splitRpcUrls(process.env.POLYGON_WS_URL)
+  ];
+  return uniqueStrings(configured.length > 0 ? [...configured, defaultPolygonWsUrl] : [defaultPolygonWsUrl]);
 }
 
 function getNextFromBlock(settings: PolymarketClarificationSettings, confirmedLatestBlock: number): number {
@@ -738,15 +761,6 @@ function getIntegerSetting(value: unknown, fallback: number, min: number, max: n
 
 function isSafeNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-function firstNonEmptyString(...values: unknown[]): string | null {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return null;
 }
 
 function normalizeRpcUrls(value: string | string[]): string[] {

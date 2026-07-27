@@ -9,6 +9,7 @@ import {
   defaultPolygonRpcUrls,
   buildFastPolymarketClarificationPostFromLog,
   fetchPolymarketClarificationUpdates,
+  getPolymarketClarificationWsUrls,
   hasSeenClarificationTx,
   postUpdateSelector,
   normalizePolymarketClarificationLog,
@@ -186,10 +187,20 @@ describe("UMA clarification WebSocket subscriptions", () => {
     ]);
   });
 
-  it("keeps the generic full pending transaction subscription for non-Alchemy WebSockets", () => {
-    expect(buildPendingTransactionSubscriptionParams("wss://polygon-bor-rpc.publicnode.com")).toEqual([
-      "newPendingTransactions",
-      true
+  it("does not subscribe to the unfiltered pending transaction stream on non-Alchemy WebSockets", () => {
+    expect(buildPendingTransactionSubscriptionParams("wss://polygon-bor-rpc.publicnode.com")).toBeNull();
+  });
+
+  it("keeps a public mined-log WebSocket alongside configured providers", () => {
+    vi.stubEnv(
+      "POLYGON_WS_URLS",
+      "wss://polygon-mainnet.g.alchemy.com/v2/test-key,wss://polygon-bor-rpc.publicnode.com"
+    );
+    vi.stubEnv("POLYGON_WS_URL", "");
+
+    expect(getPolymarketClarificationWsUrls()).toEqual([
+      "wss://polygon-mainnet.g.alchemy.com/v2/test-key",
+      "wss://polygon-bor-rpc.publicnode.com"
     ]);
   });
 });
@@ -313,6 +324,55 @@ describe("fetchPolymarketClarificationUpdates", () => {
       lastScannedBlock: 1000,
       lastScanStartedBlock: 991,
       lastScanRequestedFromBlock: 101
+    });
+  });
+
+  it("checks the live head immediately while a public RPC cursor catches up", async () => {
+    const rpcUrl = "https://rpc.example";
+    const logParams: Array<{ fromBlock?: string; toBlock?: string }> = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (url.toString() !== rpcUrl) {
+        throw new Error(`Unexpected fetch: ${url.toString()}`);
+      }
+
+      const body = JSON.parse(String(init?.body)) as { method: string; params: Array<Record<string, string>> };
+      if (body.method === "eth_blockNumber") {
+        return jsonResponse({ jsonrpc: "2.0", id: 1, result: "0x3e8" });
+      }
+      if (body.method === "eth_getLogs") {
+        const params = body.params[0];
+        logParams.push(params);
+        const isNewestChunk = params.fromBlock === "0x3b7" && params.toBlock === "0x3e8";
+        return jsonResponse({
+          jsonrpc: "2.0",
+          id: 1,
+          result: isNewestChunk ? [buildUpdateLog("Fresh clarification.")] : []
+        });
+      }
+
+      throw new Error(`Unexpected RPC method: ${body.method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketClarificationUpdates(
+      { settingsJson: JSON.stringify({ rpcUrl, lastScannedBlock: 100 }) } as Integration,
+      new Date("2026-05-21T00:00:00.000Z")
+    );
+
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0].text).toBe("Fresh clarification.");
+    expect(logParams).toContainEqual(
+      expect.objectContaining({ fromBlock: "0x3b7", toBlock: "0x3e8" })
+    );
+    expect(result.checkFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Live-tail safety scan", value: "751 to 1000" })
+      ])
+    );
+    expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
+      rpcUrl,
+      lastScannedBlock: 350,
+      lastScanStartedBlock: 101
     });
   });
 
