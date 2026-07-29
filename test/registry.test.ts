@@ -150,7 +150,8 @@ const expectedCommandIds = [
   ["whbriefings", "white-house-briefings"],
   ["fulllid", "white-house-full-lid"],
   ["whpool", "white-house-pool-updates"],
-  ["whitehousetweets", "white-house-tweets"]
+  ["whitehousetweets", "white-house-tweets"],
+  ["yotransfer", "yo-token-transferability"]
 ] as const;
 
 describe("adapter registry", () => {
@@ -235,6 +236,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
     expect(getAdapterByCommandName("pumpgo").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("pumpgo").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
+    expect(getAdapterByCommandName("yotransfer").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("companyrank").getPollIntervalMinutes?.({} as never)).toBe(5);

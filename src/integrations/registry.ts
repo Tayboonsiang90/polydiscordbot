@@ -133,6 +133,7 @@ import { whiteHouseBriefingsAdapter } from "./whiteHouseBriefings.js";
 import { whiteHouseFullLidAdapter } from "./whiteHouseFullLid.js";
 import { whiteHousePoolUpdatesAdapter } from "./whiteHousePoolUpdates.js";
 import { whiteHouseTweetsAdapter } from "./whiteHouseTweets.js";
+import { yoTokenTransferabilityAdapter } from "./yoTokenTransferability.js";
 
 const adapters = new Map<string, WebsiteAdapter>([
   [aaaRegularGasAdapter.id, aaaRegularGasAdapter],
@@ -264,7 +265,8 @@ const adapters = new Map<string, WebsiteAdapter>([
   [whiteHouseBriefingsAdapter.id, whiteHouseBriefingsAdapter],
   [whiteHouseFullLidAdapter.id, whiteHouseFullLidAdapter],
   [whiteHousePoolUpdatesAdapter.id, whiteHousePoolUpdatesAdapter],
-  [whiteHouseTweetsAdapter.id, whiteHouseTweetsAdapter]
+  [whiteHouseTweetsAdapter.id, whiteHouseTweetsAdapter],
+  [yoTokenTransferabilityAdapter.id, yoTokenTransferabilityAdapter]
 ]);
 
 export function getAdapter(adapterId: string): WebsiteAdapter {
