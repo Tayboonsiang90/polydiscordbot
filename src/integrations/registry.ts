@@ -42,6 +42,7 @@ import { elonXAdapter } from "./elonX.js";
 import { fdicFailedBanksAdapter } from "./fdicFailedBanks.js";
 import { fredEggPriceAdapter } from "./fredEggPrice.js";
 import { fredGroundBeefAdapter } from "./fredGroundBeef.js";
+import { frontierMathOpenProblemsAdapter } from "./frontierMathOpenProblems.js";
 import { freeAppStoreAdapter } from "./freeAppStore.js";
 import { hkPrecipAdapter } from "./hkPrecip.js";
 import { hendonMobMoneyListAdapter } from "./hendonMobMoneyList.js";
@@ -179,6 +180,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [fdicFailedBanksAdapter.id, fdicFailedBanksAdapter],
   [fredEggPriceAdapter.id, fredEggPriceAdapter],
   [fredGroundBeefAdapter.id, fredGroundBeefAdapter],
+  [frontierMathOpenProblemsAdapter.id, frontierMathOpenProblemsAdapter],
   [freeAppStoreAdapter.id, freeAppStoreAdapter],
   [hendonMobMoneyListAdapter.id, hendonMobMoneyListAdapter],
   [hkPrecipAdapter.id, hkPrecipAdapter],

@@ -55,6 +55,7 @@ const expectedCommandIds = [
   ["fdic", "fdic-failed-banks"],
   ["eggs", "fred-egg-price"],
   ["beef", "fred-ground-beef"],
+  ["frontiermathsolved", "frontiermath-open-problems"],
   ["freeappstore", "free-app-store"],
   ["pokermoney", "hendon-mob-money-list"],
   ["hkprecip", "hk-precip"],
@@ -236,6 +237,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("powerball").getPollIntervalMinutes?.({} as never)).toBe(1_440);
     expect(getAdapterByCommandName("pumpgo").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("pumpgo").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
+    expect(getAdapterByCommandName("frontiermathsolved").getPollIntervalMinutes?.({} as never)).toBe(5);
     expect(getAdapterByCommandName("yotransfer").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("claudecommits").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("claudedown").getPollIntervalMinutes?.({} as never)).toBe(60);
