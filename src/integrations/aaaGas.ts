@@ -1,10 +1,11 @@
 ﻿import * as cheerio from "cheerio";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import { upsertPolymarketQueueUrl } from "../polymarketQueue.js";
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 
 const sourceUrl = "https://gasprices.aaa.com/";
-const defaultPolymarketUrl = "https://polymarket.com/event/will-gas-hit-by-end-of-july-20260630204747602";
+const defaultPolymarketUrl = "https://polymarket.com/event/will-gas-hit-by-end-of-august";
 
 const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   searchQuery: "will gas hit",
@@ -83,7 +84,16 @@ export async function refreshAaaGasPolymarketQueue(
   integration: Integration,
   now = new Date()
 ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
-  return refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig, now);
+  const discovered = await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig, now);
+  return upsertPolymarketQueueUrl(
+    {
+      ...integration,
+      settingsJson: discovered.settingsJson,
+      polymarketUrl: discovered.activeUrl ?? integration.polymarketUrl
+    },
+    defaultPolymarketUrl,
+    now
+  );
 }
 
 function normalizeText(value: string): string {

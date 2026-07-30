@@ -18,7 +18,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | --- | --- | --- | --- | --- | --- |
 | `bonbast-usd-irr` | `/monitor` | `#bonbast-usd-irr` | `Bonbast Alerts` | `💱` | Monitors Bonbast USD/IRR values and auto-discovers active hit-by and end-of-month USD/IRR Polymarket markets. |
 | `cross-platform-arbitrage` | `/monitor` | `#arb` | `Arbitrage Alerts` | `🔁` | Monitors configured Polymarket, Predict, and Opinion market URLs for after-fee cross-platform arbitrage routes. |
-| `aaa-regular-gas` | `/monitor` | `#aaa-regular-gas` | `AAA Gas Alerts` | `⛽` | Monitors AAA national Current Avg. Regular gas price and auto-discovers end-of-month gas Polymarket markets. |
+| `aaa-regular-gas` | `/monitor` | `#aaa-regular-gas` | `AAA Gas Alerts` | `⛽` | Monitors AAA national Current Avg. Regular gas price, auto-discovers end-of-month gas markets, and seeds the active August market as a discovery fallback. |
 | `all-in-podcast` | `/monitor` | `#allinpod` | `All-In Podcast Alerts` | `🎧` | Monitors the All-In YouTube channel feed every minute for new non-Shorts uploads, suppresses same-video source-format flips, and auto-discovers active weekly All-In Polymarket markets. |
 | `big-brother-episodes` | `/monitor` | `#bigbrother` | `Big Brother Alerts` | `🏠` | Monitors the CBS Big Brother show page every minute and alerts when the latest full episode URL changes. |
 | `joe-rogan-podcast` | `/monitor` | `#joerogan` | `Joe Rogan Alerts` | `🎤` | Monitors the Joe Rogan YouTube RSS feed every minute for new JRE uploads and auto-discovers weekly first-episode Polymarket markets. |

@@ -122,5 +122,35 @@ describe("extractAaaRegularGasCurrentAvg", () => {
         endAt: "2026-08-01T03:59:00.000Z"
       })
     );
+    expect(settings.polymarketMarkets).toContainEqual(
+      expect.objectContaining({
+        slug: "will-gas-hit-by-end-of-august",
+        startAt: "2026-08-01T04:00:00.000Z",
+        endAt: "2026-09-01T03:59:00.000Z"
+      })
+    );
+  });
+
+  it("seeds the August market even when Gamma discovery is unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503
+      })
+    );
+
+    const result = await refreshAaaGasPolymarketQueue(integration, new Date("2026-07-30T12:00:00.000Z"));
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      polymarketMarkets: Array<{ slug: string; startAt: string; endAt: string }>;
+    };
+
+    expect(settings.polymarketMarkets).toContainEqual(
+      expect.objectContaining({
+        slug: "will-gas-hit-by-end-of-august",
+        startAt: "2026-08-01T04:00:00.000Z",
+        endAt: "2026-09-01T03:59:00.000Z"
+      })
+    );
   });
 });
