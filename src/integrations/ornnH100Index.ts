@@ -27,7 +27,7 @@ export const ornnH100IndexAdapter = createOrnnGpuIndexAdapter({
   commandName: "ornnh100",
   displayName: "ORNN H100 Index",
   gpuName: "H100",
-  defaultPolymarketUrl: "https://polymarket.com/event/gpu-rental-prices-h100-hit-by-may-31",
+  defaultPolymarketUrl: "https://polymarket.com/event/gpu-rental-prices-h100-end-of-august-1785423806191",
   defaultChannelName: "ornnh100",
   alertRoleName: "ORNN H100 Alerts"
 });

@@ -91,19 +91,20 @@ describe("Arena AI leaderboard parsing", () => {
     ]);
   });
 
-  it("formats a stable monitor value that changes when the top 5 ranking changes", () => {
+  it("formats top three models and distinct companies", () => {
     expect(extractArenaAiTopModelsValue(sampleHtml)).toBe(
       [
         "Metric: Arena AI leaderboard",
         "Leaderboard: Text Arena Overall (Style Control Off)",
         "Top model: #1 claude-opus-4-6-thinking",
         "Top company: Anthropic",
-        "Top 5:",
+        "Top 3 models:",
         "#1 Anthropic - claude-opus-4-6-thinking (score 1501±5)",
         "#2 Anthropic - claude-opus-4-6 (score 1498±5)",
         "#3 Anthropic - claude-opus-4-7-thinking (score 1487±6)",
-        "#4 Google - gemini-3.1-pro-preview (score 1487±4)",
-        "#5 unknown - kimi-k3 (score 1480±4)",
+        "Top 3 companies:",
+        "1. Anthropic - claude-opus-4-6-thinking (overall #1)",
+        "2. Google - gemini-3.1-pro-preview (overall #4)",
         "Resolution: https://arena.ai/leaderboard/text/overall-no-style-control"
       ].join("\n")
     );
@@ -128,9 +129,11 @@ describe("Arena AI leaderboard parsing", () => {
         "Leaderboard: Text Arena Overall (Chinese companies only)",
         "Top model: #4 gemini-3.1-pro-preview",
         "Top qualifying company: Google",
-        "Top 5:",
+        "Top 3 models:",
         "#4 Google - gemini-3.1-pro-preview (score 1487±4)",
         "#5 unknown - kimi-k3 (score 1480±4)",
+        "Top 3 companies:",
+        "1. Google - gemini-3.1-pro-preview (overall #4)",
         "Resolution: https://arena.ai/leaderboard/text/overall-no-style-control"
       ].join("\n")
     );
@@ -143,9 +146,9 @@ describe("Arena AI leaderboard parsing", () => {
     expect(arenaAiLeaderboardAdapter.shouldAlertOnChange?.(previousValue, currentValue)).toBe(false);
   });
 
-  it("seeds the July Code Arena WebDev market first", () => {
+  it("seeds the current August Code Arena WebDev market first", () => {
     expect(arenaAiCodeWebdevAdapter.defaultPolymarketUrl).toBe(
-      "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-july-20260715140712903"
+      "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-august-20260716213053775"
     );
   });
 });

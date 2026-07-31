@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { extractAaaRegularGasCurrentAvg, refreshAaaGasPolymarketQueue } from "../src/integrations/aaaGas.js";
+import {
+  aaaRegularGasAdapter,
+  extractAaaRegularGasCurrentAvg,
+  formatAaaRegularGasValue,
+  refreshAaaGasPolymarketQueue
+} from "../src/integrations/aaaGas.js";
 import type { Integration } from "../src/integrations/types.js";
 
 const integration: Integration = {
@@ -86,6 +91,22 @@ describe("extractAaaRegularGasCurrentAvg", () => {
     expect(() => extractAaaRegularGasCurrentAvg("<html><body>No gas price here</body></html>")).toThrow(
       "Could not find AAA Current Avg. Regular gas price"
     );
+  });
+
+  it("uses the market-rule first two decimals without rounding", () => {
+    expect(formatAaaRegularGasValue("4.098")).toBe(
+      [
+        "Metric: AAA national regular gas",
+        "Market price: $4.09 per gallon (first two decimals; no rounding)",
+        "Published price: $4.098 per gallon"
+      ].join("\n")
+    );
+    expect(
+      aaaRegularGasAdapter.shouldAlertOnChange?.(
+        formatAaaRegularGasValue("4.091"),
+        formatAaaRegularGasValue("4.098")
+      )
+    ).toBe(false);
   });
 
   it("auto-discovers the active end-of-month gas market", async () => {

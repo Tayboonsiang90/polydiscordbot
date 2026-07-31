@@ -206,7 +206,7 @@ export function buildCheckEmbed(result: CheckResult): EmbedBuilder {
             { name: "Rollover handling", value: "Current source value was stored as the new baseline.", inline: false }
           ]
         : []),
-      { name: "Links", value: formatLinks(result.integration), inline: false }
+      { name: "Links", value: formatLinks(result.integration, result.currentValue), inline: false }
     )
     .setFooter({ text: `Returned at ${nowSingaporeDateTime()}` });
 
@@ -226,7 +226,7 @@ export function buildCheckAllChannelEmbed(result: CheckAllChannelResult): EmbedB
       { name: "Queue progress", value: `${result.completed}/${result.total}`, inline: true },
       { name: "Duration", value: formatDurationMs(result.durationMs), inline: true },
       { name: "Mode", value: "Fetch-only smoke check; stored values were not updated and alert roles were not mentioned.", inline: false },
-      { name: "Links", value: formatLinks(result.integration), inline: false }
+      { name: "Links", value: formatLinks(result.integration, result.currentValue), inline: false }
     )
     .setFooter({ text: `Checked at ${nowSingaporeDateTime()}` });
 }
@@ -510,7 +510,7 @@ export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
       ...quickReadFields,
       ...changeSummaryFields,
       { name: "Retrieved at", value: formatSingaporeDateTime(result.integration.lastCheckedAt), inline: false },
-      { name: "Links", value: formatLinks(result.integration), inline: false }
+      { name: "Links", value: formatLinks(result.integration, result.currentValue), inline: false }
     )
     .setFooter({ text: `Alert sent at ${nowEasternDateTime()}` });
 }
@@ -1266,16 +1266,36 @@ function normalizeTagText(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-function formatLinks(integration: Integration): string {
+function formatLinks(integration: Integration, currentValue?: string): string {
   const polymarketLines = formatPolymarketLinks(integration);
   const resolutionLink = `🔗 ${formatMarkdownLink("Resolution", integration.sourceUrl)}`;
-  if (polymarketLines.length === 0) {
-    return resolutionLink;
+  const valueLinks = extractCurrentValueLinks(
+    currentValue,
+    new Set([integration.sourceUrl, integration.polymarketUrl ?? ""])
+  );
+  const lines = [resolutionLink, ...valueLinks, ...polymarketLines];
+  return truncateEmbedValue(lines.length <= 2 ? lines.join(" · ") : lines.join("\n"));
+}
+
+function extractCurrentValueLinks(value: string | undefined, excludedUrls: Set<string>): string[] {
+  if (!value) {
+    return [];
   }
-  if (polymarketLines.length === 1) {
-    return truncateEmbedValue(`${resolutionLink} · ${polymarketLines[0]}`);
-  }
-  return truncateEmbedValue([resolutionLink, ...polymarketLines].join("\n"));
+
+  const labels: Record<string, string> = {
+    URL: "Latest release",
+    "Press URL": "Press release",
+    "SEC Filing": "SEC filing"
+  };
+  const seen = new Set<string>();
+  return value.split(/\r?\n/).flatMap((line) => {
+    const match = line.match(/^(URL|Press URL|SEC Filing):\s*(https?:\/\/\S+)$/);
+    if (!match || excludedUrls.has(match[2]) || seen.has(match[2])) {
+      return [];
+    }
+    seen.add(match[2]);
+    return [formatMarkdownLink(labels[match[1]], match[2])];
+  });
 }
 
 function formatEventLinks(integration: Integration, post: EventMonitorPost): string {
@@ -1482,6 +1502,28 @@ function formatAlertQuickReadFields(
   const value =
     integration.adapterId === "white-house-full-lid"
       ? formatFullLidQuickRead(currentValue, previousValue)
+      : integration.adapterId === "bea-current-releases" || integration.adapterId === "bls-cpi-releases"
+        ? formatReleaseQuickRead(currentValue, previousValue)
+      : integration.adapterId === "tsa-passengers"
+        ? formatTsaQuickRead(currentValue, previousValue)
+      : integration.adapterId === "fred-egg-price"
+        ? formatFredPriceQuickRead(currentValue, previousValue, "Period")
+      : integration.adapterId === "fred-ground-beef"
+        ? formatFredPriceQuickRead(currentValue, previousValue, "Latest 2026 period")
+      : integration.adapterId === "cdc-fertility-rate"
+        ? formatFertilityQuickRead(currentValue, previousValue)
+      : integration.adapterId === "bonbast-usd-irr"
+        ? formatBonbastQuickRead(currentValue, previousValue)
+      : integration.adapterId === "eia-crude-spr"
+        ? formatEiaCrudeSprQuickRead(currentValue, previousValue)
+      : integration.adapterId === "aaa-regular-gas"
+        ? formatAaaGasQuickRead(currentValue, previousValue)
+      : integration.adapterId === "tesla-deliveries"
+        ? formatTeslaDeliveriesQuickRead(currentValue, previousValue)
+      : integration.adapterId === "ornn-h100-index" ||
+          integration.adapterId === "ornn-h200-index" ||
+          integration.adapterId === "ornn-b200-index"
+        ? formatOrnnGpuQuickRead(currentValue, previousValue)
       : isPrecipitationAdapter(integration.adapterId)
         ? formatPrecipitationQuickRead(currentValue, previousValue)
       : integration.adapterId === "ufo-files"
@@ -1509,6 +1551,104 @@ function formatAlertQuickReadFields(
 
 function isPrecipitationAdapter(adapterId: string): boolean {
   return precipitationAdapterIds.has(adapterId);
+}
+
+function formatReleaseQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Title"),
+    ...formatPreferredQuickReadLine(currentValue, "Date")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatTsaQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Latest source day"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest daily throughput"),
+    ...formatPreferredQuickReadLine(currentValue, "Market window"),
+    ...formatPreferredQuickReadLine(currentValue, "Market status"),
+    ...formatPreferredQuickReadLine(currentValue, "Window total"),
+    ...formatPreferredQuickReadLine(currentValue, "Window reported days")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatFredPriceQuickRead(currentValue: string, previousValue: string | null, periodLabel: string): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Value"),
+    ...formatPreferredQuickReadLine(currentValue, periodLabel),
+    ...formatPreferredQuickReadLine(currentValue, "Latest available"),
+    ...formatPreferredQuickReadLine(currentValue, "Next release date")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatFertilityQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Result"),
+    ...formatPreferredQuickReadLine(currentValue, "Value"),
+    ...formatPreferredQuickReadLine(currentValue, "Reference"),
+    ...formatPreferredQuickReadLine(currentValue, "Period")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatBonbastQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Latest finalized"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest finalized date"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest provisional"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest provisional date"),
+    ...formatPreferredQuickReadLine(currentValue, "Day change")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatEiaCrudeSprQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Current stocks"),
+    ...formatPreferredQuickReadLine(currentValue, "Weekly change"),
+    ...formatPreferredQuickReadLine(currentValue, "Week ending"),
+    ...formatPreferredQuickReadLine(currentValue, "Next release date")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatAaaGasQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Market price"),
+    ...formatPreferredQuickReadLine(currentValue, "Published price")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatTeslaDeliveriesQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Total Deliveries"),
+    ...formatPreferredQuickReadLine(currentValue, "Date"),
+    ...formatPreferredQuickReadLine(currentValue, "Title")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatOrnnGpuQuickRead(currentValue: string, previousValue: string | null): string {
+  const currentIndex = extractValueLine(currentValue, "Index Value");
+  const previousIndex = extractValueLine(previousValue ?? "", "Index Value");
+  const currentNumber = currentIndex ? Number(currentIndex.replace(/,/g, "")) : Number.NaN;
+  const previousNumber = previousIndex ? Number(previousIndex.replace(/,/g, "")) : Number.NaN;
+  const change =
+    Number.isFinite(currentNumber) && Number.isFinite(previousNumber)
+      ? `${currentNumber - previousNumber >= 0 ? "+" : ""}${(currentNumber - previousNumber).toFixed(4)} (${previousNumber ? `${(((currentNumber - previousNumber) / previousNumber) * 100).toFixed(2)}%` : "n/a"})`
+      : null;
+  const lines = [
+    ...(currentIndex
+      ? [`**Index value:** ${previousIndex && previousIndex !== currentIndex ? `${previousIndex} → **${currentIndex}**` : currentIndex}`]
+      : []),
+    ...(change ? [`**Daily change:** ${change}`] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Date"),
+    ...formatPreferredQuickReadLine(currentValue, "Finalized by")
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
 }
 
 function formatPrecipitationQuickRead(currentValue: string, previousValue: string | null): string {
@@ -1863,7 +2003,8 @@ function formatArenaAiQuickRead(currentValue: string, previousValue: string | nu
   const currentLeader = extractValueLine(currentValue, "Top model");
   const previousCompany = extractValueLine(previousValue ?? "", "Top company") ?? extractValueLine(previousValue ?? "", "Top qualifying company");
   const currentCompany = extractValueLine(currentValue, "Top company") ?? extractValueLine(currentValue, "Top qualifying company");
-  const topRows = extractArenaAiTopRows(currentValue).slice(0, 5);
+  const topModelRows = extractArenaAiSectionRows(currentValue, "Top 3 models:", /^#\d+\s+/).slice(0, 3);
+  const topCompanyRows = extractArenaAiSectionRows(currentValue, "Top 3 companies:", /^\d+\.\s+/).slice(0, 3);
   const lines = [
     ...formatPreferredQuickReadLine(currentValue, "Leaderboard"),
     ...(previousLeader && currentLeader && previousLeader !== currentLeader ? [`**#1 model change:** ${previousLeader} â†’ **${currentLeader}**`] : []),
@@ -1872,7 +2013,8 @@ function formatArenaAiQuickRead(currentValue: string, previousValue: string | nu
       : []),
     ...(currentLeader ? [`**Top model:** ${currentLeader}`] : []),
     ...(currentCompany ? [`**Top company:** ${currentCompany}`] : []),
-    ...(topRows.length ? ["**Top 5:**", ...topRows] : [])
+    ...(topModelRows.length ? ["**Top 3 models:**", ...topModelRows] : []),
+    ...(topCompanyRows.length ? ["**Top 3 companies:**", ...topCompanyRows] : [])
   ];
 
   if (lines.length) {
@@ -1882,14 +2024,14 @@ function formatArenaAiQuickRead(currentValue: string, previousValue: string | nu
   return formatGenericQuickRead(previousValue, currentValue);
 }
 
-function extractArenaAiTopRows(value: string): string[] {
+function extractArenaAiSectionRows(value: string, header: string, pattern: RegExp): string[] {
   const lines = value.split(/\r?\n/).map((line) => line.trim());
-  const startIndex = lines.findIndex((line) => line === "Top 5:");
+  const startIndex = lines.findIndex((line) => line === header);
   if (startIndex === -1) {
     return [];
   }
 
-  return lines.slice(startIndex + 1).filter((line) => /^#\d+\s+/.test(line)).slice(0, 5);
+  return lines.slice(startIndex + 1).filter((line) => pattern.test(line));
 }
 
 type SpotifyTopRow = {

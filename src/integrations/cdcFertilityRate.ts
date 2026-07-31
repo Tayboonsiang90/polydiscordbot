@@ -5,6 +5,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 const sourceUrl = "https://www.cdc.gov/nchs/nvss/vsrr/natality-dashboard.htm";
 const csvUrl = "https://www.cdc.gov/nchs/nvss/vsrr/natality-dashboard.csv";
 const targetQuarter = "2026 Q1";
+const referenceQuarter = "2025 Q4";
 
 export type CdcNatalityRow = {
   yearQuarter: string;
@@ -19,17 +20,20 @@ export type CdcNatalityRow = {
 export function extractCdcFertilityRateValue(csv: string, html: string): string {
   const rows = parseCdcNatalityRows(csv);
   const target = rows.find(isTargetGeneralFertilityRate);
+  const reference = rows.find((row) => row.yearQuarter === referenceQuarter && isGeneralFertilityRate(row));
   const latest = rows.filter(isGeneralFertilityRate).sort((left, right) => right.yearQuarter.localeCompare(left.yearQuarter))[0];
   const pageUpdated = extractCdcPageUpdatedAt(html) ?? "unknown";
 
   if (target) {
-    return formatCdcFertilityRate(target, pageUpdated);
+    return formatCdcFertilityRate(target, reference, pageUpdated);
   }
 
   return [
     "Metric: General fertility rate",
     `Period: ${targetQuarter}`,
     "Value: not published yet",
+    `Reference: ${reference ? `${reference.yearQuarter} = ${reference.rate} ${reference.unit}` : "not available"}`,
+    "Result: pending",
     `Latest available: ${latest ? `${latest.yearQuarter} = ${latest.rate} ${latest.unit}` : "none"}`,
     `CDC page updated: ${pageUpdated}`
   ].join("\n");
@@ -118,11 +122,25 @@ export const cdcFertilityRateAdapter: WebsiteAdapter = {
   }
 };
 
-function formatCdcFertilityRate(row: CdcNatalityRow, pageUpdated: string): string {
+function formatCdcFertilityRate(
+  row: CdcNatalityRow,
+  reference: CdcNatalityRow | undefined,
+  pageUpdated: string
+): string {
+  const targetRate = Number(row.rate);
+  const referenceRate = Number(reference?.rate);
+  const result =
+    Number.isFinite(targetRate) && Number.isFinite(referenceRate)
+      ? targetRate > referenceRate
+        ? `YES - ${row.rate} is above ${reference?.rate}`
+        : `NO - ${row.rate} is not above ${reference?.rate}`
+      : "unknown";
   return [
     "Metric: General fertility rate",
     `Period: ${row.yearQuarter}`,
     `Value: ${row.rate} ${row.unit}`,
+    `Reference: ${reference ? `${reference.yearQuarter} = ${reference.rate} ${reference.unit}` : "not available"}`,
+    `Result: ${result}`,
     `Indicator: ${row.indicator}`,
     `Group: ${row.group}`,
     `Significant: ${row.significant || "not marked"}`,

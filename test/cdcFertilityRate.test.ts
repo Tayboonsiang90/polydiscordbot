@@ -44,6 +44,8 @@ describe("CDC fertility rate adapter", () => {
         "Metric: General fertility rate",
         "Period: 2026 Q1",
         "Value: 54.1 per 1,000 population",
+        "Reference: 2025 Q4 = 53.3 per 1,000 population",
+        "Result: YES - 54.1 is above 53.3",
         "Indicator: 15-44 years",
         "Group: All races and origins",
         "Significant: not marked",
@@ -63,6 +65,8 @@ describe("CDC fertility rate adapter", () => {
         "Metric: General fertility rate",
         "Period: 2026 Q1",
         "Value: not published yet",
+        "Reference: 2025 Q4 = 53.3 per 1,000 population",
+        "Result: pending",
         "Latest available: 2025 Q4 = 53.3 per 1,000 population",
         "CDC page updated: May 5, 2026"
       ].join("\n")

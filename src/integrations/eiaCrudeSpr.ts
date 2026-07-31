@@ -1,9 +1,23 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
+import {
+  refreshGammaPolymarketQueue,
+  upsertGammaPolymarketQueueUrl,
+  type GammaPolymarketDiscoveryConfig
+} from "./gammaPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?n=PET&s=WCSSTUS1&f=W";
 const easternTimeZone = "America/New_York";
+const defaultPolymarketUrl =
+  "https://polymarket.com/event/will-us-crude-oil-reserves-fall-to-by-august-28-20260714142248732";
+const discoveryConfig: GammaPolymarketDiscoveryConfig = {
+  searchQuery: "will us crude oil reserves fall to",
+  slugPrefixes: ["will-us-crude-oil-reserves-fall-to-by-"],
+  titlePrefixes: ["Will US crude oil reserves fall to"],
+  lastDiscoveryAtKey: "lastEiaCrudeSprDiscoveryAt",
+  limit: 20
+};
 
 export type EiaCrudeSprDataPoint = {
   endDate: string;
@@ -16,18 +30,29 @@ export type EiaCrudeSprReleaseDates = {
 };
 
 export function extractEiaCrudeSprValue(html: string): string {
-  const latest = extractLatestEiaCrudeSprDataPoint(html);
+  const points = extractEiaCrudeSprDataPoints(html);
+  const latest = points[0];
+  const previous = points[1];
   const releases = extractEiaCrudeSprReleaseDates(html);
+  const latestThousands = parseEiaValue(latest.value);
+  const previousThousands = previous ? parseEiaValue(previous.value) : null;
+  const weeklyChange = previousThousands === null ? null : latestThousands - previousThousands;
 
   return [
-    `End date: ${latest.endDate}`,
-    `Value: ${latest.value} thousand barrels`,
+    "Metric: EIA Strategic Petroleum Reserve stocks",
+    `Current stocks: ${formatMillionBarrels(latestThousands)} million barrels (${latest.value} thousand)`,
+    `Weekly change: ${weeklyChange === null ? "unavailable" : `${formatSignedMillionBarrels(weeklyChange)} million barrels`}`,
+    `Week ending: ${latest.endDate}`,
     `Release date: ${releases.releaseDate ?? "unknown"}`,
     `Next release date: ${releases.nextReleaseDate ?? "unknown"}`
   ].join("\n");
 }
 
 export function extractLatestEiaCrudeSprDataPoint(html: string): EiaCrudeSprDataPoint {
+  return extractEiaCrudeSprDataPoints(html)[0];
+}
+
+export function extractEiaCrudeSprDataPoints(html: string): EiaCrudeSprDataPoint[] {
   const $ = cheerio.load(html);
   const points: EiaCrudeSprDataPoint[] = [];
 
@@ -59,7 +84,7 @@ export function extractLatestEiaCrudeSprDataPoint(html: string): EiaCrudeSprData
     throw new Error("Could not find weekly EIA SPR crude oil reserve data");
   }
 
-  return points.sort((left, right) => Date.parse(right.endDate) - Date.parse(left.endDate))[0];
+  return points.sort((left, right) => Date.parse(right.endDate) - Date.parse(left.endDate));
 }
 
 export function extractEiaCrudeSprReleaseDates(html: string): EiaCrudeSprReleaseDates {
@@ -87,12 +112,21 @@ export const eiaCrudeSprAdapter: WebsiteAdapter = {
   commandName: "eia",
   displayName: "EIA Crude Oil SPR Stocks",
   sourceUrl,
-  defaultPolymarketUrl: "https://polymarket.com/event/will-us-crude-oil-reserves-fall-to-by-june-5",
+  defaultPolymarketUrl,
   defaultChannelName: "eia-crude-spr",
   alertRoleName: "EIA Crude SPR Alerts",
   alertRoleEmoji: "\u26FD",
   getPollIntervalMinutes: getEiaCrudeSprPollIntervalMinutes,
   getPollIntervalReason: getEiaCrudeSprPollIntervalReason,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshGammaPolymarketQueue(integration, discoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  async upsertPolymarketMarket(
+    integration: Integration,
+    url: string
+  ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+    return upsertGammaPolymarketQueueUrl(integration, url, discoveryConfig);
+  },
   async fetchCurrentValue(): Promise<AdapterValue> {
     const response = await fetchWithTimeout(sourceUrl, {
       headers: {
@@ -144,4 +178,17 @@ function normalizeText(value: string): string {
 
 function getEasternWeekday(date: Date): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: easternTimeZone, weekday: "short" }).format(date);
+}
+
+function parseEiaValue(value: string): number {
+  return Number(value.replace(/,/g, ""));
+}
+
+function formatMillionBarrels(thousandBarrels: number): string {
+  return (thousandBarrels / 1_000).toFixed(3);
+}
+
+function formatSignedMillionBarrels(thousandBarrels: number): string {
+  const value = thousandBarrels / 1_000;
+  return `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
 }

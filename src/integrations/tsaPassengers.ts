@@ -132,6 +132,7 @@ export function parsePolymarketTsaDateRange(url: string, now: Date = new Date())
 
 export function formatTsaPassengerRangeValue(volumes: TsaPassengerVolume[], range: TsaDateRange): string {
   const volumeByDate = new Map(volumes.map((volume) => [volume.date, volume.passengers]));
+  const latestSourceDay = [...volumes].sort((left, right) => right.date.localeCompare(left.date))[0];
   const dates = enumerateDates(range.startDate, range.endDate);
   const reported = dates.flatMap((date) => {
     const passengers = volumeByDate.get(date);
@@ -142,12 +143,14 @@ export function formatTsaPassengerRangeValue(volumes: TsaPassengerVolume[], rang
 
   return [
     "Metric: TSA daily checkpoint throughput sum",
-    `Range: ${range.startDate} to ${range.endDate}`,
-    `Status: ${missingDates.length === 0 ? "complete" : "partial"}`,
-    `Reported days: ${reported.length}/${dates.length}`,
-    `Total passengers: ${formatInteger(total)}`,
-    `Missing dates: ${missingDates.length ? missingDates.join(", ") : "none"}`,
-    `Daily values: ${reported.length ? reported.map((volume) => `${volume.date}: ${formatInteger(volume.passengers)}`).join(" | ") : "none"}`
+    `Latest source day: ${latestSourceDay.date}`,
+    `Latest daily throughput: ${formatInteger(latestSourceDay.passengers)}`,
+    `Market window: ${range.startDate} to ${range.endDate}`,
+    `Market status: ${missingDates.length === 0 ? "complete" : "partial"}`,
+    `Window reported days: ${reported.length}/${dates.length}`,
+    `Window total: ${formatInteger(total)}`,
+    `Missing window dates: ${missingDates.length ? missingDates.join(", ") : "none"}`,
+    `Window daily values: ${reported.length ? reported.map((volume) => `${volume.date}: ${formatInteger(volume.passengers)}`).join(" | ") : "none"}`
   ].join("\n");
 }
 

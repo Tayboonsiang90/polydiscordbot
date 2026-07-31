@@ -7,7 +7,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.bonbast.com/graph/usd";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
-const defaultPolymarketUrl = "https://polymarket.com/event/will-usd-hit-iranian-rials-by-june-30";
+const defaultPolymarketUrl = "https://polymarket.com/event/will-usd-hit-iranian-rials-by-august-31-20260728205801827";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 15 * 60_000;
 
@@ -31,7 +31,18 @@ type GammaSearchEvent = {
   endDate?: unknown;
 };
 
+export type BonbastRatePoint = {
+  date: string;
+  toman: number;
+  irr: number;
+};
+
 export function extractBonbastUsdIrrValue(html: string): string {
+  const points = extractBonbastGraphPoints(html);
+  if (points.length) {
+    return String(points.at(-1)?.irr);
+  }
+
   const $ = cheerio.load(html);
   const text = $.root().text();
   const scriptText = $("script")
@@ -49,7 +60,52 @@ export function extractBonbastUsdIrrValue(html: string): string {
     throw new Error("Could not find a Bonbast USD/IRR value in the response");
   }
 
-  return String(candidates.at(-1));
+  return String((candidates.at(-1) ?? 0) * 10);
+}
+
+export function extractBonbastGraphPoints(html: string): BonbastRatePoint[] {
+  const $ = cheerio.load(html);
+  const scriptText = $("script")
+    .map((_, element) => $(element).text())
+    .get()
+    .join("\n");
+  const labelsBlock = scriptText.match(/labels\s*:\s*\[([\s\S]*?)\]\s*,\s*datasets/i)?.[1] ?? "";
+  const usdBlock =
+    scriptText.match(/label\s*:\s*['"]usd['"][\s\S]*?data\s*:\s*\[([\s\S]*?)\]/i)?.[1] ?? "";
+  const dates = [...labelsBlock.matchAll(/new Date\(\s*['"](\d{4}-\d{2}-\d{2})['"]\s*\)/g)].map(
+    (match) => match[1]
+  );
+  const tomanValues = [...usdBlock.matchAll(/\b\d{4,9}(?:\.\d+)?\b/g)].map((match) => Number(match[0]));
+
+  return dates.flatMap((date, index) => {
+    const toman = tomanValues[index];
+    return Number.isFinite(toman) ? [{ date, toman, irr: toman * 10 }] : [];
+  });
+}
+
+export function formatBonbastUsdIrrValue(html: string): string {
+  const points = extractBonbastGraphPoints(html);
+  if (points.length < 2) {
+    const irr = Number(extractBonbastUsdIrrValue(html));
+    return [
+      "Metric: Bonbast USD exchange rate",
+      `Latest provisional: ${formatInteger(irr)} IRR per USD (${formatInteger(irr / 10)} toman)`,
+      "Finalized rate: unavailable"
+    ].join("\n");
+  }
+
+  const latest = points.at(-1)!;
+  const finalized = points.at(-2)!;
+  const change = latest.irr - finalized.irr;
+  const changePercent = finalized.irr ? (change / finalized.irr) * 100 : 0;
+  return [
+    "Metric: Bonbast USD exchange rate",
+    `Latest provisional date: ${latest.date}`,
+    `Latest provisional: ${formatInteger(latest.irr)} IRR per USD (${formatInteger(latest.toman)} toman)`,
+    `Latest finalized date: ${finalized.date}`,
+    `Latest finalized: ${formatInteger(finalized.irr)} IRR per USD (${formatInteger(finalized.toman)} toman)`,
+    `Day change: ${formatSignedInteger(change)} IRR (${formatSignedPercent(changePercent)})`
+  ].join("\n");
 }
 
 export const bonbastUsdIrrAdapter: WebsiteAdapter = {
@@ -76,13 +132,16 @@ export const bonbastUsdIrrAdapter: WebsiteAdapter = {
     }
 
     const html = await response.text();
-    const value = extractBonbastUsdIrrValue(html);
+    const value = formatBonbastUsdIrrValue(html);
     return {
       value,
       rawValue: value,
       unit: "IRR per USD",
       observedAt: new Date()
     };
+  },
+  shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+    return extractBonbastComparableValue(previousValue) !== extractBonbastComparableValue(currentValue);
   }
 };
 
@@ -265,4 +324,29 @@ function parseGammaDate(value: unknown): string | null {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function extractBonbastComparableValue(value: string | null): string {
+  if (!value) {
+    return "";
+  }
+
+  return [
+    value.match(/^Latest provisional date:\s*(.+)$/m)?.[1] ?? "",
+    value.match(/^Latest provisional:\s*(.+)$/m)?.[1] ?? value,
+    value.match(/^Latest finalized date:\s*(.+)$/m)?.[1] ?? "",
+    value.match(/^Latest finalized:\s*(.+)$/m)?.[1] ?? ""
+  ].join("|");
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatSignedInteger(value: number): string {
+  return `${value >= 0 ? "+" : ""}${formatInteger(value)}`;
+}
+
+function formatSignedPercent(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }

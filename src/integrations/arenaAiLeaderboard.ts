@@ -2,6 +2,11 @@ import * as cheerio from "cheerio";
 import type { AnyNode } from "domhandler";
 import { fetchWithTimeout } from "../http.js";
 import { resolveIntegrationPolymarketQueue, upsertPolymarketQueueUrl } from "../polymarketQueue.js";
+import {
+  refreshGammaPolymarketQueue,
+  upsertGammaPolymarketQueueUrl,
+  type GammaPolymarketDiscoveryConfig
+} from "./gammaPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const noStyleControlUrl = "https://arena.ai/leaderboard/text/overall-no-style-control";
@@ -37,6 +42,7 @@ type ArenaAiLeaderboardConfig = {
   alertRoleEmoji: string;
   unit: string;
   polymarketUrls: string[];
+  discoveryConfig: GammaPolymarketDiscoveryConfig;
   rowFilter?: (row: ArenaAiRankedModel) => boolean;
   topCompanyLabel?: string;
 };
@@ -51,9 +57,9 @@ export type ArenaAiRankedModel = {
 };
 
 const noStyleControlPolymarketUrls = [
-  "https://polymarket.com/event/best-ai-model-on-july-25-20260717010053151",
   "https://polymarket.com/event/best-ai-model-on-august-1-20260717010751015",
-  "https://polymarket.com/event/which-company-has-best-ai-model-end-of-august-20260717015626546"
+  "https://polymarket.com/event/which-company-has-best-ai-model-end-of-august-20260717015626546",
+  "https://polymarket.com/event/best-ai-model-on-july-25-20260717010053151"
 ];
 
 const configs: ArenaAiLeaderboardConfig[] = [
@@ -67,7 +73,19 @@ const configs: ArenaAiLeaderboardConfig[] = [
     alertRoleName: "Arena AI Alerts",
     alertRoleEmoji: "🤖",
     unit: "top Arena AI no-style-control models",
-    polymarketUrls: noStyleControlPolymarketUrls
+    polymarketUrls: noStyleControlPolymarketUrls,
+    discoveryConfig: {
+      searchQuery: "best ai model",
+      slugPrefixes: [
+        "best-ai-model-on-",
+        "which-company-has-best-ai-model-end-of-",
+        "which-company-has-the-best-ai-model-end-of-",
+        "which-company-has-second-best-ai-model-end-of-",
+        "which-company-has-the-third-best-ai-model-end-of-"
+      ],
+      lastDiscoveryAtKey: "lastArenaAiNoStyleDiscoveryAt",
+      limit: 30
+    }
   },
   {
     id: "arena-ai-style-control-on",
@@ -81,7 +99,14 @@ const configs: ArenaAiLeaderboardConfig[] = [
     unit: "top Arena AI style-control-on models",
     polymarketUrls: [
       "https://polymarket.com/event/which-company-has-1-ai-model-end-of-august-style-control-on-20260717021043100"
-    ]
+    ],
+    discoveryConfig: {
+      searchQuery: "ai model style control on",
+      slugPrefixes: ["which-company-has-1-ai-model-end-of-", "which-company-has-best-ai-model-end-of-"],
+      titlePrefixes: ["Which company has #1 AI model", "Which company has best AI model"],
+      lastDiscoveryAtKey: "lastArenaAiStyleDiscoveryAt",
+      limit: 30
+    }
   },
   {
     id: "arena-ai-math",
@@ -95,7 +120,13 @@ const configs: ArenaAiLeaderboardConfig[] = [
     unit: "top Arena AI math models",
     polymarketUrls: [
       "https://polymarket.com/event/which-company-has-the-best-text-arena-math-ai-model-end-of-august-20260717012538240"
-    ]
+    ],
+    discoveryConfig: {
+      searchQuery: "best text arena math ai model",
+      slugPrefixes: ["which-company-has-the-best-text-arena-math-ai-model-end-of-"],
+      lastDiscoveryAtKey: "lastArenaAiMathDiscoveryAt",
+      limit: 30
+    }
   },
   {
     id: "arena-ai-code-webdev",
@@ -108,9 +139,19 @@ const configs: ArenaAiLeaderboardConfig[] = [
     alertRoleEmoji: "💻",
     unit: "top Arena AI code WebDev models",
     polymarketUrls: [
-      "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-july-20260715140712903",
-      "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-august-20260716213053775"
-    ]
+      "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-august-20260716213053775",
+      "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-july-20260715140712903"
+    ],
+    discoveryConfig: {
+      searchQuery: "code arena webdev ai model",
+      slugPrefixes: [
+        "which-company-has-the-best-code-arena-webdev-ai-model-end-of-",
+        "which-company-has-the-second-best-code-arena-webdev-ai-model-end-of-",
+        "which-company-has-the-third-best-code-arena-webdev-ai-model-end-of-"
+      ],
+      lastDiscoveryAtKey: "lastArenaAiWebdevDiscoveryAt",
+      limit: 30
+    }
   },
   {
     id: "arena-ai-text-to-image",
@@ -124,7 +165,13 @@ const configs: ArenaAiLeaderboardConfig[] = [
     unit: "top Arena AI text-to-image models",
     polymarketUrls: [
       "https://polymarket.com/event/which-company-has-the-best-text-to-image-ai-end-of-august-20260716212635678"
-    ]
+    ],
+    discoveryConfig: {
+      searchQuery: "best text to image ai",
+      slugPrefixes: ["which-company-has-the-best-text-to-image-ai-end-of-"],
+      lastDiscoveryAtKey: "lastArenaAiImageDiscoveryAt",
+      limit: 30
+    }
   },
   {
     id: "arena-ai-text-to-video",
@@ -138,7 +185,13 @@ const configs: ArenaAiLeaderboardConfig[] = [
     unit: "top Arena AI text-to-video models",
     polymarketUrls: [
       "https://polymarket.com/event/which-company-has-the-best-text-to-video-ai-end-of-august-20260717022544476"
-    ]
+    ],
+    discoveryConfig: {
+      searchQuery: "best text to video ai",
+      slugPrefixes: ["which-company-has-the-best-text-to-video-ai-end-of-"],
+      lastDiscoveryAtKey: "lastArenaAiVideoDiscoveryAt",
+      limit: 30
+    }
   },
   {
     id: "arena-ai-chinese-company",
@@ -151,6 +204,16 @@ const configs: ArenaAiLeaderboardConfig[] = [
     alertRoleEmoji: "🇨🇳",
     unit: "top Arena AI Chinese-company models",
     polymarketUrls: ["https://polymarket.com/event/best-chinese-ai-company-end-of-august-20260717004241592"],
+    discoveryConfig: {
+      searchQuery: "best chinese ai company",
+      slugPrefixes: [
+        "best-chinese-ai-company-end-of-",
+        "second-best-chinese-ai-company-end-of-",
+        "third-best-chinese-ai-company-end-of-"
+      ],
+      lastDiscoveryAtKey: "lastArenaAiChinaDiscoveryAt",
+      limit: 30
+    },
     rowFilter: (row) => chineseCompanies.has(row.company),
     topCompanyLabel: "Top qualifying company"
   }
@@ -187,9 +250,11 @@ export function extractArenaAiLeaderboardRows(html: string): ArenaAiRankedModel[
 export function formatArenaAiLeaderboardValue(
   config: Pick<ArenaAiLeaderboardConfig, "leaderboardName" | "sourceUrl" | "rowFilter" | "topCompanyLabel">,
   rows: ArenaAiRankedModel[],
-  limit = 5
+  limit = 3
 ): string {
-  const filteredRows = (config.rowFilter ? rows.filter(config.rowFilter) : rows).slice(0, limit);
+  const qualifyingRows = config.rowFilter ? rows.filter(config.rowFilter) : rows;
+  const filteredRows = qualifyingRows.slice(0, limit);
+  const companyRows = getDistinctCompanyRows(qualifyingRows, limit);
   const leader = filteredRows[0];
   if (!leader) {
     throw new Error(`Could not find qualifying Arena AI rows for ${config.leaderboardName}`);
@@ -200,8 +265,10 @@ export function formatArenaAiLeaderboardValue(
     `Leaderboard: ${config.leaderboardName}`,
     `Top model: #${leader.rank} ${leader.model}`,
     `${config.topCompanyLabel ?? "Top company"}: ${leader.company}`,
-    "Top 5:",
+    "Top 3 models:",
     ...filteredRows.map(formatArenaAiRow),
+    "Top 3 companies:",
+    ...companyRows.map((row, index) => `${index + 1}. ${row.company} - ${row.model} (overall #${row.rank})`),
     `Resolution: ${config.sourceUrl}`
   ].join("\n");
 }
@@ -226,10 +293,22 @@ function createArenaAiLeaderboardAdapter(config: ArenaAiLeaderboardConfig): Webs
     alertRoleName: config.alertRoleName,
     alertRoleEmoji: config.alertRoleEmoji,
     async refreshSettings(integration: Integration): Promise<string> {
-      return seedArenaPolymarketMarkets(integration, config.polymarketUrls).settingsJson ?? integration.settingsJson ?? "{}";
+      const seeded = seedArenaPolymarketMarkets(integration, config.polymarketUrls);
+      const discovered = await refreshGammaPolymarketQueue(
+        {
+          ...integration,
+          settingsJson: seeded.settingsJson,
+          polymarketUrl: seeded.activeUrl ?? integration.polymarketUrl
+        },
+        config.discoveryConfig
+      );
+      return discovered.settingsJson ?? seeded.settingsJson ?? integration.settingsJson ?? "{}";
     },
-    upsertPolymarketMarket(integration: Integration, url: string): { settingsJson: string | null; activeUrl: string | null } {
-      return upsertPolymarketQueueUrl(integration, url);
+    async upsertPolymarketMarket(
+      integration: Integration,
+      url: string
+    ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+      return upsertGammaPolymarketQueueUrl(integration, url, config.discoveryConfig);
     },
     shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
       return buildArenaRankSignature(previousValue) !== buildArenaRankSignature(currentValue);
@@ -332,16 +411,36 @@ function buildArenaRankSignature(value: string | null): string {
     return "";
   }
 
-  const rows = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /^#\d+\s+/.test(line))
+  const modelRows = extractSectionRows(value, "Top 3 models:", /^#\d+\s+/)
     .map((line) => line.replace(/\s+\(score .+\)$/, ""));
-  if (rows.length) {
-    return rows.join("|");
+  const companyRows = extractSectionRows(value, "Top 3 companies:", /^\d+\.\s+/);
+  if (modelRows.length || companyRows.length) {
+    return [...modelRows, ...companyRows].join("|");
   }
 
   return value;
+}
+
+function getDistinctCompanyRows(rows: ArenaAiRankedModel[], limit: number): ArenaAiRankedModel[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const company = row.company.toLowerCase();
+    if (!company || company === "unknown" || seen.has(company)) {
+      return false;
+    }
+    seen.add(company);
+    return true;
+  }).slice(0, limit);
+}
+
+function extractSectionRows(value: string, header: string, pattern: RegExp): string[] {
+  const lines = value.split(/\r?\n/).map((line) => line.trim());
+  const start = lines.indexOf(header);
+  if (start === -1) {
+    return [];
+  }
+
+  return lines.slice(start + 1).filter((line) => pattern.test(line)).slice(0, 3);
 }
 
 function normalizeText(value: string): string {

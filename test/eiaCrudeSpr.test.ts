@@ -53,8 +53,10 @@ describe("EIA crude SPR adapter", () => {
   it("formats the monitor value", () => {
     expect(extractEiaCrudeSprValue(sampleHtml)).toBe(
       [
-        "End date: 2026-05-01",
-        "Value: 392,700 thousand barrels",
+        "Metric: EIA Strategic Petroleum Reserve stocks",
+        "Current stocks: 392.700 million barrels (392,700 thousand)",
+        "Weekly change: -5.224 million barrels",
+        "Week ending: 2026-05-01",
         "Release date: 5/6/2026",
         "Next release date: 5/13/2026"
       ].join("\n")

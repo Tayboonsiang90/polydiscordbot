@@ -56,12 +56,14 @@ describe("TSA passengers adapter", () => {
     ).toBe(
       [
         "Metric: TSA daily checkpoint throughput sum",
-        "Range: 2026-05-04 to 2026-05-06",
-        "Status: complete",
-        "Reported days: 3/3",
-        "Total passengers: 6,833,061",
-        "Missing dates: none",
-        "Daily values: 2026-05-04: 2,540,806 | 2026-05-05: 2,040,845 | 2026-05-06: 2,251,410"
+        "Latest source day: 2026-05-06",
+        "Latest daily throughput: 2,251,410",
+        "Market window: 2026-05-04 to 2026-05-06",
+        "Market status: complete",
+        "Window reported days: 3/3",
+        "Window total: 6,833,061",
+        "Missing window dates: none",
+        "Window daily values: 2026-05-04: 2,540,806 | 2026-05-05: 2,040,845 | 2026-05-06: 2,251,410"
       ].join("\n")
     );
   });
@@ -73,7 +75,7 @@ describe("TSA passengers adapter", () => {
         "https://polymarket.com/event/number-of-tsa-passengers-may-4-may-10",
         new Date("2026-05-07T00:00:00.000Z")
       )
-    ).toContain("Missing dates: 2026-05-07, 2026-05-08, 2026-05-09, 2026-05-10");
+    ).toContain("Missing window dates: 2026-05-07, 2026-05-08, 2026-05-09, 2026-05-10");
   });
 
   it("discovers and queues the next TSA market when the active week is near expiry", async () => {

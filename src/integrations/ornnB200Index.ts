@@ -27,7 +27,7 @@ export const ornnB200IndexAdapter = createOrnnGpuIndexAdapter({
   commandName: "ornnb200",
   displayName: "ORNN B200 Index",
   gpuName: "B200",
-  defaultPolymarketUrl: "https://polymarket.com/event/gpu-rental-prices-b200-hit-by-may-31",
+  defaultPolymarketUrl: "https://polymarket.com/event/gpu-rental-prices-b200-end-of-august-1785423806591",
   defaultChannelName: "ornnb200",
   alertRoleName: "ORNN B200 Alerts"
 });

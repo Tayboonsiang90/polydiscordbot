@@ -9,8 +9,8 @@ const requestHeaders = {
   "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
 };
 const defaultYear = 2026;
-const defaultMonth = 4;
-const fallbackNextReleaseDate = "May 12, 2026";
+const defaultMonth = 7;
+const fallbackNextReleaseDate = "August 12, 2026";
 const easternTimeZone = "America/New_York";
 const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   searchQuery: "price of dozen eggs",
@@ -112,7 +112,7 @@ export const fredEggPriceAdapter: WebsiteAdapter = {
   commandName: "eggs",
   displayName: "FRED Egg Price",
   sourceUrl,
-  defaultPolymarketUrl: "https://polymarket.com/event/price-of-dozen-eggs-in-april-799",
+  defaultPolymarketUrl: "https://polymarket.com/event/price-of-dozen-eggs-in-july-20260714151433730",
   defaultChannelName: "eggs",
   alertRoleName: "FRED Egg Price Alerts",
   alertRoleEmoji: "\uD83E\uDD5A",

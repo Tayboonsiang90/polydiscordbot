@@ -46,6 +46,16 @@ export function extractAaaRegularGasCurrentAvg(html: string): string {
   throw new Error("Could not find AAA Current Avg. Regular gas price in the response");
 }
 
+export function formatAaaRegularGasValue(publishedPrice: string): string {
+  const published = Number(publishedPrice);
+  const marketPrice = Math.floor(published * 100) / 100;
+  return [
+    "Metric: AAA national regular gas",
+    `Market price: $${marketPrice.toFixed(2)} per gallon (first two decimals; no rounding)`,
+    `Published price: $${published.toFixed(3)} per gallon`
+  ].join("\n");
+}
+
 export const aaaRegularGasAdapter: WebsiteAdapter = {
   id: "aaa-regular-gas",
   commandName: "aaa",
@@ -70,13 +80,16 @@ export const aaaRegularGasAdapter: WebsiteAdapter = {
     }
 
     const html = await response.text();
-    const value = extractAaaRegularGasCurrentAvg(html);
+    const value = formatAaaRegularGasValue(extractAaaRegularGasCurrentAvg(html));
     return {
       value,
       rawValue: value,
       unit: "USD per gallon",
       observedAt: new Date()
     };
+  },
+  shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+    return extractMarketPrice(previousValue) !== extractMarketPrice(currentValue);
   }
 };
 
@@ -108,5 +121,9 @@ function normalizeGasPrice(value: string): string {
   }
 
   return price.toFixed(3);
+}
+
+function extractMarketPrice(value: string | null): string {
+  return value?.match(/^Market price:\s*(.+)$/m)?.[1] ?? value ?? "";
 }
 

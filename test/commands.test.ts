@@ -444,6 +444,75 @@ describe("adapter commands", () => {
     expect(quickRead).not.toContain("Lady Gaga - Die With A Smile");
   });
 
+  it.each([
+    {
+      adapterId: "tsa-passengers",
+      previousValue: "Latest source day: 2026-07-28\nLatest daily throughput: 2,900,000",
+      currentValue: [
+        "Metric: TSA daily checkpoint throughput sum",
+        "Latest source day: 2026-07-29",
+        "Latest daily throughput: 3,100,000",
+        "Market window: 2026-05-04 to 2026-05-10",
+        "Market status: complete",
+        "Window reported days: 7/7",
+        "Window total: 16,780,961"
+      ].join("\n"),
+      expected: ["**Latest source day:** 2026-07-29", "**Latest daily throughput:** 3,100,000"]
+    },
+    {
+      adapterId: "bonbast-usd-irr",
+      previousValue: "Latest finalized: 1,930,000 IRR per USD",
+      currentValue: [
+        "Metric: Bonbast USD exchange rate",
+        "Latest provisional date: 2026-07-30",
+        "Latest provisional: 1,933,000 IRR per USD (193,300 toman)",
+        "Latest finalized date: 2026-07-29",
+        "Latest finalized: 1,936,000 IRR per USD (193,600 toman)",
+        "Day change: -3,000 IRR (-0.15%)"
+      ].join("\n"),
+      expected: ["**Latest finalized:** 1,936,000 IRR per USD", "**Latest provisional:** 1,933,000 IRR per USD"]
+    },
+    {
+      adapterId: "ornn-h100-index",
+      previousValue: "Date: 2026-07-28\nIndex Value: 2.5\nFinalized by: 2026-07-29",
+      currentValue: "Date: 2026-07-29\nIndex Value: 2.75\nFinalized by: 2026-07-30",
+      expected: ["**Index value:** 2.5 → **2.75**", "**Daily change:** +0.2500 (10.00%)"]
+    }
+  ])("shows decision-useful $adapterId alert details first", ({ adapterId, previousValue, currentValue, expected }) => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId },
+      previousValue,
+      previousCheckedAt: "2026-07-30T00:00:00.000Z",
+      currentValue,
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    for (const text of expected) {
+      expect(quickRead).toContain(text);
+    }
+  });
+
+  it("adds direct article links from release values to the Links field", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "bea-current-releases", sourceUrl: "https://www.bea.gov/news/current-releases" },
+      previousValue: null,
+      previousCheckedAt: null,
+      currentValue: [
+        "Title: Gross Domestic Product, 2nd Quarter 2026",
+        "Date: July 30, 2026",
+        "URL: https://www.bea.gov/news/2026/gross-domestic-product-2nd-quarter-2026"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    expect(embed.fields?.find((field) => field.name === "Quick read")?.value).toContain("Gross Domestic Product");
+    expect(embed.fields?.find((field) => field.name === "Links")?.value).toContain(
+      "[Latest release](https://www.bea.gov/news/2026/gross-domestic-product-2nd-quarter-2026)"
+    );
+  });
+
   it("keeps Powerball jackpot numbers in quick-read alerts", () => {
     const embed = buildAlertEmbed({
       integration: { ...checkedIntegration, adapterId: "powerball-jackpot", displayName: "Powerball Jackpot" },

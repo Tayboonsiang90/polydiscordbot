@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  bonbastUsdIrrAdapter,
+  extractBonbastGraphPoints,
   extractBonbastUsdIrrValue,
+  formatBonbastUsdIrrValue,
   normalizeBonbastMarketSearchEvent,
   refreshBonbastPolymarketQueue
 } from "../src/integrations/bonbast.js";
@@ -18,7 +21,7 @@ describe("extractBonbastUsdIrrValue", () => {
       </html>
     `;
 
-    expect(extractBonbastUsdIrrValue(html)).toBe("612500");
+    expect(extractBonbastUsdIrrValue(html)).toBe("6125000");
   });
 
   it("extracts a currency-like number from chart scripts", () => {
@@ -31,7 +34,29 @@ describe("extractBonbastUsdIrrValue", () => {
       </html>
     `;
 
-    expect(extractBonbastUsdIrrValue(html)).toBe("602100");
+    expect(extractBonbastUsdIrrValue(html)).toBe("6021000");
+  });
+
+  it("shows provisional toman and finalized IRR values from graph history", () => {
+    const html = `
+      <script>
+        const chart = {
+          labels: [new Date('2026-07-29'), new Date('2026-07-30')],
+          datasets: [{ label: 'usd', data: [193600, 193300] }]
+        };
+      </script>
+    `;
+
+    expect(extractBonbastGraphPoints(html)).toEqual([
+      { date: "2026-07-29", toman: 193600, irr: 1936000 },
+      { date: "2026-07-30", toman: 193300, irr: 1933000 }
+    ]);
+    expect(formatBonbastUsdIrrValue(html)).toContain("Latest finalized: 1,936,000 IRR per USD (193,600 toman)");
+    expect(formatBonbastUsdIrrValue(html)).toContain("Latest provisional: 1,933,000 IRR per USD (193,300 toman)");
+    expect(bonbastUsdIrrAdapter.shouldAlertOnChange?.(
+      formatBonbastUsdIrrValue(html),
+      formatBonbastUsdIrrValue(html).replace("Day change: -3,000", "Day change: -4,000")
+    )).toBe(false);
   });
 
   it("throws when no plausible value exists", () => {
