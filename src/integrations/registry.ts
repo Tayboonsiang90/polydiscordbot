@@ -137,7 +137,7 @@ import { whiteHousePoolUpdatesAdapter } from "./whiteHousePoolUpdates.js";
 import { whiteHouseTweetsAdapter } from "./whiteHouseTweets.js";
 import { yoTokenTransferabilityAdapter } from "./yoTokenTransferability.js";
 
-const adapters = new Map<string, WebsiteAdapter>([
+const adapterEntries: Array<readonly [string, WebsiteAdapter]> = [
   [aaaRegularGasAdapter.id, aaaRegularGasAdapter],
   [alignedLayerSaleAdapter.id, alignedLayerSaleAdapter],
   [allInPodcastAdapter.id, allInPodcastAdapter],
@@ -271,10 +271,12 @@ const adapters = new Map<string, WebsiteAdapter>([
   [whiteHousePoolUpdatesAdapter.id, whiteHousePoolUpdatesAdapter],
   [whiteHouseTweetsAdapter.id, whiteHouseTweetsAdapter],
   [yoTokenTransferabilityAdapter.id, yoTokenTransferabilityAdapter]
-]);
+];
+
+const adapterRegistry = createAdapterRegistry(adapterEntries);
 
 export function getAdapter(adapterId: string): WebsiteAdapter {
-  const adapter = adapters.get(adapterId);
+  const adapter = adapterRegistry.byId.get(adapterId);
   if (!adapter) {
     throw new Error(`Unknown adapter: ${adapterId}`);
   }
@@ -282,11 +284,11 @@ export function getAdapter(adapterId: string): WebsiteAdapter {
 }
 
 export function hasAdapter(adapterId: string): boolean {
-  return adapters.has(adapterId);
+  return adapterRegistry.byId.has(adapterId);
 }
 
 export function getAdapterByCommandName(commandName: string): WebsiteAdapter {
-  const adapter = listAdapters().find((candidate) => candidate.commandName === commandName);
+  const adapter = adapterRegistry.byCommandName.get(commandName);
   if (!adapter) {
     throw new Error(`Unknown adapter command: ${commandName}`);
   }
@@ -294,5 +296,65 @@ export function getAdapterByCommandName(commandName: string): WebsiteAdapter {
 }
 
 export function listAdapters(): WebsiteAdapter[] {
-  return [...adapters.values()];
+  return [...adapterRegistry.list];
+}
+
+export function createAdapterRegistry(entries: ReadonlyArray<readonly [string, WebsiteAdapter]>): {
+  byId: ReadonlyMap<string, WebsiteAdapter>;
+  byCommandName: ReadonlyMap<string, WebsiteAdapter>;
+  list: readonly WebsiteAdapter[];
+} {
+  const byId = new Map<string, WebsiteAdapter>();
+  const byCommandName = new Map<string, WebsiteAdapter>();
+  const list: WebsiteAdapter[] = [];
+
+  for (const [entryId, adapter] of entries) {
+    validateAdapterMetadata(adapter);
+    if (entryId !== adapter.id) {
+      throw new Error(`Adapter registry key ${entryId} does not match adapter id ${adapter.id}.`);
+    }
+    if (byId.has(adapter.id)) {
+      throw new Error(`Duplicate adapter id: ${adapter.id}`);
+    }
+    if (byCommandName.has(adapter.commandName)) {
+      throw new Error(`Duplicate adapter command: ${adapter.commandName}`);
+    }
+
+    byId.set(adapter.id, adapter);
+    byCommandName.set(adapter.commandName, adapter);
+    list.push(adapter);
+  }
+
+  return {
+    byId,
+    byCommandName,
+    list: Object.freeze(list)
+  };
+}
+
+function validateAdapterMetadata(adapter: WebsiteAdapter): void {
+  const requiredText: Array<[string, unknown]> = [
+    ["displayName", adapter.displayName],
+    ["alertRoleName", adapter.alertRoleName],
+    ["alertRoleEmoji", adapter.alertRoleEmoji]
+  ];
+
+  if (!/^[a-z0-9-]+$/.test(adapter.id)) {
+    throw new Error(`Invalid adapter id: ${adapter.id}`);
+  }
+  if (!/^[a-z0-9]+$/.test(adapter.commandName)) {
+    throw new Error(`Invalid command name for ${adapter.id}: ${adapter.commandName}`);
+  }
+  if (!/^[a-z0-9-]+$/.test(adapter.defaultChannelName)) {
+    throw new Error(`Invalid channel name for ${adapter.id}: ${adapter.defaultChannelName}`);
+  }
+  if (!/^https?:\/\//.test(adapter.sourceUrl)) {
+    throw new Error(`Invalid source URL for ${adapter.id}: ${adapter.sourceUrl}`);
+  }
+
+  for (const [field, value] of requiredText) {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new Error(`Missing ${field} for adapter ${adapter.id}.`);
+    }
+  }
 }

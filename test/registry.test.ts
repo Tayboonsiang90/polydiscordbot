@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getAdapterByCommandName, listAdapters } from "../src/integrations/registry.js";
+import { createAdapterRegistry, getAdapterByCommandName, listAdapters } from "../src/integrations/registry.js";
+import type { WebsiteAdapter } from "../src/integrations/types.js";
 
 const expectedCommandIds = [
   ["aaa", "aaa-regular-gas"],
@@ -178,6 +179,26 @@ describe("adapter registry", () => {
       expect(adapter.alertRoleName).toBeTruthy();
       expect(adapter.alertRoleEmoji).toBeTruthy();
     }
+  });
+
+  it("rejects duplicate or invalid adapter metadata when building an index", () => {
+    const base = listAdapters()[0];
+    const second = {
+      ...base,
+      id: "second-adapter",
+      commandName: "secondadapter",
+      defaultChannelName: "second-adapter"
+    } satisfies WebsiteAdapter;
+
+    expect(() => createAdapterRegistry([[base.id, base], [base.id, base]])).toThrow("Duplicate adapter id");
+    expect(() =>
+      createAdapterRegistry([
+        [base.id, base],
+        [second.id, { ...second, commandName: base.commandName }]
+      ])
+    ).toThrow("Duplicate adapter command");
+    expect(() => createAdapterRegistry([["wrong-key", base]])).toThrow("does not match adapter id");
+    expect(() => createAdapterRegistry([["invalid-id", { ...base, id: "invalid id" }]])).toThrow("Invalid adapter id");
   });
 
   it("keeps known dynamic polling and special-command capabilities", () => {

@@ -41,7 +41,9 @@ describe("address labels", () => {
     ]);
     expect(
       formatAddressWithLabel("0x1111111111111111111111111111111111111111", updated.addressLabels)
-    ).toBe("Updated Proposer\n0x1111111111111111111111111111111111111111");
+    ).toBe(
+      "Updated Proposer\nPolygonscan: https://polygonscan.com/address/0x1111111111111111111111111111111111111111\n0x1111111111111111111111111111111111111111"
+    );
 
     const removed = updateAddressLabelsInSettingsJson(updated.settingsJson, "remove", "0x1111111111111111111111111111111111111111");
 
@@ -163,7 +165,7 @@ describe("address labels", () => {
         status
       )
     ).toBe(
-      `Known Trader ([Polymarket: noreasapa](https://polymarket.com/@noreasapa))\n${address}`
+      `Known Trader ([Polymarket: noreasapa](https://polymarket.com/@noreasapa))\nPolygonscan: https://polygonscan.com/address/${address}\n${address}`
     );
   });
 
@@ -193,7 +195,7 @@ describe("address labels", () => {
       hasTrades: false
     });
     expect(formatAddressWithLabel(address, [{ address, label: "Known Trader" }], status)).toBe(
-      `Known Trader\n${address}\nPolymarket: no linked profile/trades found`
+      `Known Trader\nPolygonscan: https://polygonscan.com/address/${address}\n${address}\nPolymarket: no linked profile/trades found`
     );
   });
 
@@ -215,7 +217,9 @@ describe("address labels", () => {
         [{ address: "0x4444444444444444444444444444444444444444", label: "Known Trader" }],
         status
       )
-    ).toBe("Known Trader\n0x4444444444444444444444444444444444444444");
+    ).toBe(
+      "Known Trader\nPolygonscan: https://polygonscan.com/address/0x4444444444444444444444444444444444444444\n0x4444444444444444444444444444444444444444"
+    );
   });
 });
 

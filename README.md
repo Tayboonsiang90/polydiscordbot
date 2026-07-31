@@ -2,6 +2,12 @@
 
 Local Discord bot for monitoring Polymarket resolution-source websites and posting alerts when tracked values change.
 
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md): runtime flow, ownership boundaries, state rules, and validation.
+- [Raspberry Pi operations](docs/OPERATIONS.md): deployment, watchdog, health checks, and Linux troubleshooting commands.
+- This README: current integrations, setup, commands, and adapter-specific behavior.
+
 ## Current Scope
 
 - Discord slash commands only.
@@ -176,14 +182,14 @@ No archived integrations currently.
 ## Agent Quick Context
 
 - This is a local Discord bot for monitoring Polymarket resolution sources; it sends alerts only and does not trade.
-- Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`.
+- Integrations are code-defined adapters in `src/integrations/` and registered in `src/integrations/registry.ts`; startup builds validated id and command-name indexes and fails fast on duplicate or malformed metadata.
 - One adapter normally creates one monitor channel. Non-UMA integrations use the generic `/monitor` command inside that channel; UMA integrations keep individual UMA command groups, individual UMA alert roles, and reaction selectors. Non-UMA alert pings use the Discord category role for the channel's current parent category, so moving a channel to another category changes the role it pings after the next sync. UMA Proposal Alerts also manages tag-specific alert channels from its configured tag filters. The provisioner also creates `#errorlogs` for centralized check-failure posts and `#bot-status` for runtime health/restart alerts.
 - Shared integration commands are generated in `src/commands.ts`: `/monitor status`, `check`, `last`, `updates`, `polymarket`, `enddate`, `interval`, `turbo`, `pause`, `archive`, `resume`; channel-specific capability commands such as `period`, `snapshot`, `strikes`, `search`, `tagsearch`, `tags`, `watchlist`, `threshold`, `setup`, and `watch` are visible under `/monitor` but only execute in channels whose adapter supports them. Channel cleanup is bot-level through `/bot clear`; server-wide fetch-only smoke checks are queued through `/bot checkall`; archived monitor channels are restored through `/bot reinstate`.
 - Discord allows 100 guild slash commands per app. `src/registerCommands.ts` enforces this cap; normal monitors share `/monitor` so new integrations do not consume one command each.
 - Channel names should identify the monitor topic, while the command is `/monitor` for non-UMA channels.
 - Shared Discord UI lives in `src/embeds.ts`; keep new integration replies/alerts using these embed builders and compact Markdown link rows such as `[Resolution] · [Polymarket]`.
 - Event alerts can put noisy metadata in `hiddenFields`; Discord shows it only through the shared `Show more` button.
-- Polling and alert sends live in `src/poller.ts`; reaction-role add/remove logic lives in `src/reactionRoles.ts`.
+- Polling and alert sends live in `src/poller.ts`; error classification and persisted failure-message state live in `src/errorNotices.ts`; reaction-role add/remove logic lives in `src/reactionRoles.ts`.
 - UMA Vote Commits polls Ethereum UMA Voting v2 `VoteCommitted` logs every minute, estimates voter stake with `getVoterStakePostUpdate(address)`, detects recommits from repeated voter/request commit keys, filters by `/umacommits threshold`, and reports tracked threshold-qualified current-cycle commit counts in `/umacommits check`.
 - UMA Vote Reveals polls Ethereum UMA Voting v2 `VoteRevealed` logs every minute and filters by `/umareveals threshold`.
 - Market-end reminder lookup lives in `src/marketEnd.ts`; it uses queued ET windows when available, otherwise Polymarket Gamma API `endDate` by URL slug, stores the result in SQLite, backs off failed Gamma lookups, sends one alert 24 hours before market end, and suppresses rollover reminders when a successor queued market is already stored.
@@ -335,78 +341,7 @@ Use `/bot clear` to clear the current text channel. You and the bot both need `M
 
 ## Raspberry Pi Health Alerts
 
-Production on the Pi has three moving parts:
-
-- `discord-bot.service` runs Guangdang Bot through `npm run dev`.
-- The existing deploy cron runs `deploy.sh` every minute; it pulls `origin/main`, builds, registers commands, and restarts `discord-bot.service` only when GitHub has a new commit.
-- `scripts/rpi-discord-watchdog.sh` is the local watchdog. It checks the bot heartbeat, posts health alerts to `#bot-status`, and restarts `discord-bot.service` when the heartbeat is stale or the service is not active.
-
-The main bot writes `.health/bot-heartbeat.json` every `BOT_HEARTBEAT_INTERVAL_SECONDS` while the Node process is alive. The provisioner creates `#bot-status`, and the bot posts a startup message there after each successful login. The watchdog can post to the same channel through `DISCORD_HEALTH_WEBHOOK_URL`; if no webhook is configured, it falls back to the normal `DISCORD_TOKEN` and `DISCORD_GUILD_ID` to find or create `#bot-status`.
-
-Health channel policy:
-
-- `#bot-status`: only bot lifecycle and liveness events: startup, Pi boot, stale/missing heartbeat, inactive service, watchdog restart attempt/result, recovery after unhealthy state, and fatal runtime errors such as uncaught exceptions or startup/login failures.
-- `#errorlogs`: integration check failures only. The poller keeps one editable failure post per integration and updates repeated failures there.
-- Healthy-service retry noise, such as transient Discord `UND_ERR_CONNECT_TIMEOUT` provisioning sends or scheduler send retries, stays in `journalctl` and `.health/watchdog.log`; it should not alert Discord unless it makes the heartbeat stale or service unhealthy.
-
-Recommended Pi `.env` health settings:
-
-```bash
-BOT_HEARTBEAT_PATH=.health/bot-heartbeat.json
-BOT_HEARTBEAT_INTERVAL_SECONDS=30
-BOT_STATUS_CHANNEL_NAME=bot-status
-BOT_SERVICE_NAME=discord-bot.service
-BOT_HEARTBEAT_MAX_AGE_SECONDS=120
-BOT_WATCHDOG_RESTART_ON_BAD=true
-BOT_WATCHDOG_RESTART_COOLDOWN_SECONDS=300
-BOT_WATCHDOG_RESTART_WINDOW_SECONDS=900
-BOT_WATCHDOG_MAX_RESTARTS_PER_WINDOW=3
-BOT_RESTART_COMMAND=
-DISCORD_HEALTH_WEBHOOK_URL=
-HEALTHCHECKS_PING_URL=https://hc-ping.com/your-uuid
-```
-
-`BOT_RESTART_COMMAND` is optional. If unset, the watchdog runs `sudo -n systemctl restart discord-bot.service`. If that fails, either run the watchdog from root's cron/systemd or set `BOT_RESTART_COMMAND` to the exact command that works on the Pi.
-
-Install or confirm the watchdog cron job on the Pi:
-
-```bash
-cd /home/financegeek/apps/discord-bot
-mkdir -p .health
-chmod +x scripts/rpi-discord-watchdog.sh
-(crontab -l 2>/dev/null; echo '* * * * * cd /home/financegeek/apps/discord-bot && ./scripts/rpi-discord-watchdog.sh >> .health/watchdog-cron.log 2>&1') | crontab -
-```
-
-Common Pi commands:
-
-```bash
-cd /home/financegeek/apps/discord-bot
-
-# Is the bot process active?
-systemctl status discord-bot.service --no-pager -l
-
-# Latest bot logs.
-journalctl -u discord-bot.service -n 120 --no-pager
-
-# Watch auto-deploy logs.
-tail -n 80 deploy.log
-
-# Watch watchdog logs.
-tail -n 80 .health/watchdog.log
-tail -n 80 .health/watchdog-cron.log
-
-# Check the current deployed commit.
-git rev-parse --short HEAD
-git log -1 --oneline
-
-# Manual restart.
-sudo systemctl restart discord-bot.service
-
-# Manual watchdog test.
-./scripts/rpi-discord-watchdog.sh
-```
-
-What the watchdog reports as the "reason" is the concrete local evidence it sees: inactive service state, missing/stale heartbeat age, recent `journalctl` errors, and whether the restart command succeeded. It cannot send Discord alerts while the whole Pi or its internet connection is fully down. For true "Pi is unreachable" alerts, set `HEALTHCHECKS_PING_URL` from a Healthchecks.io check and configure that service to post missed-ping alerts into Discord.
+Production uses `discord-bot.service`, the minute-by-minute `deploy.sh` cron, and `scripts/rpi-discord-watchdog.sh`. See the [Raspberry Pi operations runbook](docs/OPERATIONS.md) for setup, health-channel policy, deployment checks, and copy-paste troubleshooting commands.
 
 ## Polymarket URL Queue
 
@@ -567,13 +502,12 @@ Old per-integration alert roles from before the category-role model are not reus
 - `commands.ts`, `embeds.ts`, and `poller.ts` are still the main growth hotspots; split only when changing them for real features, not as a standalone rewrite.
 - Poller error suppression/formatting lives in `src/errorNotices.ts`; keep retry/noise-control behavior there instead of adding local copies.
 - Integration check failures should route through the shared poller error path into `#errorlogs`; do not send adapter-local error messages to monitor channels.
-- Registry and command metadata tests are table-driven from `listAdapters()`; add special-case assertions only for adapter-specific capabilities.
+- Adapter registry construction validates ids, command names, channels, source URLs, and required role metadata at startup; tests cover duplicate rejection and adapter-specific capabilities.
 - Current one-timer-per-integration polling is fine for dozens of adapters; revisit only if the bot grows into hundreds of active monitors or needs exact cron scheduling.
 - Keep `lastValue` string comparisons for simple monitors, but use structured settings/event tables for dedupe-heavy or multi-item integrations.
 
 ## Validation
 
 ```powershell
-npm test
-npm run build
+npm.cmd run validate
 ```

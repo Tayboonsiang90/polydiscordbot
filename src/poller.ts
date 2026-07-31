@@ -11,12 +11,17 @@ import {
   buildSnapshotCapturedEmbed
 } from "./embeds.js";
 import {
+  clearLatestErrorNoticeState,
   defaultRepeatedErrorNoticeWindowMs,
   formatErrorMessage,
   formatSchedulerNetworkError,
   getErrorNoticeDecision,
   getErrorNoticeSignature,
+  getLatestErrorMessageId,
+  getLatestErrorNoticeState,
   isTransientNetworkError,
+  setLatestErrorMessageId,
+  setLatestErrorNoticeState,
   transientRepeatedErrorNoticeWindowMs,
   type ErrorNoticeState
 } from "./errorNotices.js";
@@ -25,11 +30,20 @@ import { isPolymarketProposalChannelPingEnabled } from "./integrations/polymarke
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "./integrations/types.js";
 import { getDueMarketEndReminders, getStoredOrFetchPolymarketEndDate, type MarketEndReminder } from "./marketEnd.js";
 import { resolveIntegrationPolymarketQueue } from "./polymarketQueue.js";
-import { deleteSettingsJsonKeys, mergeSettingsJson, parseSettingsJson } from "./settingsJson.js";
+import { parseSettingsJson } from "./settingsJson.js";
 import { formatSingaporeDateTime } from "./time.js";
 import { getTurboPollingSettings } from "./turboPolling.js";
 
-export { formatSchedulerNetworkError, getErrorNoticeDecision, getErrorNoticeSignature } from "./errorNotices.js";
+export {
+  clearLatestErrorNoticeState,
+  formatSchedulerNetworkError,
+  getErrorNoticeDecision,
+  getErrorNoticeSignature,
+  getLatestErrorMessageId,
+  getLatestErrorNoticeState,
+  setLatestErrorMessageId,
+  setLatestErrorNoticeState
+} from "./errorNotices.js";
 
 export type CheckResult = {
   integration: Integration;
@@ -940,55 +954,6 @@ export function formatErrorNoticeDiscordMessage(
   }
 
   return `${message}\n\nRepeated failure update: ${decision.nextState.suppressedCount} repeated error(s) since the last full alert.`;
-}
-
-export function getLatestErrorMessageId(settingsJson: string | null): string | null {
-  const settings = parseSettingsJson(settingsJson);
-  return typeof settings.latestErrorMessageId === "string" ? settings.latestErrorMessageId : null;
-}
-
-export function setLatestErrorMessageId(settingsJson: string | null, messageId: string): string {
-  return mergeSettingsJson(settingsJson, { latestErrorMessageId: messageId });
-}
-
-export function getLatestErrorNoticeState(settingsJson: string | null): ErrorNoticeState | undefined {
-  const state = parseSettingsJson(settingsJson).latestErrorNoticeState;
-  if (!state || typeof state !== "object" || Array.isArray(state)) {
-    return undefined;
-  }
-
-  const signature = "signature" in state ? state.signature : undefined;
-  const sentAt = "sentAt" in state ? state.sentAt : undefined;
-  const suppressedCount = "suppressedCount" in state ? state.suppressedCount : undefined;
-  const sentAtMs = typeof sentAt === "string" ? Date.parse(sentAt) : Number.NaN;
-  if (typeof signature !== "string" || !Number.isFinite(sentAtMs)) {
-    return undefined;
-  }
-
-  return {
-    signature,
-    sentAtMs,
-    suppressedCount: typeof suppressedCount === "number" && Number.isFinite(suppressedCount) ? suppressedCount : 0
-  };
-}
-
-export function setLatestErrorNoticeState(settingsJson: string | null, state: ErrorNoticeState): string {
-  return mergeSettingsJson(settingsJson, {
-    latestErrorNoticeState: {
-      signature: state.signature,
-      sentAt: new Date(state.sentAtMs).toISOString(),
-      suppressedCount: state.suppressedCount
-    }
-  });
-}
-
-export function clearLatestErrorNoticeState(settingsJson: string | null): string | null {
-  const settings = parseSettingsJson(settingsJson);
-  if (!Object.prototype.hasOwnProperty.call(settings, "latestErrorNoticeState")) {
-    return settingsJson;
-  }
-
-  return deleteSettingsJsonKeys(settingsJson, ["latestErrorNoticeState"]);
 }
 
 export function activateQueuedPolymarket(

@@ -1,3 +1,5 @@
+import { deleteSettingsJsonKeys, mergeSettingsJson, parseSettingsJson } from "./settingsJson.js";
+
 export type ErrorNoticeState = {
   signature: string;
   sentAtMs: number;
@@ -55,6 +57,55 @@ export function formatSchedulerNetworkError(error: unknown): string {
   const codes = [...new Set(collectErrorCodes(error))].join(", ");
   const codeText = codes ? ` (${codes})` : "";
   return `Discord/network send failed${codeText}: ${formatErrorMessage(error)}. This is usually Pi DNS/VPN/router access to Discord; scheduler will retry.`;
+}
+
+export function getLatestErrorMessageId(settingsJson: string | null): string | null {
+  const settings = parseSettingsJson(settingsJson);
+  return typeof settings.latestErrorMessageId === "string" ? settings.latestErrorMessageId : null;
+}
+
+export function setLatestErrorMessageId(settingsJson: string | null, messageId: string): string {
+  return mergeSettingsJson(settingsJson, { latestErrorMessageId: messageId });
+}
+
+export function getLatestErrorNoticeState(settingsJson: string | null): ErrorNoticeState | undefined {
+  const state = parseSettingsJson(settingsJson).latestErrorNoticeState;
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    return undefined;
+  }
+
+  const signature = "signature" in state ? state.signature : undefined;
+  const sentAt = "sentAt" in state ? state.sentAt : undefined;
+  const suppressedCount = "suppressedCount" in state ? state.suppressedCount : undefined;
+  const sentAtMs = typeof sentAt === "string" ? Date.parse(sentAt) : Number.NaN;
+  if (typeof signature !== "string" || !Number.isFinite(sentAtMs)) {
+    return undefined;
+  }
+
+  return {
+    signature,
+    sentAtMs,
+    suppressedCount: typeof suppressedCount === "number" && Number.isFinite(suppressedCount) ? suppressedCount : 0
+  };
+}
+
+export function setLatestErrorNoticeState(settingsJson: string | null, state: ErrorNoticeState): string {
+  return mergeSettingsJson(settingsJson, {
+    latestErrorNoticeState: {
+      signature: state.signature,
+      sentAt: new Date(state.sentAtMs).toISOString(),
+      suppressedCount: state.suppressedCount
+    }
+  });
+}
+
+export function clearLatestErrorNoticeState(settingsJson: string | null): string | null {
+  const settings = parseSettingsJson(settingsJson);
+  if (!Object.prototype.hasOwnProperty.call(settings, "latestErrorNoticeState")) {
+    return settingsJson;
+  }
+
+  return deleteSettingsJsonKeys(settingsJson, ["latestErrorNoticeState"]);
 }
 
 export function isTransientNetworkError(error: unknown): boolean {
