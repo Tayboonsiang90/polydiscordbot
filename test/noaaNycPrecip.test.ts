@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendNycHourlyPrecipitationAlpha,
+  extractNycHourlyPrecipObservations,
+  extractNycHourlyPrecipObservationsFromHtml,
   extractNoaaNycPrecipitationValue,
   getNoaaNycPrecipSettings,
-  isValidNoaaPeriod
+  isValidNoaaPeriod,
+  noaaNycPrecipAdapter,
+  shouldAlertOnNycPrecipChange,
+  type NycHourlyPrecipObservation
 } from "../src/integrations/noaaNycPrecip.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -32,6 +38,12 @@ const noaaIntegration: Integration = {
 };
 
 describe("NOAA NYC precipitation adapter", () => {
+  const currentEtDay = new Date("2026-08-01T03:30:00.000Z");
+  const firstRainObservation: NycHourlyPrecipObservation = {
+    observedAt: new Date("2026-07-31T22:51:00.000Z"),
+    precipitationInches: 0.03
+  };
+
   it("extracts monthly precipitation from NOAA daily rows", () => {
     const value = extractNoaaNycPrecipitationValue(
       {
@@ -77,4 +89,121 @@ describe("NOAA NYC precipitation adapter", () => {
     expect(isValidNoaaPeriod(2026, 5)).toBe(true);
     expect(isValidNoaaPeriod(2026, 13)).toBe(false);
   });
+
+  it("keeps only positive routine KNYC METAR precipitation from the current ET date", () => {
+    const observations = extractNycHourlyPrecipObservations(
+      [
+        {
+          metarType: "METAR",
+          obsTime: new Date("2026-07-31T22:51:00.000Z").getTime() / 1_000,
+          precip: 0.03
+        },
+        {
+          metarType: "METAR",
+          obsTime: new Date("2026-07-31T21:51:00.000Z").getTime() / 1_000,
+          precip: 0
+        },
+        {
+          metarType: "SPECI",
+          obsTime: new Date("2026-07-31T22:20:00.000Z").getTime() / 1_000,
+          precip: 0.02
+        },
+        {
+          metarType: "METAR",
+          obsTime: new Date("2026-07-31T03:51:00.000Z").getTime() / 1_000,
+          precip: 0.01
+        },
+        {
+          metarType: "METAR",
+          obsTime: new Date("2026-08-01T04:51:00.000Z").getTime() / 1_000,
+          precip: 0.04
+        }
+      ],
+      currentEtDay
+    );
+
+    expect(observations).toEqual([firstRainObservation]);
+  });
+
+  it("uses positive and trace one-hour values from the NWS history fallback", () => {
+    const html = `<table><tbody>
+      ${buildHourlyHistoryRow("31", "18:51", "0.03")}
+      ${buildHourlyHistoryRow("31", "17:51", "0.00")}
+      ${buildHourlyHistoryRow("31", "16:51", "T")}
+      ${buildHourlyHistoryRow("30", "23:51", "0.02")}
+    </tbody></table>`;
+
+    const observations = extractNycHourlyPrecipObservationsFromHtml(html, currentEtDay);
+
+    expect(observations).toHaveLength(2);
+    expect(observations[0]).toMatchObject({ precipitationInches: null });
+    expect(observations[1]).toMatchObject({ precipitationInches: 0.03 });
+    expect(observations[1]?.observedAt.toISOString()).toBe("2026-07-31T22:51:00.000Z");
+  });
+
+  it("adds readable hourly alpha totals and the latest positive hour", () => {
+    const value = appendNycHourlyPrecipitationAlpha(
+      "Total precipitation: 1.25 inches",
+      [
+        { observedAt: new Date("2026-07-31T20:51:00.000Z"), precipitationInches: null },
+        firstRainObservation
+      ],
+      "https://example.com/hourly",
+      currentEtDay
+    );
+
+    expect(value).toContain("Hourly alpha date ET: 2026-07-31");
+    expect(value).toContain("Hourly alpha total: 0.03 inches (plus 1 trace hour)");
+    expect(value).toContain("Positive hourly reports: 2");
+    expect(value).toContain("Latest positive hour ET: Jul 31, 2026, 6:51 PM EDT");
+    expect(value).toContain("Latest positive hour precipitation: 0.03 inches");
+  });
+
+  it("alerts for a new or revised positive hour but not for zero-only rollover removal", () => {
+    const officialValue = "Total precipitation: 1.25 inches\nLatest reported day: 2026-07-31";
+    const previousValue = appendNycHourlyPrecipitationAlpha(
+      officialValue,
+      [firstRainObservation],
+      "https://example.com/hourly",
+      currentEtDay
+    );
+    const secondObservation = {
+      observedAt: new Date("2026-07-31T23:51:00.000Z"),
+      precipitationInches: 0.02
+    };
+    const withNewHour = appendNycHourlyPrecipitationAlpha(
+      officialValue,
+      [firstRainObservation, secondObservation],
+      "https://example.com/hourly",
+      currentEtDay
+    );
+    const withRevision = appendNycHourlyPrecipitationAlpha(
+      officialValue,
+      [{ ...firstRainObservation, precipitationInches: 0.04 }],
+      "https://example.com/hourly",
+      currentEtDay
+    );
+    const afterRollover = appendNycHourlyPrecipitationAlpha(
+      officialValue,
+      [],
+      "https://example.com/hourly",
+      new Date("2026-08-01T05:00:00.000Z")
+    );
+
+    expect(shouldAlertOnNycPrecipChange(previousValue, previousValue)).toBe(false);
+    expect(shouldAlertOnNycPrecipChange(previousValue, withNewHour)).toBe(true);
+    expect(shouldAlertOnNycPrecipChange(previousValue, withRevision)).toBe(true);
+    expect(shouldAlertOnNycPrecipChange(previousValue, afterRollover)).toBe(false);
+    expect(shouldAlertOnNycPrecipChange(previousValue, previousValue.replace("1.25", "1.30"))).toBe(true);
+  });
+
+  it("polls every minute for the hourly alpha source", () => {
+    expect(noaaNycPrecipAdapter.getPollIntervalMinutes?.(noaaIntegration)).toBe(1);
+    expect(noaaNycPrecipAdapter.getPollIntervalReason?.(noaaIntegration)).toContain("zero-hour reports are ignored");
+  });
 });
+
+function buildHourlyHistoryRow(day: string, time: string, oneHourPrecipitation: string): string {
+  const cells = [day, time, ...Array.from({ length: 13 }, () => ""), oneHourPrecipitation, "", ""];
+  return `<tr>${cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`;
+}

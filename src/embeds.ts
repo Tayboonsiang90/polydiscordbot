@@ -1568,6 +1568,8 @@ function formatAlertQuickReadFields(
           integration.adapterId === "ornn-h200-index" ||
           integration.adapterId === "ornn-b200-index"
         ? formatOrnnGpuQuickRead(currentValue, previousValue)
+      : integration.adapterId === "noaa-nyc-precip"
+        ? formatNycPrecipitationQuickRead(currentValue, previousValue)
       : isPrecipitationAdapter(integration.adapterId)
         ? formatPrecipitationQuickRead(currentValue, previousValue)
       : integration.adapterId === "ufo-files"
@@ -1956,6 +1958,20 @@ function formatPrecipitationQuickRead(currentValue: string, previousValue: strin
   }
 
   return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatNycPrecipitationQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Latest positive hour ET"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest positive hour precipitation"),
+    ...formatPreferredQuickReadLine(currentValue, "Hourly alpha total"),
+    ...formatPreferredQuickReadLine(currentValue, "Positive hourly reports"),
+    ...formatPreferredQuickReadLine(currentValue, "Total precipitation"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest reported day"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest day value")
+  ];
+
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
 }
 
 function formatAlphaPrecipitationLines(value: string): string[] {

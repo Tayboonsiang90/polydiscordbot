@@ -154,7 +154,7 @@ Local Discord bot for monitoring Polymarket resolution-source websites and posti
 | `noaa-boston-rain` | `/monitor` | `#bostonrain` | `NOAA Boston Rain Alerts` | `☔` | Monitors NOAA Boston Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
 | `noaa-dallas-rain` | `/monitor` | `#dallasrain` | `NOAA Dallas Rain Alerts` | `☔` | Monitors NOAA Dallas Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
 | `noaa-denver-rain` | `/monitor` | `#denverrain` | `NOAA Denver Rain Alerts` | `☔` | Monitors NOAA Denver Area daily precipitation for the June 9 rain market and alerts when the value finalizes. |
-| `noaa-nyc-precip` | `/monitor` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors NOAA NYC monthly precipitation with latest daily row details so new 0.00 or trace days still alert. |
+| `noaa-nyc-precip` | `/monitor` | `#nycprecip` | `NOAA NYC Precip Alerts` | `☔` | Monitors official NOAA NYC monthly precipitation plus 1-minute KNYC hourly alpha; each new positive or trace hour alerts while zero hours are ignored. |
 | `noaa-san-francisco-rain` | `/monitor` | `#sfrain` | `NOAA SF Rain Alerts` | `☔` | Monitors NOAA San Francisco City daily precipitation for the June 9 rain market and alerts when the value finalizes. |
 | `noaa-seattle-precip` | `/monitor` | `#seattleprecip` | `NOAA Seattle Precip Alerts` | `☔` | Monitors NOAA Seattle monthly precipitation with latest daily row details so new 0.00 or trace days still alert. |
 | `ncei-tornadoes` | `/monitor` | `#tornadoes` | `NCEI Tornado Alerts` | `🌪️` | Monitors NCEI U.S. Tornadoes monthly time-series counts, preliminary status, chart uncertainty range, and auto-discovers monthly tornado markets. |
