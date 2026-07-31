@@ -5,7 +5,10 @@ import {
   findMatchedElonXStrikeTerms,
   getXFeedUrls,
   getXFrontendBaseUrls,
+  hasAuthenticatedXCredentials,
+  parseAuthenticatedElonXTweets,
   parseElonXCancelTimeline,
+  parseElonXTrackerPosts,
   parseElonXMarketWindow,
   parseElonXNitterFeed,
   refreshElonXSettings
@@ -39,6 +42,7 @@ const integration: Integration = {
 
 describe("Elon X strike monitor", () => {
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
@@ -140,6 +144,86 @@ describe("Elon X strike monitor", () => {
   it("uses multiple public X frontends by default", () => {
     expect(getXFrontendBaseUrls()).toEqual(["https://xcancel.com", "https://nitter.kareem.one"]);
     expect(getXFeedUrls()).toEqual(["https://xcancel.com/elonmusk/rss"]);
+  });
+
+  it("recognizes direct X session credentials only when both cookies exist", () => {
+    vi.stubEnv("ELON_X_AUTH_TOKEN", "auth");
+    expect(hasAuthenticatedXCredentials()).toBe(false);
+    vi.stubEnv("ELON_X_CT0", "csrf");
+    expect(hasAuthenticatedXCredentials()).toBe(true);
+  });
+
+  it("polls an active market every 30 seconds with direct X credentials", () => {
+    const activeAt = new Date("2026-06-16T12:00:00.000Z");
+    expect(elonXAdapter.getPollIntervalMinutes?.(integration, activeAt)).toBe(1);
+
+    vi.stubEnv("ELON_X_AUTH_TOKEN", "auth");
+    vi.stubEnv("ELON_X_CT0", "csrf");
+    expect(elonXAdapter.getPollIntervalMinutes?.(integration, activeAt)).toBe(0.5);
+  });
+
+  it("converts authenticated X search results into full-text posts and replies", () => {
+    const posts = parseAuthenticatedElonXTweets([
+      {
+        id: "2083053178761732504",
+        text: "Wow",
+        author: { username: "elonmusk", name: "Elon Musk" },
+        inReplyToStatusId: "2083050000000000000",
+        media: [{ type: "photo", url: "https://pbs.twimg.com/media/reply.jpg" }]
+      },
+      {
+        id: "2083050405349482668",
+        text: "Seriously https://t.co/cHH6KDkWst",
+        author: { username: "elonmusk", name: "Elon Musk" },
+        createdAt: "2026-07-31T04:41:32.000Z",
+        quotedTweet: {
+          id: "200",
+          text: "Quoted text does not become Elon's wording",
+          author: { username: "other", name: "Other" }
+        }
+      }
+    ]);
+
+    expect(posts[0]).toMatchObject({
+      id: "2083053178761732504",
+      type: "Reply",
+      text: "Wow",
+      qualifyingText: "Wow",
+      url: "https://x.com/elonmusk/status/2083053178761732504",
+      imageUrls: ["https://pbs.twimg.com/media/reply.jpg"],
+      captureSource: "Direct X search"
+    });
+    expect(posts[0].postedAt.toISOString()).toBe("2026-07-31T04:52:33.730Z");
+    expect(posts[1]).toMatchObject({
+      id: "2083050405349482668",
+      type: "Quote",
+      text: "Seriously https://t.co/cHH6KDkWst"
+    });
+  });
+
+  it("parses fast Polymarket XTracker posts without treating repost text as a strike source", () => {
+    const posts = parseElonXTrackerPosts({
+      success: true,
+      data: [
+        {
+          platformId: "2083050405349482668",
+          content: "Seriously https://t.co/cHH6KDkWst",
+          createdAt: "2026-07-31T04:41:32.000Z"
+        },
+        {
+          platformId: "2083037264750211153",
+          content: "RT @someone: Bitcoin",
+          createdAt: "2026-07-31T03:49:19.000Z"
+        }
+      ]
+    });
+
+    expect(posts[0]).toMatchObject({
+      id: "2083050405349482668",
+      type: "Post",
+      qualifyingText: "Seriously https://t.co/cHH6KDkWst"
+    });
+    expect(posts[1]).toMatchObject({ id: "2083037264750211153", type: "Repost", qualifyingText: "" });
   });
 
   it("parses Nitter/XCancel RSS fallback posts", () => {

@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import type { TweetData } from "@steipete/bird";
 import type { AnyNode } from "domhandler";
 import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlug, parseManualEasternDateTime } from "../marketEnd.js";
@@ -13,8 +14,12 @@ const marketSearchQuery = "what will elon post this week";
 const marketSearchTags = ["elon-tweets", "mention-markets"];
 const defaultXFrontendBaseUrls = ["https://xcancel.com", "https://nitter.kareem.one"];
 const defaultXFeedUrls = ["https://xcancel.com/elonmusk/rss"];
+const xTrackerPostsUrl = "https://xtracker.polymarket.com/api/users/elonmusk/posts";
 const maxPosts = 40;
-const sourceTimeoutMs = 30_000;
+const directXMaxPosts = 20;
+const sourceTimeoutMs = 10_000;
+const publicSourceTimeoutMs = 8_000;
+const publicSourceLookbackMs = 48 * 60 * 60_000;
 const strikeRefreshIntervalMs = 5 * 60_000;
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
@@ -48,6 +53,19 @@ export type ElonXPost = {
   url: string;
   imageUrls: string[];
   imageText: string;
+  captureSource?: string;
+};
+
+type XTrackerPost = {
+  platformId?: unknown;
+  content?: unknown;
+  createdAt?: unknown;
+};
+
+type XTrackerPostsResponse = {
+  success?: unknown;
+  data?: unknown;
+  error?: unknown;
 };
 
 type GammaEvent = {
@@ -85,12 +103,22 @@ export const elonXAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\uD83D\uDE80",
   supportsStrikes: true,
   getPollIntervalMinutes(integration: Integration, now = new Date()): number {
+    if (hasAuthenticatedXCredentials()) {
+      return getActiveElonXMarket(getConfiguredElonXMarkets(integration), now) ? 0.5 : 1;
+    }
+
     return getActiveElonXMarket(getConfiguredElonXMarkets(integration), now) ? 1 : 5;
   },
   getPollIntervalReason(integration: Integration, now = new Date()): string {
+    if (hasAuthenticatedXCredentials()) {
+      return getActiveElonXMarket(getConfiguredElonXMarkets(integration), now)
+        ? "30-second direct X search polling during the active market window."
+        : "1-minute direct X search polling while no compatible market window is active.";
+    }
+
     return getActiveElonXMarket(getConfiguredElonXMarkets(integration), now)
-      ? "1-minute Elon X strike polling during the active market window."
-      : "5-minute Elon X feed polling while no compatible market window is active.";
+      ? "1-minute merged XTracker and public-mirror polling during the active market window."
+      : "5-minute merged XTracker and public-mirror polling while no compatible market window is active.";
   },
   getErrorNoticeWindowMinutes(): number {
     return 30;
@@ -328,6 +356,80 @@ export function parseElonXNitterFeed(xml: string, feedUrl = defaultXFeedUrls[0])
   return sortPostsNewestFirst(dedupePosts(posts));
 }
 
+export function parseAuthenticatedElonXTweets(tweets: TweetData[]): ElonXPost[] {
+  const posts = tweets.flatMap((tweet): ElonXPost[] => {
+    const id = tweet.id.trim();
+    const text = normalizeText(tweet.text);
+    const timestamp = parseAuthenticatedXTimestamp(tweet.createdAt, id);
+    if (!id || !text || !timestamp) {
+      return [];
+    }
+
+    const type: ElonXPost["type"] = /^RT\s+@/i.test(text)
+      ? "Repost"
+      : tweet.inReplyToStatusId
+        ? "Reply"
+        : tweet.quotedTweet
+          ? "Quote"
+          : "Post";
+    const imageUrls = uniqueStrings(
+      (tweet.media ?? [])
+        .filter((media) => media.type === "photo")
+        .map((media) => media.url)
+        .filter(isNonEmptyString)
+    );
+
+    return [
+      {
+        id,
+        type,
+        text,
+        qualifyingText: type === "Repost" ? "" : text,
+        postedAt: timestamp,
+        url: `https://x.com/elonmusk/status/${id}`,
+        imageUrls,
+        imageText: "",
+        captureSource: "Direct X search"
+      }
+    ];
+  });
+
+  return sortPostsNewestFirst(dedupePosts(posts)).slice(0, maxPosts);
+}
+
+export function parseElonXTrackerPosts(payload: XTrackerPostsResponse): ElonXPost[] {
+  if (payload.success !== true || !Array.isArray(payload.data)) {
+    return [];
+  }
+
+  const posts = payload.data.flatMap((entry): ElonXPost[] => {
+    const post = entry as XTrackerPost;
+    const id = typeof post.platformId === "string" ? post.platformId.trim() : "";
+    const text = typeof post.content === "string" ? normalizeText(post.content) : "";
+    const timestamp = typeof post.createdAt === "string" ? new Date(post.createdAt) : null;
+    if (!id || !text || !timestamp || Number.isNaN(timestamp.getTime())) {
+      return [];
+    }
+
+    const type: ElonXPost["type"] = /^RT\s+@/i.test(text) ? "Repost" : "Post";
+    return [
+      {
+        id,
+        type,
+        text,
+        qualifyingText: type === "Repost" ? "" : text,
+        postedAt: timestamp,
+        url: `https://x.com/elonmusk/status/${id}`,
+        imageUrls: [],
+        imageText: "",
+        captureSource: "Polymarket XTracker"
+      }
+    ];
+  });
+
+  return sortPostsNewestFirst(dedupePosts(posts)).slice(0, maxPosts);
+}
+
 export function extractElonXGammaStrikeTerms(markets: GammaMarket[]): Pick<ElonXMarket, "strikeTerms" | "resolvedTerms" | "activeStrikeTerms"> {
   const strikeTerms = new Set<string>();
   const resolvedTerms = new Set<string>();
@@ -401,108 +503,164 @@ function normalizeElonXEventPost(post: ElonXPost, strikeTerms: string[]): EventM
     imageUrls: post.imageUrls,
     imageText: post.imageText,
     matchedTerms,
-    strikeTerms
+    strikeTerms,
+    hiddenFields: post.captureSource ? [{ name: "Capture source", value: post.captureSource, inline: false }] : undefined
   };
 }
 
-async function fetchElonXPosts(): Promise<{ posts: ElonXPost[]; source: string }> {
+export async function fetchElonXPosts(): Promise<{ posts: ElonXPost[]; source: string }> {
   const errors: string[] = [];
 
-  for (const baseUrl of getXFrontendBaseUrls()) {
+  if (hasAuthenticatedXCredentials()) {
     try {
-      const posts = await fetchElonXPostsFromFrontend(baseUrl);
+      const posts = await fetchElonXPostsFromAuthenticatedSearch();
       if (posts.length > 0) {
-        return { posts, source: `${baseUrl} public page` };
+        return { posts, source: "Direct X search (authenticated web session)" };
       }
 
-      errors.push(`${baseUrl}: no timeline posts found`);
+      errors.push("Direct X search: no posts found");
     } catch (error) {
-      errors.push(`${baseUrl}: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(`Direct X search: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  try {
-    return { posts: await fetchElonXPostsFromNitterFeeds(), source: "Nitter/XCancel RSS" };
-  } catch (error) {
-    errors.push(`Nitter/XCancel RSS: ${error instanceof Error ? error.message : String(error)}`);
+  const publicSources: Array<Promise<{ posts: ElonXPost[]; source: string }>> = [
+    fetchElonXPostsFromXTracker().then((posts) => ({ posts, source: "Polymarket XTracker" })),
+    ...getXFrontendBaseUrls().map((baseUrl) =>
+      fetchElonXPostsFromFrontend(baseUrl).then((posts) => ({ posts, source: `${baseUrl} replies page` }))
+    ),
+    ...getXFeedUrls().map((feedUrl) =>
+      fetchElonXPostsFromNitterFeed(feedUrl).then((posts) => ({ posts, source: `${feedUrl} RSS` }))
+    )
+  ];
+  const results = await Promise.allSettled(publicSources);
+  const successful = results.flatMap((result) => {
+    if (result.status === "fulfilled" && result.value.posts.length > 0) {
+      return [result.value];
+    }
+    if (result.status === "rejected") {
+      errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
+    }
+    return [];
+  });
+  const posts = sortPostsNewestFirst(
+    dedupePosts(
+      successful
+        .filter((result) => result.source !== "Polymarket XTracker")
+        .flatMap((result) => result.posts)
+        .concat(successful.filter((result) => result.source === "Polymarket XTracker").flatMap((result) => result.posts))
+    )
+  ).slice(0, maxPosts);
+
+  if (posts.length > 0) {
+    return { posts, source: successful.map((result) => result.source).join(" + ") };
   }
 
   throw new Error(`Public Elon X polling failed: ${errors.join(" | ")}`);
 }
 
-async function fetchElonXPostsFromNitterFeeds(): Promise<ElonXPost[]> {
-  const feedUrls = getXFeedUrls();
-  const posts: ElonXPost[] = [];
-  const errors: string[] = [];
-
-  for (const feedUrl of feedUrls) {
-    try {
-      const response = await fetchWithTimeout(
-        feedUrl,
-        {
-          headers: {
-            accept: "application/rss+xml, application/xml, text/xml",
-            "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-          }
-        },
-        sourceTimeoutMs
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const xml = await response.text();
-      if (isUnavailableXFrontendPage(xml) || isUnavailableXFeed(xml)) {
-        throw new Error("RSS feed returned an unavailable/whitelist placeholder");
-      }
-
-      const feedPosts = parseElonXNitterFeed(xml, feedUrl);
-      if (!feedPosts.length && !/<item[\s>]/i.test(xml)) {
-        throw new Error("RSS feed returned no items");
-      }
-
-      posts.push(...feedPosts);
-    } catch (error) {
-      errors.push(`${feedUrl}: ${error instanceof Error ? error.message : String(error)}`);
-    }
+async function fetchElonXPostsFromAuthenticatedSearch(): Promise<ElonXPost[]> {
+  const credentials = getAuthenticatedXCredentials();
+  if (!credentials) {
+    return [];
   }
 
-  if (!posts.length && errors.length === feedUrls.length) {
-    throw new Error(errors.join(" | "));
+  const { TwitterClient } = await import("@steipete/bird");
+  const client = new TwitterClient({
+    cookies: {
+      authToken: credentials.authToken,
+      ct0: credentials.ct0,
+      cookieHeader: null,
+      source: "ELON_X_AUTH_TOKEN/ELON_X_CT0"
+    },
+    timeoutMs: sourceTimeoutMs,
+    quoteDepth: 0
+  });
+  const result = await client.search("from:elonmusk", directXMaxPosts);
+  if (!result.success) {
+    throw new Error(result.error);
   }
 
-  return sortPostsNewestFirst(dedupePosts(posts)).slice(0, maxPosts);
+  return parseAuthenticatedElonXTweets(result.tweets);
 }
 
 async function fetchElonXPostsFromFrontend(baseUrl: string): Promise<ElonXPost[]> {
-  const profileUrl = buildFrontendUrl(baseUrl, "/elonmusk");
   const repliesUrl = buildFrontendUrl(baseUrl, "/elonmusk/with_replies");
-  const posts: ElonXPost[] = [];
-
-  for (const url of [profileUrl, repliesUrl]) {
-    const response = await fetchWithTimeout(
-      url,
-      {
-        headers: {
-          accept: "text/html,application/xhtml+xml",
-          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-        }
-      },
-      sourceTimeoutMs
-    );
-    if (!response.ok) {
-      throw new Error(`${url} returned HTTP ${response.status}`);
+  const response = await fetchPublicXSource(repliesUrl, {
+    headers: {
+      accept: "text/html,application/xhtml+xml",
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
     }
-
-    const html = await response.text();
-    if (isUnavailableXFrontendPage(html)) {
-      throw new Error(`${url} returned a bot-check or unavailable page`);
-    }
-
-    posts.push(...parseElonXCancelTimeline(html, baseUrl));
+  });
+  if (!response.ok) {
+    throw new Error(`${repliesUrl} returned HTTP ${response.status}`);
   }
 
-  return sortPostsNewestFirst(dedupePosts(posts)).slice(0, maxPosts);
+  const html = await response.text();
+  if (isUnavailableXFrontendPage(html)) {
+    throw new Error(`${repliesUrl} returned a bot-check or unavailable page`);
+  }
+
+  return parseElonXCancelTimeline(html, baseUrl)
+    .map((post) => ({ ...post, captureSource: `${baseUrl} replies page` }))
+    .slice(0, maxPosts);
+}
+
+async function fetchElonXPostsFromNitterFeed(feedUrl: string): Promise<ElonXPost[]> {
+  const response = await fetchPublicXSource(feedUrl, {
+    headers: {
+      accept: "application/rss+xml, application/xml, text/xml",
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`${feedUrl} returned HTTP ${response.status}`);
+  }
+
+  const xml = await response.text();
+  if (isUnavailableXFrontendPage(xml) || isUnavailableXFeed(xml)) {
+    throw new Error(`${feedUrl} returned an unavailable/whitelist placeholder`);
+  }
+
+  const posts = parseElonXNitterFeed(xml, feedUrl);
+  if (!posts.length && !/<item[\s>]/i.test(xml)) {
+    throw new Error(`${feedUrl} returned no RSS items`);
+  }
+
+  return posts.map((post) => ({ ...post, captureSource: `${feedUrl} RSS` })).slice(0, maxPosts);
+}
+
+async function fetchElonXPostsFromXTracker(now = new Date()): Promise<ElonXPost[]> {
+  const startDate = new Date(now.getTime() - publicSourceLookbackMs).toISOString();
+  const endDate = new Date(now.getTime() + 5 * 60_000).toISOString();
+  const url = `${xTrackerPostsUrl}?platform=X&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
+  const response = await fetchPublicXSource(url, {
+    headers: {
+      accept: "application/json",
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket XTracker returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as XTrackerPostsResponse;
+  const posts = parseElonXTrackerPosts(payload);
+  if (!posts.length) {
+    throw new Error(
+      typeof payload.error === "string" ? `Polymarket XTracker: ${payload.error}` : "Polymarket XTracker returned no recent posts"
+    );
+  }
+
+  return posts;
+}
+
+async function fetchPublicXSource(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(publicSourceTimeoutMs) });
+  } catch (error) {
+    throw new Error(`${url}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 async function fetchElonXGammaMarket(url: string, now: Date): Promise<ElonXMarket> {
@@ -865,7 +1023,9 @@ function buildElonXCheckFields(
     },
     {
       name: "Source note",
-      value: `${source}. This is a free unauthenticated X frontend, not the paid X API; if it is stale or blocked, the bot will fail loudly instead of guessing.`,
+      value: hasAuthenticatedXCredentials()
+        ? `${source}. Direct search uses the configured logged-in X web session and falls back to merged public sources if it fails.`
+        : `${source}. Public mode merges XTracker and every configured reply-capable mirror; add ELON_X_AUTH_TOKEN and ELON_X_CT0 for the fastest full-text reply capture.`,
       inline: false
     }
   ];
@@ -906,6 +1066,23 @@ function parseXCancelTimestamp(value: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function parseAuthenticatedXTimestamp(value: string | undefined, id: string): Date | null {
+  if (value) {
+    const timestamp = new Date(value);
+    if (!Number.isNaN(timestamp.getTime())) {
+      return timestamp;
+    }
+  }
+
+  try {
+    const timestamp = Number((BigInt(id) >> 22n) + 1_288_834_974_657n);
+    const date = new Date(timestamp);
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+}
+
 function extractTweetId(link: string): string | null {
   return link.match(/\/status(?:es)?\/(\d+)/)?.[1] ?? null;
 }
@@ -931,6 +1108,16 @@ export function getXFeedUrls(): string[] {
   const configured = process.env.ELON_X_NITTER_FEEDS ?? process.env.ELON_X_RSS_URLS;
   const urls = configured?.split(",").map((url) => url.trim()).filter(Boolean) ?? [];
   return uniqueStrings([...urls, ...defaultXFeedUrls]);
+}
+
+export function hasAuthenticatedXCredentials(): boolean {
+  return getAuthenticatedXCredentials() !== null;
+}
+
+function getAuthenticatedXCredentials(): { authToken: string; ct0: string } | null {
+  const authToken = process.env.ELON_X_AUTH_TOKEN?.trim();
+  const ct0 = process.env.ELON_X_CT0?.trim();
+  return authToken && ct0 ? { authToken, ct0 } : null;
 }
 
 function buildFrontendUrl(baseUrl: string, path: string): string {
