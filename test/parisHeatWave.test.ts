@@ -4,7 +4,8 @@ import {
   buildWundergroundHistoryApiUrl,
   extractParisHeatDays,
   formatParisHeatWaveValue,
-  parisHeatWaveShouldAlertOnChange
+  parisHeatWaveShouldAlertOnChange,
+  splitWundergroundDateRange
 } from "../src/integrations/parisHeatWave.js";
 
 function observation(dateTimeUtc: string, temp: number, obsId = "LFPB") {
@@ -73,5 +74,15 @@ describe("Paris Heat Wave adapter", () => {
     expect(buildWundergroundHistoryApiUrl("2026-06-30", "2026-07-31")).toContain("units=m");
     expect(buildWundergroundHistoryApiUrl("2026-06-30", "2026-07-31")).toContain("startDate=20260630");
     expect(buildWundergroundHistoryApiUrl("2026-06-30", "2026-07-31")).toContain("endDate=20260731");
+  });
+
+  it("splits history requests at the Weather.com 31-day inclusive limit", () => {
+    expect(splitWundergroundDateRange("2026-06-30", "2026-07-31")).toEqual([
+      { startDate: "2026-06-30", endDate: "2026-07-30" },
+      { startDate: "2026-07-31", endDate: "2026-07-31" }
+    ]);
+    expect(splitWundergroundDateRange("2026-07-01", "2026-07-31")).toEqual([
+      { startDate: "2026-07-01", endDate: "2026-07-31" }
+    ]);
   });
 });

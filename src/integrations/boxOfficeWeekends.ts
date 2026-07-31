@@ -140,7 +140,7 @@ export const boxOfficeWeekendsAdapter: WebsiteAdapter = {
   alertRoleEmoji: "🎬",
   getPollIntervalMinutes: () => 5,
   getPollIntervalReason: () =>
-    "5-minute The Numbers and BoxOfficeMojo polling; alerts only when a tracked weekend market becomes complete/bondable, its complete bracket changes, or BoxOfficeMojo updates after a baseline exists.",
+    "5-minute The Numbers and BoxOfficeMojo polling; alerts only when a tracked weekend market becomes complete/bondable or its complete bracket changes.",
   getErrorNoticeWindowMinutes: () => 30,
   shouldAlertOnChange: shouldAlertOnBoxOfficeStateChange,
   async refreshSettings(integration: Integration, options?: { force?: boolean }): Promise<string> {
@@ -281,7 +281,7 @@ export function formatBoxOfficeWeekendValue(snapshots: WeekendSnapshot[], previo
   const lines = [
     "Metric: The Numbers domestic weekend box office",
     `Tracked active markets: ${snapshots.length}`,
-    "Alert rule: alerts when a market becomes complete/bondable, its complete bracket changes, or BoxOfficeMojo updates that movie.",
+    "Alert rule: alerts only when a market becomes complete/bondable or its complete bracket changes.",
     "Data rule: Daily rows; opening weekends include preview row when present.",
     "Movies:"
   ];
@@ -322,16 +322,6 @@ export function shouldAlertOnBoxOfficeStateChange(previousValue: string | null, 
 
     if (previousValueForKey !== value) {
       return true;
-    }
-  }
-
-  const previousMojoState = extractBoxOfficeMojoStateMap(previousValue);
-  const currentMojoState = extractBoxOfficeMojoStateMap(currentValue);
-  if (previousMojoState.size > 0) {
-    for (const [key, value] of currentMojoState) {
-      if (previousMojoState.get(key) !== value) {
-        return true;
-      }
     }
   }
 
@@ -457,9 +447,9 @@ export function buildWeekendSnapshot(
 export function parseBoxOfficeMojoSearchResults(markdown: string): BoxOfficeMojoSearchResult[] {
   const results: BoxOfficeMojoSearchResult[] = [];
   const seen = new Set<string>();
-  const resultPattern = /\[([^\]\n]+)\]\((https:\/\/www\.boxofficemojo\.com\/title\/tt\d+\/?[^)]*)\)\s+\((\d{4})\)/g;
+  const resultPattern = /\[([^\]\n]+)\]\((https?:\/\/www\.boxofficemojo\.com\/title\/tt\d+\/?[^)]*)\)\s+\((\d{4})\)/g;
   for (const match of markdown.matchAll(resultPattern)) {
-    const titleUrl = stripUrlQuery(match[2]);
+    const titleUrl = canonicalizeBoxOfficeMojoUrl(stripUrlQuery(match[2]));
     if (seen.has(titleUrl)) {
       continue;
     }
@@ -481,14 +471,14 @@ export function parseBoxOfficeMojoDomesticSummary(markdown: string): {
   domesticGross: number | null;
 } | null {
   const row = markdown.match(
-    /\|\s*\[Domestic\]\((https:\/\/www\.boxofficemojo\.com\/release\/rl\d+\/?[^)]*)\)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/i
+    /\|\s*\[Domestic\]\((https?:\/\/www\.boxofficemojo\.com\/release\/rl\d+\/?[^)]*)\)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/i
   );
   if (!row) {
     return null;
   }
 
   return {
-    releaseUrl: stripUrlQuery(row[1]),
+    releaseUrl: canonicalizeBoxOfficeMojoUrl(stripUrlQuery(row[1])),
     releaseDate: parseBoxOfficeMojoDate(row[2]),
     openingGross: parseDollarAmount(row[3]),
     domesticGross: parseDollarAmount(row[4])
@@ -544,6 +534,10 @@ function stripUrlQuery(value: string): string {
   }
 }
 
+function canonicalizeBoxOfficeMojoUrl(value: string): string {
+  return value.replace(/^http:\/\/www\.boxofficemojo\.com/i, "https://www.boxofficemojo.com");
+}
+
 function buildBoxOfficeMojoSnapshot(
   market: BoxOfficeWeekendMarket,
   input: {
@@ -584,7 +578,13 @@ async function fetchBoxOfficeMojoSnapshot(market: BoxOfficeWeekendMarket): Promi
   const titleMarkdown = await fetchRenderedMarkdown(titleUrl, 20_000);
   const summary = parseBoxOfficeMojoDomesticSummary(titleMarkdown);
   if (!summary) {
-    throw new Error(`Could not parse BoxOfficeMojo domestic summary for ${market.title}`);
+    return buildBoxOfficeMojoSnapshot(market, {
+      titleUrl,
+      releaseUrl: market.boxOfficeMojoReleaseUrl,
+      domesticGross: null,
+      openingGross: null,
+      rows: []
+    });
   }
 
   const releaseUrl = market.boxOfficeMojoReleaseUrl ?? summary.releaseUrl;

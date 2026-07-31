@@ -54,6 +54,10 @@ const precipitationAdapterIds = new Set([
 ]);
 const spotifyTop50AdapterIds = new Set(["spotify-top-50-usa", "spotify-top-50-global"]);
 const netflixTop10AdapterIds = new Set(["netflix-top-10"]);
+const earthquakeCountAdapterIds = new Set(["usgs-earthquakes", "usgs-earthquakes-6-5"]);
+const earthquakeSevenAdapterIds = new Set(["usgs-earthquakes-7-plus", "usgs-earthquakes-7-plus-2026"]);
+const billboardAdapterIds = new Set(["billboard-hot-100-number-one-song", "billboard-200-number-one-album"]);
+const artistReleaseAdapterIds = new Set(["apple-artist-album-releases", "apple-artist-song-releases"]);
 const mediaReleaseAdapterIds = new Set([
   "all-in-podcast",
   "big-brother-episodes",
@@ -1302,11 +1306,14 @@ function extractCurrentValueLinks(value: string | undefined, excludedUrls: Set<s
     "SEC Filing": "SEC filing",
     "First lid URL": "Source report",
     "F6 PDF": "Current F6 PDF",
-    CSV: "Daily data"
+    CSV: "Daily data",
+    "Chart URL": "Current chart",
+    Kworb: "Ranking data",
+    "Alpha source": "Alpha source"
   };
   const seen = new Set<string>();
   return value.split(/\r?\n/).flatMap((line) => {
-    const match = line.match(/^(URL|Press URL|SEC Filing|First lid URL|F6 PDF|CSV):\s*(https?:\/\/\S+)$/);
+    const match = line.match(/^(URL|Press URL|SEC Filing|First lid URL|F6 PDF|CSV|Chart URL|Kworb|Alpha source):\s*(https?:\/\/\S+)$/);
     if (!match || excludedUrls.has(match[2]) || seen.has(match[2])) {
       return [];
     }
@@ -1553,6 +1560,16 @@ function formatAlertQuickReadFields(
         ? formatArenaAiQuickRead(currentValue, previousValue)
       : integration.adapterId === "mt-washington-wind"
         ? formatMtWashingtonWindQuickRead(currentValue, previousValue)
+      : integration.adapterId === "paris-heat-wave"
+        ? formatParisHeatQuickRead(currentValue, previousValue)
+      : earthquakeCountAdapterIds.has(integration.adapterId)
+        ? formatEarthquakeCountQuickRead(currentValue, previousValue)
+      : earthquakeSevenAdapterIds.has(integration.adapterId)
+        ? formatEarthquakeSevenQuickRead(currentValue, previousValue)
+      : integration.adapterId === "ncei-tornadoes"
+        ? formatTornadoQuickRead(currentValue, previousValue)
+      : integration.adapterId === "nasa-gistemp-temperature"
+        ? formatGistempQuickRead(currentValue, previousValue)
       : integration.adapterId === "nsidc-arctic-sea-ice"
         ? formatNsidcSeaIceQuickRead(currentValue, previousValue)
       : integration.adapterId === "powerball-jackpot"
@@ -1561,6 +1578,18 @@ function formatAlertQuickReadFields(
         ? formatSilverTrumpApprovalQuickRead(currentValue, previousValue)
       : integration.adapterId === "polymarket-mention-schedule"
         ? formatPolymarketMentionScheduleQuickRead(currentValue)
+      : integration.adapterId === "spotify-bieber-monthly-listeners"
+        ? formatSpotifyMonthlyListenersQuickRead(currentValue, previousValue)
+      : integration.adapterId === "spotify-top-artist-monthly"
+        ? formatSpotifyTopArtistQuickRead(currentValue, previousValue)
+      : integration.adapterId === "rotten-tomatoes-scores"
+        ? formatRottenTomatoesQuickRead(currentValue, previousValue)
+      : integration.adapterId === "box-office-weekends"
+        ? formatBoxOfficeQuickRead(currentValue, previousValue)
+      : billboardAdapterIds.has(integration.adapterId)
+        ? formatBillboardQuickRead(currentValue, previousValue)
+      : artistReleaseAdapterIds.has(integration.adapterId)
+        ? formatArtistReleaseQuickRead(currentValue, previousValue)
       : mediaReleaseAdapterIds.has(integration.adapterId)
         ? formatMediaReleaseQuickRead(currentValue, previousValue, integration.adapterId)
       : integration.adapterId === "mrbeast-subscribers"
@@ -1795,6 +1824,59 @@ function formatMtWashingtonWindQuickRead(currentValue: string, previousValue: st
   return formatGenericQuickRead(previousValue, currentValue);
 }
 
+function formatParisHeatQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Status"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest reported day"),
+    ...formatPreferredQuickReadLine(currentValue, "Longest qualifying streak"),
+    ...formatPreferredQuickReadLine(currentValue, "Qualifying days"),
+    ...formatPreferredQuickReadLine(currentValue, "Fetched through")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatEarthquakeCountQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Total earthquakes"),
+    ...formatPreferredQuickReadLine(currentValue, "Minimum magnitude"),
+    ...formatPreferredQuickReadLine(currentValue, "Window ET"),
+    ...formatPreferredQuickReadLine(currentValue, "Market start UTC"),
+    ...formatPreferredQuickReadLine(currentValue, "Market end UTC")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatEarthquakeSevenQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "By June 30 market"),
+    ...formatPreferredQuickReadLine(currentValue, "Full-year 2026 market")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatEarthquakeCountQuickRead(currentValue, previousValue);
+}
+
+function formatTornadoQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Value"),
+    ...formatPreferredQuickReadLine(currentValue, "Data status"),
+    ...formatPreferredQuickReadLine(currentValue, "Final count"),
+    ...formatPreferredQuickReadLine(currentValue, "Preliminary count"),
+    ...formatPreferredQuickReadLine(currentValue, "Uncertainty range"),
+    ...formatPreferredQuickReadLine(currentValue, "Period"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest available for month")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatGistempQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Value"),
+    ...formatPreferredQuickReadLine(currentValue, "Period"),
+    ...formatPreferredQuickReadLine(currentValue, "Source cell"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest available")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
 type MtWashingtonDailyWindRow = {
   fastest: string;
   average: string;
@@ -1913,6 +1995,103 @@ function formatNetflixTop10QuickRead(currentValue: string): string {
   ];
 
   return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatSpotifyMonthlyListenersQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Monthly listeners"),
+    ...formatPreferredQuickReadLine(currentValue, "Next strike"),
+    ...formatPreferredQuickReadLine(currentValue, "Hit strikes"),
+    ...formatPreferredQuickReadLine(currentValue, "Open strikes")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatSpotifyTopArtistQuickRead(currentValue: string, previousValue: string | null): string {
+  const rows = extractSectionRows(currentValue, "Tracked artists:", /^\d+\.\s+/).slice(0, 5);
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Leader"),
+    ...formatPreferredQuickReadLine(currentValue, "Market"),
+    ...(rows.length ? ["**Top 5:**", ...rows] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Missing")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatRottenTomatoesQuickRead(currentValue: string, previousValue: string | null): string {
+  const currentRows = extractSectionRows(currentValue, "Scores:", /^-\s+/);
+  const previousRows = new Set(extractSectionRows(previousValue ?? "", "Scores:", /^-\s+/));
+  const changedRows = currentRows.filter((row) => !previousRows.has(row));
+  const rows = (changedRows.length ? changedRows : currentRows).slice(0, 5);
+  const lines = [
+    "**Action:** A tracked movie moved into a new 5-point score bucket.",
+    ...(rows.length ? ["**Changed score:**", ...rows] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Tracked active markets")
+  ];
+  return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatBoxOfficeQuickRead(currentValue: string, previousValue: string | null): string {
+  const currentRows = extractSectionRows(currentValue, "Movies:", /^-\s+/);
+  const previousRows = new Set(extractSectionRows(previousValue ?? "", "Movies:", /^-\s+/));
+  const changedRows = currentRows.filter((row) => !previousRows.has(row));
+  const rows = (changedRows.length ? changedRows : currentRows).slice(0, 5);
+  const lines = [
+    "**Action:** A weekend total is complete; review the listed bracket for bonding.",
+    ...(rows.length ? ["**Completed/changed movie:**", ...rows] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Tracked active markets")
+  ];
+  return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatBillboardQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Status"),
+    ...formatPreferredQuickReadLine(currentValue, "Target chart"),
+    ...formatPreferredQuickReadLine(currentValue, "#1 Song"),
+    ...formatPreferredQuickReadLine(currentValue, "#1 Album"),
+    ...formatPreferredQuickReadLine(currentValue, "Artist"),
+    ...formatPreferredQuickReadLine(currentValue, "Published chart date"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest available"),
+    ...formatPreferredQuickReadLine(currentValue, "Expected release")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatArtistReleaseQuickRead(currentValue: string, previousValue: string | null): string {
+  const currentRows = extractArtistReleaseRows(currentValue);
+  const previousRows = new Set(extractArtistReleaseRows(previousValue ?? ""));
+  const newRows = currentRows.filter((row) => !previousRows.has(row)).slice(0, 5);
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "New albums found"),
+    ...formatPreferredQuickReadLine(currentValue, "New songs found"),
+    ...(newRows.length ? ["**New release:**", ...newRows] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Tracked unresolved artists")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function extractArtistReleaseRows(value: string): string[] {
+  const albumRows = extractSectionRows(value, "Latest albums:", /^-\s+/);
+  const songRows = extractSectionRows(value, "Latest songs:", /^-\s+/);
+  return [...albumRows, ...songRows];
+}
+
+function extractSectionRows(value: string, header: string, pattern: RegExp): string[] {
+  const lines = value.split(/\r?\n/).map((line) => line.trim());
+  const startIndex = lines.findIndex((line) => line === header);
+  if (startIndex === -1) {
+    return [];
+  }
+
+  const rows: string[] = [];
+  for (const line of lines.slice(startIndex + 1)) {
+    if (!pattern.test(line)) {
+      break;
+    }
+    rows.push(line);
+  }
+  return rows;
 }
 
 function formatPolymarketMentionScheduleQuickRead(currentValue: string): string {

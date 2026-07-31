@@ -569,6 +569,121 @@ describe("adapter commands", () => {
     }
   });
 
+  it.each([
+    {
+      adapterId: "paris-heat-wave",
+      previousValue: "Status: watching\nLatest reported day: 2026-07-28 33°C",
+      currentValue: [
+        "Status: qualifying days found, streak not complete",
+        "Latest reported day: 2026-07-30 36°C",
+        "Qualifying days: 2026-07-29 35°C; 2026-07-30 36°C",
+        "Longest qualifying streak: 2026-07-29 35°C; 2026-07-30 36°C",
+        "Fetched through: 2026-07-30"
+      ].join("\n"),
+      expected: ["**Status:** qualifying days found", "**Longest qualifying streak:**", "**Fetched through:** 2026-07-30"]
+    },
+    {
+      adapterId: "usgs-earthquakes",
+      previousValue: "Total earthquakes: 10",
+      currentValue: [
+        "Window ET: 2026-07-27 00:00 to 2026-08-02 23:59",
+        "Market start UTC: 2026-07-27T04:00:00.000Z",
+        "Market end UTC: 2026-08-03T03:59:00.000Z",
+        "Minimum magnitude: 5.5",
+        "Total earthquakes: 11",
+        "Events: long event list"
+      ].join("\n"),
+      expected: ["**Total earthquakes:** 11", "**Minimum magnitude:** 5.5", "**Market end UTC:**"]
+    },
+    {
+      adapterId: "usgs-earthquakes-7-plus",
+      previousValue: "By June 30 market: 9\nFull-year 2026 market: 8",
+      currentValue: "By June 30 market: 10\nFull-year 2026 market: 9\nEvents: long event list",
+      expected: ["**By June 30 market:** 10", "**Full-year 2026 market:** 9"]
+    },
+    {
+      adapterId: "ncei-tornadoes",
+      previousValue: "Value: not published yet",
+      currentValue: [
+        "Period: 2026-07",
+        "Value: 117 tornadoes",
+        "Data status: preliminary",
+        "Final count: not available",
+        "Preliminary count: 117 tornadoes",
+        "Uncertainty range: 105 to 129"
+      ].join("\n"),
+      expected: ["**Value:** 117 tornadoes", "**Data status:** preliminary", "**Uncertainty range:** 105 to 129"]
+    },
+    {
+      adapterId: "nasa-gistemp-temperature",
+      previousValue: "Value: not published yet",
+      currentValue: "Period: 2026-06\nValue: 1.18 °C anomaly\nSource cell: row 2026, column Jun",
+      expected: ["**Value:** 1.18 °C anomaly", "**Period:** 2026-06", "**Source cell:** row 2026, column Jun"]
+    },
+    {
+      adapterId: "spotify-bieber-monthly-listeners",
+      previousValue: "Monthly listeners: 122,900,000",
+      currentValue: [
+        "Monthly listeners: 123,100,000 (123.1M)",
+        "Next strike: 130M - 6,900,000 away",
+        "Hit strikes: 120M",
+        "Open strikes: 125M, 130M"
+      ].join("\n"),
+      expected: ["**Monthly listeners:** 123,100,000", "**Next strike:** 130M", "**Open strikes:** 125M, 130M"]
+    },
+    {
+      adapterId: "spotify-top-artist-monthly",
+      previousValue: "Leader: Justin Bieber 123.0M",
+      currentValue: [
+        "Market: 2026-07; check: Jul 31, 2026, 12:00 ET",
+        "Leader: Bruno Mars 130.5M (Kworb #1)",
+        "Tracked artists:",
+        "1. Bruno Mars 130.5M (#1, +120K)",
+        "2. Justin Bieber 123.1M (#2, +90K)",
+        "3. The Weeknd 113.5M (#3, +50K)",
+        "Missing: none"
+      ].join("\n"),
+      expected: ["**Leader:** Bruno Mars 130.5M", "**Top 5:**", "1. Bruno Mars 130.5M"]
+    },
+    {
+      adapterId: "rotten-tomatoes-scores",
+      previousValue: "Scores:\n- Spider-Man (2026): 89%, bucket 85, hit 85, next 90",
+      currentValue: "Tracked active markets: 2\nScores:\n- Spider-Man (2026): 90%, bucket 90, hit 85/90, next 95\n- PAW Patrol (2026): pending, bucket pending, thresholds 70/75",
+      expected: ["**Action:** A tracked movie moved", "**Changed score:**", "Spider-Man (2026): 90%"]
+    },
+    {
+      adapterId: "box-office-weekends",
+      previousValue: "Movies:\n- The Odyssey: $49.0M partial (2/3 days)",
+      currentValue: "Tracked active markets: 2\nMovies:\n- The Odyssey: $61.2M complete (3/3 days), bracket 60-65m\n- PAW Patrol: pending (0/3 days)",
+      expected: ["**Action:** A weekend total is complete", "**Completed/changed movie:**", "The Odyssey: $61.2M complete"]
+    },
+    {
+      adapterId: "billboard-hot-100-number-one-song",
+      previousValue: "Status: not published yet",
+      currentValue: "Target chart: Week of August 8, 2026\nStatus: published\n#1 Song: New Song\nArtist: Artist Name\nPublished chart date: Week of August 8, 2026",
+      expected: ["**Status:** published", "**#1 Song:** New Song", "**Artist:** Artist Name"]
+    },
+    {
+      adapterId: "apple-artist-album-releases",
+      previousValue: "New albums found: 1\nLatest albums:\n- Artist A — Old Album — 2026-01-01 — https://music.apple.com/old",
+      currentValue: "New albums found: 2\nLatest albums:\n- Artist B — New Album — 2026-07-31 — https://music.apple.com/new\n- Artist A — Old Album — 2026-01-01 — https://music.apple.com/old\nTracked unresolved artists: Artist A, Artist B",
+      expected: ["**New albums found:** 2", "**New release:**", "Artist B — New Album"]
+    }
+  ])("gives $adapterId an actionable domain summary", ({ adapterId, previousValue, currentValue, expected }) => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId },
+      previousValue,
+      previousCheckedAt: "2026-07-30T00:00:00.000Z",
+      currentValue,
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    for (const text of expected) {
+      expect(quickRead).toContain(text);
+    }
+  });
+
   it("adds direct article links from release values to the Links field", () => {
     const embed = buildAlertEmbed({
       integration: { ...checkedIntegration, adapterId: "bea-current-releases", sourceUrl: "https://www.bea.gov/news/current-releases" },

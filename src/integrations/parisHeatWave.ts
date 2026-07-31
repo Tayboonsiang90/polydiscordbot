@@ -71,18 +71,49 @@ export const parisHeatWaveAdapter: WebsiteAdapter = {
 };
 
 export async function fetchWundergroundHistory(startDate: string, endDate: string): Promise<WundergroundHistoryResponse> {
-  const url = buildWundergroundHistoryApiUrl(startDate, endDate);
-  const response = await fetchWithTimeout(url, {
-    headers: {
-      accept: "application/json",
-      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-    }
-  });
-  if (!response.ok) {
-    throw new Error(`Wunderground history API returned HTTP ${response.status}`);
+  const responses = await Promise.all(
+    splitWundergroundDateRange(startDate, endDate).map(async (range) => {
+      const response = await fetchWithTimeout(buildWundergroundHistoryApiUrl(range.startDate, range.endDate), {
+        headers: {
+          accept: "application/json",
+          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Wunderground history API returned HTTP ${response.status}`);
+      }
+
+      const body = (await response.json()) as WundergroundHistoryResponse;
+      if (body.metadata?.status_code && body.metadata.status_code !== 200) {
+        throw new Error(`Wunderground history API status ${body.metadata.status_code}`);
+      }
+      return body;
+    })
+  );
+
+  return {
+    metadata: { status_code: 200 },
+    observations: responses.flatMap((response) => response.observations ?? [])
+  };
+}
+
+export function splitWundergroundDateRange(
+  startDate: string,
+  endDate: string,
+  maximumInclusiveDays = 31
+): Array<{ startDate: string; endDate: string }> {
+  if (startDate > endDate || maximumInclusiveDays < 1) {
+    throw new Error(`Invalid Wunderground history range: ${startDate} to ${endDate}`);
   }
 
-  return (await response.json()) as WundergroundHistoryResponse;
+  const ranges: Array<{ startDate: string; endDate: string }> = [];
+  let chunkStart = startDate;
+  while (chunkStart <= endDate) {
+    const chunkEnd = minDate(addDays(chunkStart, maximumInclusiveDays - 1), endDate);
+    ranges.push({ startDate: chunkStart, endDate: chunkEnd });
+    chunkStart = addDays(chunkEnd, 1);
+  }
+  return ranges;
 }
 
 export function buildParisHeatReport(response: WundergroundHistoryResponse, fetchedThroughDate: string): ParisHeatReport {

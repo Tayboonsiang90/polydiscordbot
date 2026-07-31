@@ -88,13 +88,13 @@ describe("Box Office weekend adapter", () => {
 
   it("parses BoxOfficeMojo search, title, and daily release pages", () => {
     const search = parseBoxOfficeMojoSearchResults(`
-* [Moana](https://www.boxofficemojo.com/title/tt27419466/?ref_=bo_se_r_1) (2026)
+* [Moana](http://www.boxofficemojo.com/title/tt27419466/?ref_=bo_se_r_1) (2026)
 * [Moana 2](https://www.boxofficemojo.com/title/tt13622970/?ref_=bo_se_r_2) (2024)
 `);
     const summary = parseBoxOfficeMojoDomesticSummary(`
 | Area | Release Date | Opening | Gross |
 | --- | --- | --- | --- |
-| [Domestic](https://www.boxofficemojo.com/release/rl486245121/?ref_=bo_tt_gr_1) | Jul 10, 2026 | $43,142,824 | $68,581,410 |
+| [Domestic](http://www.boxofficemojo.com/release/rl486245121/?ref_=bo_tt_gr_1) | Jul 10, 2026 | $43,142,824 | $68,581,410 |
 `);
     const rows = parseBoxOfficeMojoDailyRows(`
 [Jul 10](https://www.boxofficemojo.com/date/2026-07-10/)[Friday](https://www.boxofficemojo.com/date/2026-07-10/weekly/)1$18,510,043--3,875$4,776$18,510,043 1 false
@@ -137,14 +137,14 @@ describe("Box Office weekend adapter", () => {
     expect(shouldAlertOnBoxOfficeStateChange(currentBondable, "Bondable: abc=34-39m\nState: abc=35000000:3:complete")).toBe(true);
   });
 
-  it("alerts on BoxOfficeMojo state changes after an initial baseline exists", () => {
+  it("does not alert on BoxOfficeMojo-only state changes", () => {
     const initial = "BoxOfficeMojo State: none";
     const baseline = "BoxOfficeMojo State: abc=10000000:1:partial:1:25000000:0";
     const changed = "BoxOfficeMojo State: abc=18000000:2:partial:1:35000000:0";
 
     expect(shouldAlertOnBoxOfficeStateChange(initial, baseline)).toBe(false);
     expect(shouldAlertOnBoxOfficeStateChange(baseline, baseline)).toBe(false);
-    expect(shouldAlertOnBoxOfficeStateChange(baseline, changed)).toBe(true);
+    expect(shouldAlertOnBoxOfficeStateChange(baseline, changed)).toBe(false);
     expect(extractBoxOfficeMojoStateMap(changed).get("abc")).toBe("18000000:2:partial:1:35000000:0");
   });
 
