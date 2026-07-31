@@ -74,8 +74,17 @@ export const polymarketMentionScheduleAdapter: WebsiteAdapter = {
   defaultChannelName: "mentions-schedule",
   alertRoleName: "Polymarket Mentions Schedule Alerts",
   alertRoleEmoji: "🗓️",
+  dailySnapshot: {
+    timeZone: singaporeTimeZone,
+    hour: 18,
+    minute: 0,
+    windowMinutes: 10,
+    label: "6:00 PM SGT next-24-hours briefing",
+    alwaysAlert: true
+  },
   getPollIntervalMinutes: () => 60,
-  getPollIntervalReason: () => "Hourly consolidated tomorrow-SGT Mentions schedule check",
+  getPollIntervalReason: () => "Hourly silent refresh; one scheduled briefing at 6:00 PM SGT",
+  shouldAlertOnChange: () => false,
   async fetchCurrentValue(): Promise<AdapterValue> {
     const observedAt = new Date();
     const [html, events] = await Promise.all([fetchMentionsHtml(), fetchGammaMentionEvents()]);
@@ -83,7 +92,7 @@ export const polymarketMentionScheduleAdapter: WebsiteAdapter = {
     return {
       value,
       rawValue: value,
-      unit: "tomorrow SGT mention markets",
+      unit: "next 24 hours mention markets",
       observedAt
     };
   }
@@ -91,21 +100,21 @@ export const polymarketMentionScheduleAdapter: WebsiteAdapter = {
 
 export function buildPolymarketMentionScheduleValue(events: GammaMentionEvent[], mentionsHtml: string, now = new Date()): string {
   const listings = new Map(extractPolymarketMentionListings(mentionsHtml, now).map((listing) => [listing.slug, listing]));
-  const targetDate = addDaysToDateKey(getZonedDateKey(now, singaporeTimeZone), 1);
-  const rows = buildPolymarketMentionScheduleRows(events, listings, targetDate).sort(
+  const window = getNextTwentyFourHourWindow(now);
+  const rows = buildPolymarketMentionScheduleRows(events, listings, window.startAt, window.endAt).sort(
     (left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime() || left.title.localeCompare(right.title)
   );
 
   return [
-    "Metric: Polymarket Mentions tomorrow schedule",
-    `Tomorrow SGT date: ${targetDate}`,
+    "Metric: Polymarket Mentions next 24 hours schedule",
+    `Window SGT: ${formatZonedDateTime(window.startAt, singaporeTimeZone, "SGT")} to ${formatZonedDateTime(window.endAt, singaporeTimeZone, "SGT")}`,
     `Markets scheduled: ${rows.length}`,
     ...(rows.length
       ? [
           "Schedule:",
           ...rows.map(
             (row, index) =>
-              `${index + 1}. ${row.scheduledAtSgt} — ${row.title} | Original: ${row.originalListedTime} | ${row.url}`
+              `${index + 1}. **${row.scheduledAtSgt} — ${row.title}** · [Polymarket](${row.url}) · Original: ${row.originalListedTime}`
           )
         ]
       : ["Schedule: none"]),
@@ -117,7 +126,8 @@ export function buildPolymarketMentionScheduleValue(events: GammaMentionEvent[],
 export function buildPolymarketMentionScheduleRows(
   events: GammaMentionEvent[],
   listings: Map<string, PolymarketMentionListing>,
-  targetSingaporeDate: string
+  startAt: Date,
+  endAt: Date
 ): PolymarketMentionScheduleRow[] {
   return events.flatMap((event) => {
     if (event.active === false || event.closed === true || event.archived === true) {
@@ -133,7 +143,7 @@ export function buildPolymarketMentionScheduleRows(
     const listing = listings.get(slug);
     const ruleSchedule = parsePolymarketMentionRuleSchedule(firstNonEmptyString(event.description) ?? "");
     const scheduledAt = ruleSchedule?.scheduledAt ?? listing?.listedAt ?? null;
-    if (!scheduledAt || getZonedDateKey(scheduledAt, singaporeTimeZone) !== targetSingaporeDate) {
+    if (!scheduledAt || scheduledAt < startAt || scheduledAt >= endAt) {
       return [];
     }
 
@@ -143,13 +153,26 @@ export function buildPolymarketMentionScheduleRows(
         slug,
         url: `https://polymarket.com/event/${slug}`,
         scheduledAt,
-        scheduledAtSgt: formatZonedDateTime(scheduledAt, singaporeTimeZone, "SGT"),
+        scheduledAtSgt: formatZonedDisplayDateTime(scheduledAt, singaporeTimeZone, "SGT"),
         originalListedTime:
           ruleSchedule?.originalListedTime ??
           (listing ? `${listing.listedLabel} (timezone not shown on Polymarket card; treated as UTC)` : "not shown")
       }
     ];
   });
+}
+
+export function getNextTwentyFourHourWindow(now: Date): { startAt: Date; endAt: Date } {
+  const parts = getZonedDateParts(now, singaporeTimeZone);
+  const startAt =
+    parts.hour === 18 && parts.minute < 10
+      ? zonedDateTimeToUtc(
+          { year: parts.year, month: parts.month, day: parts.day, hour: 18, minute: 0 },
+          singaporeTimeZone
+        )
+      : new Date(Math.floor(now.getTime() / 60_000) * 60_000);
+
+  return { startAt, endAt: new Date(startAt.getTime() + 24 * 60 * 60_000) };
 }
 
 export function extractPolymarketMentionListings(html: string, now = new Date()): PolymarketMentionListing[] {
@@ -332,20 +355,14 @@ function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
   return asUtc - date.getTime();
 }
 
-function getZonedDateKey(date: Date, timeZone: string): string {
-  const parts = getZonedDateParts(date, timeZone);
-  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
-}
-
-function addDaysToDateKey(dateKey: string, days: number): string {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + days));
-  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
-}
-
 function formatZonedDateTime(date: Date, timeZone: string, suffix: string): string {
   const parts = getZonedDateParts(date, timeZone);
   return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)} ${pad2(parts.hour)}:${pad2(parts.minute)} ${suffix}`;
+}
+
+function formatZonedDisplayDateTime(date: Date, timeZone: string, suffix: string): string {
+  const parts = getZonedDateParts(date, timeZone);
+  return `${monthLabel(parts.month)} ${parts.day}, ${parts.year}, ${formatTwelveHour(parts.hour, parts.minute)} ${suffix}`;
 }
 
 function getZonedDateParts(date: Date, timeZone: string): {

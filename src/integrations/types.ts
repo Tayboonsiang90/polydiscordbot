@@ -331,6 +331,7 @@ export type WebsiteAdapter = {
     minute: number;
     windowMinutes: number;
     label: string;
+    alwaysAlert?: boolean;
   };
   manualCheckMode?: "latest" | "historical";
   supportsStrikes?: boolean;

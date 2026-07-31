@@ -58,6 +58,7 @@ export type SnapshotResult = {
   integration: Integration;
   snapshotDate: string;
   snapshotValue: string;
+  snapshotLabel: string;
   shouldAlert: boolean;
 };
 
@@ -372,7 +373,7 @@ export async function captureDailySnapshot(
     integration.snapshotValue !== null &&
     integration.snapshotValue !== adapterValue.value &&
     (adapter.shouldAlertOnChange ? adapter.shouldAlertOnChange(integration.snapshotValue, adapterValue.value) : true);
-  const shouldAlert = integration.snapshotValue === null || snapshotChanged;
+  const shouldAlert = adapter.dailySnapshot.alwaysAlert === true || integration.snapshotValue === null || snapshotChanged;
   const updatedIntegration = database.recordSnapshot(integration.id, adapterValue.value, adapterValue.observedAt, snapshotDate);
   if (snapshotChanged) {
     database.recordUpdateLog({
@@ -390,6 +391,7 @@ export async function captureDailySnapshot(
     integration: updatedIntegration,
     snapshotDate,
     snapshotValue: adapterValue.value,
+    snapshotLabel: adapter.dailySnapshot.label,
     shouldAlert
   };
 }

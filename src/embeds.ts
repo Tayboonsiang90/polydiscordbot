@@ -813,13 +813,20 @@ function formatNotificationLatency(blockchainTimestamp: Date, alertSentAt: Date)
 }
 
 export function buildSnapshotCapturedEmbed(result: SnapshotResult): EmbedBuilder {
-  return baseEmbed(result.integration, "12:00 PM ET daily snapshot")
+  const isMentionsBriefing = result.integration.adapterId === "polymarket-mention-schedule";
+  const valueFields = isMentionsBriefing
+    ? formatPolymarketMentionScheduleSnapshotFields(result.snapshotValue)
+    : [{ name: "Snapshot value", value: formatAlertValue(result.snapshotValue), inline: false as const }];
+
+  return baseEmbed(result.integration, result.snapshotLabel)
     .setColor(successColor)
     .addFields(
       { name: "Snapshot date", value: result.snapshotDate, inline: true },
       { name: "Retrieved at", value: formatSingaporeDateTime(result.integration.snapshotCheckedAt), inline: false },
-      { name: "Snapshot value", value: formatAlertValue(result.snapshotValue), inline: false },
-      { name: "Stored separately", value: "Regular interval checks cannot overwrite this daily snapshot.", inline: false },
+      ...valueFields,
+      ...(isMentionsBriefing
+        ? []
+        : [{ name: "Stored separately", value: "Regular interval checks cannot overwrite this daily snapshot.", inline: false as const }]),
       { name: "Links", value: formatLinks(result.integration), inline: false }
     )
     .setFooter({ text: `Snapshot alert sent at ${nowEasternDateTime()}` });
@@ -2325,16 +2332,64 @@ function extractSectionRows(value: string, header: string, pattern: RegExp): str
 }
 
 function formatPolymarketMentionScheduleQuickRead(currentValue: string): string {
-  const targetDate = extractValueLine(currentValue, "Tomorrow SGT date");
+  const window = extractValueLine(currentValue, "Window SGT");
   const marketCount = extractValueLine(currentValue, "Markets scheduled");
-  const scheduleRows = extractScheduleRows(currentValue).slice(0, 8);
+  const scheduleRows = extractScheduleRows(currentValue).slice(0, 10);
   const lines = [
-    ...(targetDate ? [`**Tomorrow SGT date:** ${targetDate}`] : []),
+    ...(window ? [`**Next 24 hours:** ${window}`] : []),
     ...(marketCount ? [`**Markets scheduled:** ${marketCount}`] : []),
     ...(scheduleRows.length ? ["**Schedule:**", ...scheduleRows] : ["**Schedule:** none"])
   ];
 
   return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatPolymarketMentionScheduleSnapshotFields(
+  currentValue: string
+): Array<{ name: string; value: string; inline: false }> {
+  const window = extractValueLine(currentValue, "Window SGT") ?? "not available";
+  const marketCount = extractValueLine(currentValue, "Markets scheduled") ?? "0";
+  const scheduleRows = extractScheduleRows(currentValue);
+  const fields: Array<{ name: string; value: string; inline: false }> = [
+    {
+      name: "Next 24 hours",
+      value: `**Window:** ${window}\n**Markets scheduled:** ${marketCount}`,
+      inline: false
+    }
+  ];
+
+  if (!scheduleRows.length) {
+    fields.push({ name: "Schedule", value: "No Mentions markets are scheduled in this window.", inline: false });
+    return fields;
+  }
+
+  for (const [index, chunk] of chunkScheduleRows(scheduleRows).entries()) {
+    fields.push({
+      name: index === 0 ? "Schedule" : `Schedule continued ${index + 1}`,
+      value: chunk,
+      inline: false
+    });
+  }
+  return fields;
+}
+
+function chunkScheduleRows(rows: string[], maxLength = 950): string[] {
+  const chunks: string[] = [];
+  let current = "";
+  for (const row of rows) {
+    const safeRow = truncateEmbedValue(row, maxLength);
+    const candidate = current ? `${current}\n${safeRow}` : safeRow;
+    if (candidate.length > maxLength && current) {
+      chunks.push(current);
+      current = safeRow;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) {
+    chunks.push(current);
+  }
+  return chunks;
 }
 
 function formatMediaReleaseQuickRead(currentValue: string, previousValue: string | null, adapterId: string): string {

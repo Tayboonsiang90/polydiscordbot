@@ -26,6 +26,7 @@ import {
   selectNewEventPosts
 } from "../src/poller.js";
 import type { EventMonitorPost, Integration, WebsiteAdapter } from "../src/integrations/types.js";
+import { freeAppStoreAdapter } from "../src/integrations/freeAppStore.js";
 import { nytFrontPageAdapter } from "../src/integrations/nytFrontPage.js";
 
 let tempDir: string | null = null;
@@ -539,6 +540,38 @@ describe("captureDailySnapshot", () => {
     expect(stored.snapshotDate).toBe("2026-05-09");
     expect(stored.snapshotValue).toBe(currentSnapshot);
     database.close();
+  });
+
+  it("always alerts adapters configured for a daily briefing even when the value is unchanged", async () => {
+    const database = createTestDatabase();
+    const integration = database.createIntegration({
+      guildId: "guild",
+      channelId: "freeappstore",
+      adapterId: "free-app-store",
+      displayName: "Free App Store Top 5",
+      sourceUrl: "https://apps.apple.com/us/charts/iphone",
+      pollIntervalMinutes: 5
+    });
+    const snapshot = ["1. App 1", "2. App 2", "3. App 3", "4. App 4", "5. App 5"].join("\n");
+    database.recordSnapshot(integration.id, snapshot, new Date("2026-05-08T16:00:00.000Z"), "2026-05-08");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ feed: { results: ["App 1", "App 2", "App 3", "App 4", "App 5"].map((name) => ({ name })) } })
+      })
+    );
+
+    const originalAlwaysAlert = freeAppStoreAdapter.dailySnapshot?.alwaysAlert;
+    freeAppStoreAdapter.dailySnapshot!.alwaysAlert = true;
+    try {
+      const result = await captureDailySnapshot(database, database.getIntegrationById(integration.id), "2026-05-09");
+      expect(result.shouldAlert).toBe(true);
+      expect(result.snapshotLabel).toBe("12:00 PM ET snapshot");
+    } finally {
+      freeAppStoreAdapter.dailySnapshot!.alwaysAlert = originalAlwaysAlert;
+      database.close();
+    }
   });
 });
 
