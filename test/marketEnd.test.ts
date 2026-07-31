@@ -130,10 +130,10 @@ describe("Polymarket market end reminders", () => {
     ).resolves.toEqual(["24h"]);
     await expect(
       getDueMarketEndReminders(database, storedIntegration, new Date("2026-05-10T15:59:00.000Z")).then((items) => items.map((item) => item.key))
-    ).resolves.toEqual(["24h", "12h"]);
+    ).resolves.toEqual(["24h"]);
     await expect(
       getDueMarketEndReminders(database, storedIntegration, new Date("2026-05-11T03:59:00.000Z")).then((items) => items.map((item) => item.key))
-    ).resolves.toEqual(["24h", "12h", "1h", "end"]);
+    ).resolves.toEqual(["24h"]);
     expect(fetch).toHaveBeenCalledTimes(1);
 
     database.close();

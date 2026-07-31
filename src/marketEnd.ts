@@ -3,7 +3,7 @@ import type { BotDatabase } from "./database.js";
 import type { Integration } from "./integrations/types.js";
 import { parseSettingsJson } from "./settingsJson.js";
 
-export type MarketEndReminderKey = "24h" | "12h" | "1h" | "end";
+export type MarketEndReminderKey = "24h";
 
 export type MarketEndReminder = {
   key: MarketEndReminderKey;
@@ -22,10 +22,7 @@ const failedMarketEndLookupBackoffMs = 30 * 60_000;
 const failedMarketEndLookups = new Map<string, { retryAfterMs: number }>();
 
 const reminders: Array<{ key: MarketEndReminderKey; label: string; offsetMs: number }> = [
-  { key: "24h", label: "24 hours before market end", offsetMs: 24 * 60 * 60 * 1000 },
-  { key: "12h", label: "12 hours before market end", offsetMs: 12 * 60 * 60 * 1000 },
-  { key: "1h", label: "1 hour before market end", offsetMs: 60 * 60 * 1000 },
-  { key: "end", label: "Market end reached", offsetMs: 0 }
+  { key: "24h", label: "24 hours before market end", offsetMs: 24 * 60 * 60 * 1000 }
 ];
 
 export type MarketEndLookupResult = {
