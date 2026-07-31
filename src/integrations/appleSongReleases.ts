@@ -20,6 +20,7 @@ type SongReleaseAdapterConfig = {
   alertRoleEmoji: string;
   releasePhrase: "new song" | "song" | "album";
   releaseKind: "song" | "album";
+  qualifyingStart: "calendar_year" | "market_creation";
 };
 
 export type ArtistReleaseMarket = {
@@ -28,6 +29,7 @@ export type ArtistReleaseMarket = {
   question: string;
   artistId?: number;
   artistUrl?: string;
+  qualifyingStartDate?: string;
 };
 
 type SongReleaseSettings = {
@@ -38,6 +40,9 @@ type SongReleaseSettings = {
 };
 
 type GammaEvent = {
+  startDate?: unknown;
+  creationDate?: unknown;
+  createdAt?: unknown;
   markets?: GammaMarket[];
 };
 
@@ -100,7 +105,8 @@ export const artistSongReleasesAdapter = createSongReleaseAdapter({
   alertRoleName: "Artist Song Release Alerts",
   alertRoleEmoji: "\uD83C\uDFB6",
   releasePhrase: "new song",
-  releaseKind: "song"
+  releaseKind: "song",
+  qualifyingStart: "calendar_year"
 });
 
 export const kpopSongReleasesAdapter = createSongReleaseAdapter({
@@ -112,7 +118,8 @@ export const kpopSongReleasesAdapter = createSongReleaseAdapter({
   alertRoleName: "KPop Song Release Alerts",
   alertRoleEmoji: "\uD83C\uDFA4",
   releasePhrase: "song",
-  releaseKind: "song"
+  releaseKind: "song",
+  qualifyingStart: "market_creation"
 });
 
 export const artistAlbumReleasesAdapter = createSongReleaseAdapter({
@@ -124,7 +131,8 @@ export const artistAlbumReleasesAdapter = createSongReleaseAdapter({
   alertRoleName: "Artist Album Release Alerts",
   alertRoleEmoji: "\uD83D\uDCBF",
   releasePhrase: "album",
-  releaseKind: "album"
+  releaseKind: "album",
+  qualifyingStart: "calendar_year"
 });
 
 export function createSongReleaseAdapter(config: SongReleaseAdapterConfig): WebsiteAdapter {
@@ -174,7 +182,11 @@ export async function refreshSongReleaseSettings(
     return JSON.stringify(settings);
   }
 
-  const artistReleaseMarkets = await parseArtistReleaseMarketsFromPolymarket(polymarketUrl, config.releasePhrase);
+  const artistReleaseMarkets = await parseArtistReleaseMarketsFromPolymarket(
+    polymarketUrl,
+    config.releasePhrase,
+    config.qualifyingStart
+  );
   const existingByName = new Map(
     (settings.artistReleaseMarkets ?? []).map((market) => [normalizeName(market.artistName), market])
   );
@@ -199,7 +211,8 @@ export async function refreshSongReleaseSettings(
 
 export async function parseArtistReleaseMarketsFromPolymarket(
   polymarketUrl: string,
-  releasePhrase: "new song" | "song" | "album"
+  releasePhrase: "new song" | "song" | "album",
+  qualifyingStart: "calendar_year" | "market_creation" = "calendar_year"
 ): Promise<ArtistReleaseMarket[]> {
   const slug = getPolymarketSlug(polymarketUrl);
   if (!slug) {
@@ -214,7 +227,12 @@ export async function parseArtistReleaseMarketsFromPolymarket(
   }
 
   const events = (await response.json()) as GammaEvent[];
-  const markets = events[0]?.markets ?? [];
+  const event = events[0];
+  const markets = event?.markets ?? [];
+  const qualifyingStartDate =
+    qualifyingStart === "market_creation"
+      ? parseGammaDate(event?.startDate) ?? parseGammaDate(event?.creationDate) ?? parseGammaDate(event?.createdAt)
+      : null;
   return markets.flatMap((market) => {
     const artistName = parseArtistFromQuestion(String(market.question ?? ""), releasePhrase);
     if (!artistName || !isUnresolvedMarket(market) || !isNonEmptyString(market.slug)) {
@@ -225,7 +243,8 @@ export async function parseArtistReleaseMarketsFromPolymarket(
       {
         artistName,
         marketSlug: market.slug,
-        question: String(market.question)
+        question: String(market.question),
+        ...(qualifyingStartDate ? { qualifyingStartDate: qualifyingStartDate.slice(0, 10) } : {})
       }
     ];
   });
@@ -250,14 +269,14 @@ export function formatSongReleaseValue(
   const lines = [
     `Metric: Apple Music/iTunes 2026 ${releaseLabel} releases`,
     `Tracked unresolved artists: ${artistMarkets.length ? artistMarkets.map((market) => market.artistName).join(", ") : "none"}`,
-    `New ${releaseLabelPlural} found: ${sortedReleases.length ? String(sortedReleases.length) : "none"}`,
+    `Candidate ${releaseLabelPlural} found: ${sortedReleases.length ? String(sortedReleases.length) : "none"}`,
     `Parsed from: ${parsedFromUrl}`,
     `Artists parsed at: ${lastParsedAt ?? "not parsed yet"}`
   ];
 
   if (sortedReleases.length) {
     lines.push(
-      `Latest ${releaseLabelPlural}:`,
+      `Latest candidate ${releaseLabelPlural}:`,
       ...sortedReleases
         .slice(0, 10)
         .map((release) => `- ${release.artistName} — ${release.trackName} — ${release.releaseDate.slice(0, 10)} — ${release.trackUrl}`)
@@ -417,7 +436,8 @@ function isQualifyingAppleSongResult(result: AppleLookupResult, artistMarket: Ar
     !isNonEmptyString(result.trackViewUrl) ||
     !isNonEmptyString(result.releaseDate) ||
     typeof result.trackId !== "number" ||
-    new Date(result.releaseDate).getUTCFullYear() !== releaseYear
+    new Date(result.releaseDate).getUTCFullYear() !== releaseYear ||
+    !isOnOrAfterQualifyingStartDate(result.releaseDate, artistMarket.qualifyingStartDate)
   ) {
     return false;
   }
@@ -428,7 +448,7 @@ function isQualifyingAppleSongResult(result: AppleLookupResult, artistMarket: Ar
   return (
     normalizeName(collectionArtistName) === normalizeName(artistMarket.artistName) &&
     !/\bDJ Mix\b/i.test(collectionName) &&
-    !/\(Mixed\)|\[Mixed\]|\bTrack by Track\b|\bCommentary\b/i.test(trackName)
+    !isClearlyDisqualifiedSongVersion(trackName, collectionName)
   );
 }
 
@@ -441,7 +461,8 @@ function isQualifyingAppleAlbumResult(result: AppleLookupResult, artistMarket: A
     !isNonEmptyString(result.collectionViewUrl) ||
     !isNonEmptyString(result.releaseDate) ||
     typeof result.collectionId !== "number" ||
-    new Date(result.releaseDate).getUTCFullYear() !== releaseYear
+    new Date(result.releaseDate).getUTCFullYear() !== releaseYear ||
+    !isOnOrAfterQualifyingStartDate(result.releaseDate, artistMarket.qualifyingStartDate)
   ) {
     return false;
   }
@@ -517,10 +538,35 @@ function normalizeArtistReleaseMarkets(value: unknown): ArtistReleaseMarket[] {
         marketSlug: market.marketSlug,
         question: market.question,
         artistId: typeof market.artistId === "number" ? market.artistId : undefined,
-        artistUrl: isNonEmptyString(market.artistUrl) ? market.artistUrl : undefined
+        artistUrl: isNonEmptyString(market.artistUrl) ? market.artistUrl : undefined,
+        qualifyingStartDate: isIsoDate(market.qualifyingStartDate) ? market.qualifyingStartDate : undefined
       }
     ];
   });
+}
+
+function isClearlyDisqualifiedSongVersion(trackName: string, collectionName: string): boolean {
+  const versionMarker =
+    /(?:\(|\[|\s[-–—]\s)\s*(?:acoustic|commentary|demo|edit|extended|instrumental|live|mixed|radio edit|re-?recorded|remaster(?:ed)?|remix|slowed|sped up|track by track|version)\b/i;
+  const catalogMarker = /\b(?:anniversary|compilation|deluxe|expanded|greatest hits|legacy edition|remaster(?:ed)?)\b/i;
+  return versionMarker.test(trackName) || versionMarker.test(collectionName) || catalogMarker.test(collectionName);
+}
+
+function isOnOrAfterQualifyingStartDate(releaseDate: string, qualifyingStartDate?: string): boolean {
+  return !qualifyingStartDate || releaseDate.slice(0, 10) >= qualifyingStartDate;
+}
+
+function parseGammaDate(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
+}
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function isUnresolvedMarket(market: GammaMarket): boolean {

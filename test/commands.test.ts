@@ -442,6 +442,101 @@ describe("adapter commands", () => {
     expect(quickRead).toContain("Malcolm Todd - Earrings");
     expect(quickRead).toContain("Ravyn Lenae - Love Me Not");
     expect(quickRead).not.toContain("Lady Gaga - Die With A Smile");
+    expect(embed.fields?.find((field) => field.name === "Links")?.value).toContain(
+      "[Ranking data](https://kworb.net/spotify/country/us_daily.html)"
+    );
+  });
+
+  it("shows NPM valuation changes before supporting details", () => {
+    const embed = buildAlertEmbed({
+      integration: {
+        ...checkedIntegration,
+        adapterId: "npm-perplexity-valuation",
+        displayName: "NPM Perplexity Valuation"
+      },
+      previousValue: [
+        "Metric: NPM private company valuation",
+        "Company: Perplexity",
+        "As of: Jul 29, 2026",
+        "Valuation: $16.730B",
+        "Price per share: $58.17",
+        "Expected update: 1:00 PM ET on NPM business days"
+      ].join("\n"),
+      previousCheckedAt: "2026-07-29T17:00:00.000Z",
+      currentValue: [
+        "Metric: NPM private company valuation",
+        "Company: Perplexity",
+        "As of: Jul 30, 2026",
+        "Valuation: $17.100B",
+        "Price per share: $59.45",
+        "Expected update: 1:00 PM ET on NPM business days"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Valuation:** $16.730B → **$17.100B**");
+    expect(quickRead).toContain("**Price per share:** $58.17 → **$59.45**");
+    expect(quickRead).toContain("**As of:** Jul 29, 2026 → **Jul 30, 2026**");
+  });
+
+  it("shows Pyth strike action before the live ticker context", () => {
+    const embed = buildAlertEmbed({
+      integration: {
+        ...checkedIntegration,
+        adapterId: "pyth-wti-strikes",
+        displayName: "Pyth WTI Strikes"
+      },
+      previousValue: null,
+      previousCheckedAt: null,
+      currentValue: [
+        "Ticker: WTIN6",
+        "Last Price: 99.2",
+        "Last Price Time: 2026-07-30T14:10:00.000Z",
+        "Crossed Strikes:",
+        "$100.00 crossed up on WTIN6 at 100.1 (2026-07-30T14:10:00.000Z)",
+        "Alerted Strikes:",
+        "$100.00",
+        "Tracked Strikes:",
+        "↑ $100.00"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Strike crossed:**");
+    expect(quickRead).toContain("**$100.00** crossed up on WTIN6");
+    expect(quickRead).toContain("**Last Price:** 99.2");
+    expect(quickRead).toContain("One-shot alert");
+  });
+
+  it("labels Apple release matches as candidates with review links", () => {
+    const embed = buildAlertEmbed({
+      integration: {
+        ...checkedIntegration,
+        adapterId: "apple-kpop-song-releases",
+        displayName: "KPop Song Releases"
+      },
+      previousValue: "Candidate songs found: none\nRelease IDs: none",
+      previousCheckedAt: "2026-07-29T17:00:00.000Z",
+      currentValue: [
+        "Metric: Apple Music/iTunes 2026 song releases",
+        "Tracked unresolved artists: NewJeans",
+        "Candidate songs found: 1",
+        "Latest candidate songs:",
+        "- NewJeans — New Song — 2026-07-30 — https://music.apple.com/us/album/new-song/123",
+        "Release IDs: 123"
+      ].join("\n"),
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain("**Candidate songs found:** 1");
+    expect(quickRead).toContain("[Apple Music](https://music.apple.com/us/album/new-song/123)");
+    expect(quickRead).toContain("Candidate only");
   });
 
   it.each([
@@ -667,7 +762,7 @@ describe("adapter commands", () => {
       adapterId: "apple-artist-album-releases",
       previousValue: "New albums found: 1\nLatest albums:\n- Artist A — Old Album — 2026-01-01 — https://music.apple.com/old",
       currentValue: "New albums found: 2\nLatest albums:\n- Artist B — New Album — 2026-07-31 — https://music.apple.com/new\n- Artist A — Old Album — 2026-01-01 — https://music.apple.com/old\nTracked unresolved artists: Artist A, Artist B",
-      expected: ["**New albums found:** 2", "**New release:**", "Artist B — New Album"]
+      expected: ["**New albums found:** 2", "**New candidate:**", "Artist B — New Album"]
     }
   ])("gives $adapterId an actionable domain summary", ({ adapterId, previousValue, currentValue, expected }) => {
     const embed = buildAlertEmbed({

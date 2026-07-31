@@ -1,5 +1,5 @@
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
-import { extractSpotifyTop50NumberOne, fetchKworbSpotifyTop10Value } from "./spotifyTop50Usa.js";
+import { extractSpotifyTop50NumberOne, fetchKworbSpotifyTop10Value, refreshSpotifyRankPolymarketQueue } from "./spotifyTop50Usa.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF";
@@ -50,5 +50,14 @@ export async function refreshSpotifyTop50GlobalPolymarketQueue(
   integration: Integration,
   now: Date = new Date()
 ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
-  return refreshMonthlyPolymarketQueue(integration, globalMonthlyDiscoveryConfig, now);
+  const monthly = await refreshMonthlyPolymarketQueue(integration, globalMonthlyDiscoveryConfig, now);
+  return refreshSpotifyRankPolymarketQueue(
+    {
+      ...integration,
+      settingsJson: monthly.settingsJson,
+      polymarketUrl: monthly.activeUrl ?? integration.polymarketUrl
+    },
+    "global",
+    now
+  );
 }

@@ -463,7 +463,7 @@ export function normalizeNpmValuationMarketSearchEvent(
       parseGammaDate(event.creationDate)?.toISOString() ??
       parseGammaDate(event.createdAt)?.toISOString() ??
       market.startAt,
-    endAt: market.endAt
+    endAt: parseGammaDate(event.endDate)?.toISOString() ?? market.endAt
   };
 }
 
@@ -604,8 +604,12 @@ function isMatchingMonthlyValuationSlug(slug: string, config: NpmValuationConfig
     return false;
   }
 
-  const target = parseNpmValuationTargetFromSlug(slug);
-  return target.month !== 12;
+  try {
+    parseNpmValuationTargetFromSlug(slug);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function parseNpmValuationSettings(settingsJson: string | null): NpmValuationSettings {

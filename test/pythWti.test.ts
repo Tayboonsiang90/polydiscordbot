@@ -30,8 +30,8 @@ describe("Pyth WTI strike monitor", () => {
         }
       ])
     ).toEqual([
-      { display: "$80.00", value: 80 },
-      { display: "$150.00", value: 150 }
+      { display: "$80.00", triggerDirection: "down", value: 80 },
+      { display: "$150.00", triggerDirection: "up", value: 150 }
     ]);
   });
 });

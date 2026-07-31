@@ -8,6 +8,7 @@ import {
   extractSpotifyTop50UsaNumberOne,
   fetchSpotifyTop50Value,
   formatKworbSpotifyDailyChartValue,
+  normalizeSpotifyRankMarket,
   refreshSpotifyTop50UsaPolymarketQueue
 } from "../src/integrations/spotifyTop50Usa.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -197,6 +198,40 @@ describe("Spotify Top 50 USA adapter", () => {
       "which-artists-will-have-1-hits-in-the-us-in-june"
     ]);
   });
+
+  it("recognizes current weekly USA #1 and #2 song markets", () => {
+    const now = new Date("2026-07-30T12:00:00.000Z");
+    expect(
+      normalizeSpotifyRankMarket(
+        {
+          slug: "1-song-in-the-us-this-week-july-31-2026",
+          title: "#1 song in the US this week?",
+          active: true,
+          closed: false,
+          startDate: "2026-07-30T00:00:00.000Z",
+          endDate: "2026-08-06T00:00:00.000Z"
+        },
+        "usa",
+        now
+      )
+    ).toMatchObject({
+      slug: "1-song-in-the-us-this-week-july-31-2026",
+      endAt: "2026-08-06T00:00:00.000Z"
+    });
+    expect(
+      normalizeSpotifyRankMarket(
+        {
+          slug: "1-song-this-week-july-31-2026",
+          title: "#1 global song this week?",
+          active: true,
+          closed: false,
+          endDate: "2026-08-06T00:00:00.000Z"
+        },
+        "usa",
+        now
+      )
+    ).toBeNull();
+  });
 });
 
 describe("Spotify Top 50 Global adapter", () => {
@@ -224,6 +259,25 @@ describe("Spotify Top 50 Global adapter", () => {
 
     expect(result.activeUrl).toBe("https://polymarket.com/event/which-artists-will-have-1-hits-in-june");
     expect(settings.polymarketMarkets?.map((market) => market.slug)).toEqual(["which-artists-will-have-1-hits-in-june"]);
+  });
+
+  it("recognizes current weekly global #1 and #2 song markets", () => {
+    expect(
+      normalizeSpotifyRankMarket(
+        {
+          slug: "2-song-this-week-july-31-2026",
+          title: "#2 global song this week?",
+          active: true,
+          closed: false,
+          endDate: "2026-08-06T00:00:00.000Z"
+        },
+        "global",
+        new Date("2026-07-30T12:00:00.000Z")
+      )
+    ).toMatchObject({
+      slug: "2-song-this-week-july-31-2026",
+      endAt: "2026-08-06T00:00:00.000Z"
+    });
   });
 });
 

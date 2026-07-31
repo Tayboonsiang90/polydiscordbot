@@ -1,6 +1,8 @@
 ﻿import type { AdapterValue, WebsiteAdapter } from "./types.js";
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
+import { resolveIntegrationPolymarketQueue, type PolymarketQueueMarket } from "../polymarketQueue.js";
+import { parseSettingsJson } from "../settingsJson.js";
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 import type { Integration } from "./types.js";
 
@@ -9,6 +11,9 @@ const kworbUsDailyUrl = "https://kworb.net/spotify/country/us_daily.html";
 const playlistUri = "spotify:playlist:37i9dQZEVXbLRQDuF5jeBp";
 const spotifyFetchAttempts = 3;
 const spotifyRetryDelaysMs = [1_000, 3_000];
+const spotifyRankMarketDiscoveryIntervalMs = 30 * 60_000;
+const gammaSpotifyEventsUrl =
+  "https://gamma-api.polymarket.com/events?tag_slug=spotify&active=true&closed=false&limit=100&order=id&ascending=false";
 const usaMonthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
   searchQuery: "which artists will have 1 hits",
   slugPrefix: "which-artists-will-have-1-hits-in-the-us-in-",
@@ -48,6 +53,20 @@ type SpotifyArtist = {
     name?: string;
   };
   uri?: string;
+};
+
+type SpotifyRankMarketScope = "usa" | "global";
+
+type GammaSpotifyEvent = {
+  slug?: unknown;
+  title?: unknown;
+  active?: unknown;
+  closed?: unknown;
+  archived?: unknown;
+  startDate?: unknown;
+  creationDate?: unknown;
+  createdAt?: unknown;
+  endDate?: unknown;
 };
 
 export type KworbSpotifyDailyChart = {
@@ -262,7 +281,140 @@ export async function refreshSpotifyTop50UsaPolymarketQueue(
   integration: Integration,
   now: Date = new Date()
 ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
-  return refreshMonthlyPolymarketQueue(integration, usaMonthlyDiscoveryConfig, now);
+  const monthly = await refreshMonthlyPolymarketQueue(integration, usaMonthlyDiscoveryConfig, now);
+  return refreshSpotifyRankPolymarketQueue(
+    {
+      ...integration,
+      settingsJson: monthly.settingsJson,
+      polymarketUrl: monthly.activeUrl ?? integration.polymarketUrl
+    },
+    "usa",
+    now
+  );
+}
+
+export async function refreshSpotifyRankPolymarketQueue(
+  integration: Integration,
+  scope: SpotifyRankMarketScope,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  const settings = parseSettingsJson(integration.settingsJson);
+  const discoveryKey = `lastSpotify${scope === "usa" ? "Usa" : "Global"}RankMarketDiscoveryAt`;
+  const lastDiscoveryAt = typeof settings[discoveryKey] === "string" ? Date.parse(settings[discoveryKey]) : Number.NaN;
+  if (!Number.isNaN(lastDiscoveryAt) && now.getTime() - lastDiscoveryAt < spotifyRankMarketDiscoveryIntervalMs) {
+    return resolveIntegrationPolymarketQueue(integration, now);
+  }
+
+  const nextSettings = { ...settings, [discoveryKey]: now.toISOString() };
+  try {
+    const response = await fetchWithTimeout(gammaSpotifyEventsUrl, {
+      headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+    });
+    if (!response.ok) {
+      throw new Error(`Polymarket Gamma events returned HTTP ${response.status}`);
+    }
+
+    const payload = (await response.json()) as unknown;
+    const candidates = Array.isArray(payload)
+      ? payload
+          .map((event) => normalizeSpotifyRankMarket(event as GammaSpotifyEvent, scope, now))
+          .filter((market): market is PolymarketQueueMarket => market !== null)
+      : [];
+    const markets = mergeSpotifyRankMarkets(nextSettings.polymarketMarkets, candidates);
+    return resolveIntegrationPolymarketQueue(
+      {
+        ...integration,
+        settingsJson: JSON.stringify({ ...nextSettings, polymarketMarkets: markets })
+      },
+      now
+    );
+  } catch {
+    return resolveIntegrationPolymarketQueue(
+      {
+        ...integration,
+        settingsJson: JSON.stringify(nextSettings)
+      },
+      now
+    );
+  }
+}
+
+export function normalizeSpotifyRankMarket(
+  event: GammaSpotifyEvent,
+  scope: SpotifyRankMarketScope,
+  now: Date = new Date()
+): PolymarketQueueMarket | null {
+  if (
+    event.active === false ||
+    event.closed === true ||
+    event.archived === true ||
+    !isNonEmptyString(event.slug) ||
+    !isNonEmptyString(event.title)
+  ) {
+    return null;
+  }
+
+  const slug = event.slug.trim().toLowerCase();
+  const matchesScope =
+    scope === "usa"
+      ? /^(?:1|2)-song-in-the-us-this-week-/.test(slug)
+      : /^(?:1|2)-song-this-week-/.test(slug) && !slug.includes("-in-the-us-");
+  const endAt = parseGammaDate(event.endDate);
+  if (!matchesScope || !endAt) {
+    return null;
+  }
+
+  return {
+    url: `https://polymarket.com/event/${event.slug.trim()}`,
+    slug: event.slug.trim(),
+    startAt:
+      parseGammaDate(event.startDate) ??
+      parseGammaDate(event.creationDate) ??
+      parseGammaDate(event.createdAt) ??
+      now.toISOString(),
+    endAt,
+    addedAt: now.toISOString()
+  };
+}
+
+function mergeSpotifyRankMarkets(existing: unknown, candidates: PolymarketQueueMarket[]): PolymarketQueueMarket[] {
+  const markets = new Map<string, PolymarketQueueMarket>();
+  if (Array.isArray(existing)) {
+    for (const value of existing) {
+      if (!value || typeof value !== "object") {
+        continue;
+      }
+      const market = value as Partial<PolymarketQueueMarket>;
+      if (isNonEmptyString(market.slug) && isNonEmptyString(market.url)) {
+        markets.set(market.slug, {
+          url: market.url,
+          slug: market.slug,
+          startAt: isNonEmptyString(market.startAt) ? market.startAt : null,
+          endAt: isNonEmptyString(market.endAt) ? market.endAt : null,
+          addedAt: isNonEmptyString(market.addedAt) ? market.addedAt : new Date(0).toISOString()
+        });
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    markets.set(candidate.slug, { ...markets.get(candidate.slug), ...candidate });
+  }
+
+  return [...markets.values()].sort(
+    (left, right) =>
+      Date.parse(left.startAt ?? "9999-12-31") - Date.parse(right.startAt ?? "9999-12-31") ||
+      left.slug.localeCompare(right.slug)
+  );
+}
+
+function parseGammaDate(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
 function extractInitialState(html: string): SpotifyInitialState {

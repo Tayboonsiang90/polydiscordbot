@@ -29,8 +29,8 @@ describe("Pyth XAUUSD strike monitor", () => {
         }
       ])
     ).toEqual([
-      { display: "$4,500.00", value: 4500 },
-      { display: "$5,400.00", value: 5400 }
+      { display: "$4,500.00", triggerDirection: "down", value: 4500 },
+      { display: "$5,400.00", triggerDirection: "up", value: 5400 }
     ]);
   });
 });

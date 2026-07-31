@@ -7,6 +7,14 @@ const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const marketDiscoveryActiveIntervalMs = 2 * 60 * 60_000;
 const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
 const marketDiscoveryLookaheadMs = 72 * 60 * 60_000;
+const pythFeedCacheMs = 5 * 60_000;
+const pythMinimumRequestSpacingMs = 350;
+const pythHttpRetryAttempts = 4;
+const officialPythApiBaseUrl = "https://pyth.dourolabs.app/v1";
+const officialPythHistoryChannel = "fixed_rate@1000ms";
+const pythFeedCache = new Map<string, { feed: PythPriceFeed; expiresAt: number }>();
+let pythRequestQueue: Promise<void> = Promise.resolve();
+let lastPythRequestAt = 0;
 
 export type PythPriceStrikeConfig = {
   id: string;
@@ -40,6 +48,7 @@ export type PythCandle = {
 export type PythStrike = {
   display: string;
   value: number;
+  triggerDirection?: "up" | "down";
 };
 
 export type PythStrikeCrossing = PythStrike & {
@@ -191,8 +200,9 @@ export function extractPythStrikesFromGamma(data: unknown): PythStrike[] {
     }
 
     const strike = extractStrikeFromText([market.groupItemTitle, market.question].filter(Boolean).join(" "));
-    if (strike && !seen.has(strike.display)) {
-      seen.add(strike.display);
+    const strikeKey = strike ? `${strike.triggerDirection ?? "either"}:${strike.display}` : "";
+    if (strike && !seen.has(strikeKey)) {
+      seen.add(strikeKey);
       strikes.push(strike);
     }
   }
@@ -201,12 +211,13 @@ export function extractPythStrikesFromGamma(data: unknown): PythStrike[] {
 }
 
 export function extractTopPythFeed(data: unknown, feedNamePattern: RegExp): PythPriceFeed | null {
-  if (!isRecord(data) || !Array.isArray(data.data)) {
+  const rows = Array.isArray(data) ? data : isRecord(data) && Array.isArray(data.data) ? data.data : null;
+  if (!rows) {
     return null;
   }
 
   return (
-    data.data
+    rows
       .filter(isRecord)
       .map((row) => ({
         name: String(row.name ?? ""),
@@ -218,6 +229,26 @@ export function extractTopPythFeed(data: unknown, feedNamePattern: RegExp): Pyth
 }
 
 export function extractPythCandles(data: unknown): PythCandle[] {
+  if (isRecord(data) && Array.isArray(data.t) && Array.isArray(data.h) && Array.isArray(data.l) && Array.isArray(data.c)) {
+    const rowCount = Math.min(data.t.length, data.h.length, data.l.length, data.c.length);
+    const candles: PythCandle[] = [];
+    for (let index = 0; index < rowCount; index += 1) {
+      const timestampSeconds = parseNumber(data.t[index]);
+      const high = parseNumber(data.h[index]);
+      const low = parseNumber(data.l[index]);
+      const close = parseNumber(data.c[index]);
+      if (timestampSeconds !== null && high !== null && low !== null && close !== null) {
+        candles.push({
+          high,
+          low,
+          close,
+          timestamp: new Date(timestampSeconds * 1_000).toISOString()
+        });
+      }
+    }
+    return candles;
+  }
+
   if (!Array.isArray(data)) {
     return [];
   }
@@ -270,9 +301,9 @@ export function findPythStrikeCrossings(
 
   for (const candle of candles) {
     for (const strike of strikes) {
-      if (referencePrice < strike.value && candle.high >= strike.value) {
+      if (strike.triggerDirection !== "down" && referencePrice < strike.value && candle.high >= strike.value) {
         crossings.push({ ...strike, direction: "up", feedName: feed.name, price: candle.high, timestamp: candle.timestamp });
-      } else if (referencePrice > strike.value && candle.low <= strike.value) {
+      } else if (strike.triggerDirection !== "up" && referencePrice > strike.value && candle.low <= strike.value) {
         crossings.push({ ...strike, direction: "down", feedName: feed.name, price: candle.low, timestamp: candle.timestamp });
       }
     }
@@ -302,7 +333,7 @@ export function formatPythPriceStrikeMonitorValue(input: {
     "Alerted Strikes:",
     input.alertedStrikes && input.alertedStrikes.length > 0 ? input.alertedStrikes.join(", ") : "none",
     "Tracked Strikes:",
-    input.strikes.length > 0 ? input.strikes.map((strike) => strike.display).join(", ") : "none",
+    input.strikes.length > 0 ? input.strikes.map(formatTrackedStrike).join(", ") : "none",
     `Resolution: ${input.sourceUrl}`,
     `Alerted For: ${input.polymarketUrl ?? "not set"}`
   ].join("\n");
@@ -476,52 +507,124 @@ async function fetchPythStrikes(polymarketUrl: string, fallbackStrikes: PythStri
 }
 
 async function fetchTopPythFeed(config: PythPriceStrikeConfig): Promise<PythPriceFeed> {
-  const response = await fetchPythDependencyWithRetry(buildPythPriceFeedsUrl(config.priceFeedsQuery ?? config.search), {
-    headers: {
-      accept: "application/json",
-      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-    }
-  });
-  if (!response.ok) {
-    throw new Error(`Pyth price-feeds endpoint returned HTTP ${response.status}`);
+  const query = config.priceFeedsQuery ?? config.search;
+  const cached = pythFeedCache.get(query);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.feed;
   }
 
-  const feed = extractTopPythFeed(await response.json(), config.feedNamePattern);
+  let feed: PythPriceFeed | null = null;
+  try {
+    const officialResponse = await fetchPythDependencyWithRetry(buildOfficialPythSymbolsUrl(query), {
+      headers: buildPythHeaders()
+    });
+    if (officialResponse.ok) {
+      feed = extractTopPythFeed(await parsePythJsonResponse(officialResponse), config.feedNamePattern);
+    }
+  } catch {
+    feed = null;
+  }
+
+  if (!feed) {
+    const response = await fetchPythDependencyWithRetry(buildPythPriceFeedsUrl(query), {
+      headers: buildPythHeaders()
+    });
+    if (!response.ok) {
+      throw new Error(`Pyth price-feeds endpoint returned HTTP ${response.status}`);
+    }
+    feed = extractTopPythFeed(await parsePythJsonResponse(response), config.feedNamePattern);
+  }
+
   if (!feed) {
     throw new Error(`Could not find the top active ${config.search} Pyth feed`);
   }
 
+  pythFeedCache.set(query, { feed, expiresAt: Date.now() + pythFeedCacheMs });
   return feed;
 }
 
 async function fetchPythCandles(feed: PythPriceFeed, range: { from?: Date; to?: Date }): Promise<PythCandle[]> {
-  const response = await fetchPythDependencyWithRetry(buildHistoryUrl(feed.symbol, range), {
-    headers: {
-      accept: "application/json",
-      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+  const apiKey = process.env.PYTH_PRO_API_KEY?.trim();
+  const response = await fetchPythDependencyWithRetry(
+    apiKey ? buildOfficialHistoryUrl(feed.symbol, range) : buildHistoryUrl(feed.symbol, range),
+    {
+      headers: buildPythHeaders(apiKey)
     }
-  });
+  );
   if (!response.ok) {
-    throw new Error(`Pyth history endpoint returned HTTP ${response.status} for ${feed.name}`);
+    const keyHint =
+      !apiKey && (response.status === 401 || response.status === 403)
+        ? " Add PYTH_PRO_API_KEY to .env for Pyth's authenticated history API."
+        : "";
+    throw new Error(`Pyth history endpoint returned HTTP ${response.status} for ${feed.name}.${keyHint}`);
   }
 
-  return extractPythCandles(await response.json());
+  return extractPythCandles(await parsePythJsonResponse(response));
 }
 
-async function fetchPythDependencyWithRetry(url: string, init: RequestInit): Promise<Response> {
+export async function fetchPythDependencyWithRetry(url: string, init: RequestInit): Promise<Response> {
   let lastError: unknown = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  let lastResponse: Response | null = null;
+  for (let attempt = 1; attempt <= pythHttpRetryAttempts; attempt += 1) {
     try {
-      return await fetchWithTimeout(url, init, 30_000);
+      const response = await queuePythRequest(() => fetchWithTimeout(url, init, 30_000));
+      if (response.status !== 429 && response.status < 500) {
+        return response;
+      }
+
+      lastResponse = response;
+      if (attempt < pythHttpRetryAttempts) {
+        await delay(getPythRetryDelayMs(response, attempt));
+      }
     } catch (error) {
       lastError = error;
-      if (attempt < 3) {
+      if (attempt < pythHttpRetryAttempts) {
         await delay(attempt * 1_000);
       }
     }
   }
 
+  if (lastResponse) {
+    return lastResponse;
+  }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+async function queuePythRequest(operation: () => Promise<Response>): Promise<Response> {
+  let releaseQueue: () => void = () => undefined;
+  const previous = pythRequestQueue;
+  pythRequestQueue = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
+  });
+  await previous;
+
+  try {
+    const waitMs = Math.max(0, lastPythRequestAt + pythMinimumRequestSpacingMs - Date.now());
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
+    lastPythRequestAt = Date.now();
+    return await operation();
+  } finally {
+    releaseQueue();
+  }
+}
+
+function getPythRetryDelayMs(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return seconds * 1_000;
+    }
+
+    const retryAt = Date.parse(retryAfter);
+    if (!Number.isNaN(retryAt)) {
+      return Math.max(0, retryAt - Date.now());
+    }
+  }
+
+  return attempt * 2_000;
 }
 
 function delay(ms: number): Promise<void> {
@@ -536,6 +639,10 @@ function buildPythPriceFeedsUrl(search: string): string {
   return `https://pythdata.app/api/price-feeds?query=${encodeURIComponent(search)}&limit=100`;
 }
 
+function buildOfficialPythSymbolsUrl(search: string): string {
+  return `${officialPythApiBaseUrl}/symbols?query=${encodeURIComponent(search)}`;
+}
+
 function buildHistoryUrl(symbol: string, range: { from?: Date; to?: Date }): string {
   const url = new URL(`https://pythdata.app/api/price-feeds/${encodeURIComponent(symbol)}/history`);
   url.searchParams.set("resolution", "1m");
@@ -546,6 +653,38 @@ function buildHistoryUrl(symbol: string, range: { from?: Date; to?: Date }): str
     url.searchParams.set("to", range.to.toISOString());
   }
   return url.toString();
+}
+
+function buildOfficialHistoryUrl(symbol: string, range: { from?: Date; to?: Date }): string {
+  const nowSeconds = Math.floor(Date.now() / 1_000);
+  const url = new URL(`${officialPythApiBaseUrl}/${encodeURIComponent(officialPythHistoryChannel)}/history`);
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("resolution", "1");
+  url.searchParams.set("from", String(Math.floor((range.from?.getTime() ?? Date.now() - 15 * 60_000) / 1_000)));
+  url.searchParams.set("to", String(Math.floor((range.to?.getTime() ?? nowSeconds * 1_000) / 1_000)));
+  return url.toString();
+}
+
+function buildPythHeaders(apiKey?: string): Record<string, string> {
+  return {
+    accept: "application/json",
+    "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1",
+    ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
+  };
+}
+
+async function parsePythJsonResponse(response: Response): Promise<unknown> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    const checkpoint = /Vercel Security Checkpoint|<!DOCTYPE html/i.test(text);
+    throw new Error(
+      checkpoint
+        ? "Pyth Data returned a browser security checkpoint. Add PYTH_PRO_API_KEY to .env for the official authenticated history API."
+        : "Pyth returned a non-JSON response."
+    );
+  }
 }
 
 function getHistoryRange(integration?: Integration): { from?: Date; to?: Date } {
@@ -574,9 +713,20 @@ function extractStrikeFromText(text: string): PythStrike | null {
   return value !== null && Number.isFinite(value)
     ? {
         display: formatStrikeDisplay(value),
-        value
+        value,
+        ...(getStrikeTriggerDirection(text) ? { triggerDirection: getStrikeTriggerDirection(text)! } : {})
       }
     : null;
+}
+
+function getStrikeTriggerDirection(text: string): "up" | "down" | null {
+  if (/\bHIGH\b/i.test(text) || text.includes("↑")) {
+    return "up";
+  }
+  if (/\bLOW\b/i.test(text) || text.includes("↓")) {
+    return "down";
+  }
+  return null;
 }
 
 function parseStoredLastPrice(value: string | null): number | null {
@@ -621,10 +771,12 @@ function parseStoredTrackedStrikes(value: string | null, polymarketUrl: string):
     return [];
   }
 
-  return (trackedText.match(/\$[\d,]+(?:\.\d+)?/g) ?? [])
-    .map((display) => {
-      const value = parseNumber(display.replace("$", ""));
-      return value === null ? null : { display, value };
+  return (trackedText.match(/(?:[↑↓]\s*)?\$[\d,]+(?:\.\d+)?/g) ?? [])
+    .map((trackedStrike) => {
+      const display = trackedStrike.match(/\$[\d,]+(?:\.\d+)?/)?.[0];
+      const value = display ? parseNumber(display.replace("$", "")) : null;
+      const triggerDirection = trackedStrike.includes("↑") ? "up" : trackedStrike.includes("↓") ? "down" : undefined;
+      return value === null || !display ? null : { display, value, ...(triggerDirection ? { triggerDirection } : {}) };
     })
     .filter((strike): strike is PythStrike => strike !== null)
     .sort((left, right) => left.value - right.value);
@@ -659,6 +811,10 @@ function dedupeCrossings(crossings: PythStrikeCrossing[]): PythStrikeCrossing[] 
 
 function formatCrossing(crossing: PythStrikeCrossing): string {
   return `${crossing.display} crossed ${crossing.direction} on ${crossing.feedName} at ${formatPrice(crossing.price)} (${crossing.timestamp})`;
+}
+
+function formatTrackedStrike(strike: PythStrike): string {
+  return `${strike.triggerDirection === "up" ? "↑ " : strike.triggerDirection === "down" ? "↓ " : ""}${strike.display}`;
 }
 
 function formatStrikeDisplay(value: number): string {

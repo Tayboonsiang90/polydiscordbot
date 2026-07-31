@@ -149,7 +149,7 @@ describe("NPM private valuation adapters", () => {
     expect(getNpmValuationPollIntervalMinutes(integration, new Date("2026-07-01T18:00:00.000Z"))).toBe(1);
   });
 
-  it("normalizes monthly Polymarket discovery candidates and excludes yearly markets", () => {
+  it("normalizes concurrent monthly and yearly Polymarket discovery candidates", () => {
     const july = normalizeNpmValuationMarketSearchEvent(
       {
         slug: "will-databricks-valuation-hit-by-july-31-20260629172513776",
@@ -157,7 +157,8 @@ describe("NPM private valuation adapters", () => {
         active: true,
         closed: false,
         archived: false,
-        createdAt: "2026-06-29T17:25:13.776Z"
+        createdAt: "2026-06-29T17:25:13.776Z",
+        endDate: "2026-08-01T19:00:00.000Z"
       },
       config,
       new Date("2026-07-01T00:00:00.000Z")
@@ -179,8 +180,11 @@ describe("NPM private valuation adapters", () => {
       url: "https://polymarket.com/event/will-databricks-valuation-hit-by-july-31-20260629172513776",
       startAt: "2026-06-29T17:25:13.776Z"
     });
-    expect(july?.endAt).toBe("2026-08-01T17:10:00.000Z");
-    expect(december).toBeNull();
+    expect(july?.endAt).toBe("2026-08-01T19:00:00.000Z");
+    expect(december).toMatchObject({
+      slug: "will-databricks-valuation-hit-by-december-31",
+      url: "https://polymarket.com/event/will-databricks-valuation-hit-by-december-31"
+    });
   });
 
   it("builds auto-discovery adapters for monthly valuation markets", () => {

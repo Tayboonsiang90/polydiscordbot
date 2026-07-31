@@ -35,8 +35,8 @@ describe("Pyth XAGUSD strike monitor", () => {
         }
       ])
     ).toEqual([
-      { display: "$45.00", value: 45 },
-      { display: "$50.00", value: 50 }
+      { display: "$45.00", triggerDirection: "down", value: 45 },
+      { display: "$50.00", triggerDirection: "up", value: 50 }
     ]);
   });
 
@@ -46,6 +46,9 @@ describe("Pyth XAGUSD strike monitor", () => {
       const value = String(url);
       if (value.includes("gamma-api.polymarket.com")) {
         return new Response(JSON.stringify([]));
+      }
+      if (value.includes("pyth.dourolabs.app/v1/symbols")) {
+        return new Response(JSON.stringify([{ name: "XAGUSD", state: "stable", symbol: "Metal.XAG/USD" }]));
       }
       if (value.includes("/api/price-feeds?")) {
         return new Response(JSON.stringify({ data: [{ name: "XAGUSD", state: "stable", symbol: "Metal.XAG/USD" }] }));
@@ -82,6 +85,9 @@ describe("Pyth XAGUSD strike monitor", () => {
       const value = String(url);
       if (value.includes("gamma-api.polymarket.com")) {
         return new Response(JSON.stringify([]));
+      }
+      if (value.includes("pyth.dourolabs.app/v1/symbols")) {
+        return new Response(JSON.stringify([{ name: "XAGUSD", state: "stable", symbol: "Metal.XAG/USD" }]));
       }
       if (value.includes("/api/price-feeds?")) {
         return new Response(JSON.stringify({ data: [{ name: "XAGUSD", state: "stable", symbol: "Metal.XAG/USD" }] }));

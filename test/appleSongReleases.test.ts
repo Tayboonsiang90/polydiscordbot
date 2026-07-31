@@ -64,6 +64,44 @@ describe("Apple song release adapters", () => {
     ]);
   });
 
+  it("stores the market creation date for KPop release-window filtering", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [
+          {
+            startDate: "2026-02-03T22:52:55.650492Z",
+            markets: [
+              {
+                question: "Will NewJeans release a song in 2026?",
+                slug: "will-newjeans-release-a-song-in-2026",
+                active: true,
+                closed: false,
+                outcomePrices: "[\"0.5\", \"0.5\"]"
+              }
+            ]
+          }
+        ]
+      })
+    );
+
+    await expect(
+      parseArtistReleaseMarketsFromPolymarket(
+        "https://polymarket.com/event/which-kpop-groups-will-release-songs-in-2026",
+        "song",
+        "market_creation"
+      )
+    ).resolves.toEqual([
+      {
+        artistName: "NewJeans",
+        marketSlug: "will-newjeans-release-a-song-in-2026",
+        question: "Will NewJeans release a song in 2026?",
+        qualifyingStartDate: "2026-02-03"
+      }
+    ]);
+  });
+
   it("formats release IDs and detects only new song IDs", () => {
     const previous = formatSongReleaseValue(
       [
@@ -105,7 +143,7 @@ describe("Apple song release adapters", () => {
     expect(shouldAlertOnSongReleaseChange(current, current)).toBe(false);
   });
 
-  it("fetches Apple Music songs and filters DJ-mix catalog noise", async () => {
+  it("fetches Apple Music songs and filters obvious alternate versions", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -136,6 +174,18 @@ describe("Apple song release adapters", () => {
               trackName: "Old Song (Mixed)",
               releaseDate: "2026-03-01T12:00:00Z",
               trackViewUrl: "https://music.apple.com/example-mixed"
+            },
+            {
+              wrapperType: "track",
+              kind: "song",
+              artistId: 159260351,
+              artistName: "Taylor Swift",
+              collectionArtistName: "Taylor Swift",
+              collectionName: "Old Song - Single",
+              trackId: 4,
+              trackName: "Old Song (Radio Edit)",
+              releaseDate: "2026-03-02T12:00:00Z",
+              trackViewUrl: "https://music.apple.com/example-radio-edit"
             }
           ]
         })
@@ -160,6 +210,53 @@ describe("Apple song release adapters", () => {
 
     expect(value.value).toContain("New Song");
     expect(value.value).not.toContain("Old Song (Mixed)");
+    expect(value.value).not.toContain("Old Song (Radio Edit)");
+    expect(value.value).toContain("Candidate songs found: 1");
+  });
+
+  it("ignores KPop catalog entries dated before market creation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              wrapperType: "track",
+              kind: "song",
+              artistId: 1635469693,
+              artistName: "NewJeans",
+              collectionArtistName: "NewJeans",
+              collectionName: "Before Market - Single",
+              trackId: 5,
+              trackName: "Before Market",
+              releaseDate: "2026-01-15T12:00:00Z",
+              trackViewUrl: "https://music.apple.com/example-before"
+            }
+          ]
+        })
+      })
+    );
+
+    const value = await kpopSongReleasesAdapter.fetchCurrentValue({
+      settingsJson: JSON.stringify({
+        artistReleaseMarkets: [
+          {
+            artistName: "NewJeans",
+            marketSlug: "will-newjeans-release-a-song-in-2026",
+            question: "Will NewJeans release a song in 2026?",
+            artistId: 1635469693,
+            qualifyingStartDate: "2026-02-03"
+          }
+        ],
+        parsedFromUrl: "https://polymarket.com/event/which-kpop-groups-will-release-songs-in-2026",
+        lastParsedAt: "2026-05-01T00:00:00.000Z"
+      }),
+      polymarketUrl: "https://polymarket.com/event/which-kpop-groups-will-release-songs-in-2026"
+    } as Integration);
+
+    expect(value.value).toContain("Candidate songs found: none");
+    expect(value.value).not.toContain("Before Market");
   });
 
   it("fetches Apple Music albums and filters singles or EPs", async () => {

@@ -53,11 +53,21 @@ const precipitationAdapterIds = new Set([
   "noaa-seattle-precip"
 ]);
 const spotifyTop50AdapterIds = new Set(["spotify-top-50-usa", "spotify-top-50-global"]);
+const pythPriceStrikeAdapterIds = new Set([
+  "pyth-natural-gas-strikes",
+  "pyth-wti-strikes",
+  "pyth-xagusd-strikes",
+  "pyth-xauusd-strikes"
+]);
 const netflixTop10AdapterIds = new Set(["netflix-top-10"]);
 const earthquakeCountAdapterIds = new Set(["usgs-earthquakes", "usgs-earthquakes-6-5"]);
 const earthquakeSevenAdapterIds = new Set(["usgs-earthquakes-7-plus", "usgs-earthquakes-7-plus-2026"]);
 const billboardAdapterIds = new Set(["billboard-hot-100-number-one-song", "billboard-200-number-one-album"]);
-const artistReleaseAdapterIds = new Set(["apple-artist-album-releases", "apple-artist-song-releases"]);
+const artistReleaseAdapterIds = new Set([
+  "apple-artist-album-releases",
+  "apple-artist-song-releases",
+  "apple-kpop-song-releases"
+]);
 const mediaReleaseAdapterIds = new Set([
   "all-in-podcast",
   "big-brother-episodes",
@@ -1309,11 +1319,14 @@ function extractCurrentValueLinks(value: string | undefined, excludedUrls: Set<s
     CSV: "Daily data",
     "Chart URL": "Current chart",
     Kworb: "Ranking data",
+    "Kworb details": "Ranking data",
     "Alpha source": "Alpha source"
   };
   const seen = new Set<string>();
   return value.split(/\r?\n/).flatMap((line) => {
-    const match = line.match(/^(URL|Press URL|SEC Filing|First lid URL|F6 PDF|CSV|Chart URL|Kworb|Alpha source):\s*(https?:\/\/\S+)$/);
+    const match = line.match(
+      /^(URL|Press URL|SEC Filing|First lid URL|F6 PDF|CSV|Chart URL|Kworb|Kworb details|Alpha source):\s*(https?:\/\/\S+)$/
+    );
     if (!match || excludedUrls.has(match[2]) || seen.has(match[2])) {
       return [];
     }
@@ -1552,6 +1565,10 @@ function formatAlertQuickReadFields(
         ? formatPrecipitationQuickRead(currentValue, previousValue)
       : integration.adapterId === "ufo-files"
         ? formatUfoFilesQuickRead(currentValue, previousValue)
+      : isNpmValuationAdapter(integration.adapterId)
+        ? formatNpmValuationQuickRead(currentValue, previousValue)
+      : pythPriceStrikeAdapterIds.has(integration.adapterId)
+        ? formatPythPriceStrikeQuickRead(currentValue)
       : spotifyTop50AdapterIds.has(integration.adapterId)
         ? formatSpotifyTop50QuickRead(currentValue, previousValue)
       : netflixTop10AdapterIds.has(integration.adapterId)
@@ -1609,6 +1626,10 @@ function formatAlertQuickReadFields(
 
 function isPrecipitationAdapter(adapterId: string): boolean {
   return precipitationAdapterIds.has(adapterId);
+}
+
+function isNpmValuationAdapter(adapterId: string): boolean {
+  return adapterId.startsWith("npm-") && adapterId.endsWith("-valuation");
 }
 
 function formatReleaseQuickRead(currentValue: string, previousValue: string | null): string {
@@ -2061,12 +2082,15 @@ function formatBillboardQuickRead(currentValue: string, previousValue: string | 
 function formatArtistReleaseQuickRead(currentValue: string, previousValue: string | null): string {
   const currentRows = extractArtistReleaseRows(currentValue);
   const previousRows = new Set(extractArtistReleaseRows(previousValue ?? ""));
-  const newRows = currentRows.filter((row) => !previousRows.has(row)).slice(0, 5);
+  const newRows = currentRows.filter((row) => !previousRows.has(row)).slice(0, 5).map(formatArtistReleaseRow);
   const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Candidate albums found"),
+    ...formatPreferredQuickReadLine(currentValue, "Candidate songs found"),
     ...formatPreferredQuickReadLine(currentValue, "New albums found"),
     ...formatPreferredQuickReadLine(currentValue, "New songs found"),
-    ...(newRows.length ? ["**New release:**", ...newRows] : []),
-    ...formatPreferredQuickReadLine(currentValue, "Tracked unresolved artists")
+    ...(newRows.length ? ["**New candidate:**", ...newRows] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Tracked unresolved artists"),
+    "_Candidate only: obvious remixes/alternate versions are excluded; verify ambiguous catalog reissues._"
   ];
   return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
 }
@@ -2074,7 +2098,18 @@ function formatArtistReleaseQuickRead(currentValue: string, previousValue: strin
 function extractArtistReleaseRows(value: string): string[] {
   const albumRows = extractSectionRows(value, "Latest albums:", /^-\s+/);
   const songRows = extractSectionRows(value, "Latest songs:", /^-\s+/);
-  return [...albumRows, ...songRows];
+  const candidateAlbumRows = extractSectionRows(value, "Latest candidate albums:", /^-\s+/);
+  const candidateSongRows = extractSectionRows(value, "Latest candidate songs:", /^-\s+/);
+  return [...albumRows, ...songRows, ...candidateAlbumRows, ...candidateSongRows];
+}
+
+function formatArtistReleaseRow(row: string): string {
+  const match = row.match(/^-\s+(.+?)\s+[—-]\s+(.+?)\s+[—-]\s+(\d{4}-\d{2}-\d{2})\s+[—-]\s+(https?:\/\/\S+)$/);
+  if (!match) {
+    return row;
+  }
+
+  return `- **${match[1]} — ${match[2]}** (${match[3]}) · ${formatMarkdownLink("Apple Music", match[4])}`;
 }
 
 function extractSectionRows(value: string, header: string, pattern: RegExp): string[] {
@@ -2289,6 +2324,52 @@ function formatSpotifyTop50QuickRead(currentValue: string, previousValue: string
   }
 
   return formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatNpmValuationQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatQuickReadDiffLine(previousValue, currentValue, "Valuation"),
+    ...formatQuickReadDiffLine(previousValue, currentValue, "Price per share"),
+    ...formatQuickReadDiffLine(previousValue, currentValue, "As of"),
+    ...formatPreferredQuickReadLine(currentValue, "Company"),
+    ...formatPreferredQuickReadLine(currentValue, "Expected update")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatPythPriceStrikeQuickRead(currentValue: string): string {
+  const crossings = extractSectionRows(currentValue, "Crossed Strikes:", /^\$/).slice(0, 6);
+  const lines = [
+    ...(crossings.length ? ["**Strike crossed:**", ...crossings.map(formatPythCrossingRow)] : ["**Strike crossed:** none"]),
+    ...formatPreferredQuickReadLine(currentValue, "Last Price"),
+    ...formatPreferredQuickReadLine(currentValue, "Ticker"),
+    ...formatPreferredQuickReadLine(currentValue, "Last Price Time"),
+    ...(crossings.length ? ["_One-shot alert: each strike is notified once per Polymarket._"] : [])
+  ];
+  return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatPythCrossingRow(row: string): string {
+  const match = row.match(/^(\$[\d,.]+)\s+(.+)$/);
+  return match ? `- **${match[1]}** ${convertIsoTimestampsToEastern(match[2])}` : `- ${convertIsoTimestampsToEastern(row)}`;
+}
+
+function formatQuickReadDiffLine(previousValue: string | null, currentValue: string, label: string): string[] {
+  const previous = previousValue ? extractValueLine(previousValue, label) : null;
+  const current = extractValueLine(currentValue, label);
+  if (!current) {
+    return [];
+  }
+  if (!previous || previous === current) {
+    return [`**${label}:** ${truncatePlainText(convertIsoTimestampsToEastern(current), 180)}`];
+  }
+
+  return [
+    `**${label}:** ${truncatePlainText(convertIsoTimestampsToEastern(previous), 90)} → **${truncatePlainText(
+      convertIsoTimestampsToEastern(current),
+      140
+    )}**`
+  ];
 }
 
 function formatArenaAiQuickRead(currentValue: string, previousValue: string | null): string {
