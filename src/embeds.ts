@@ -1591,6 +1591,8 @@ function formatAlertQuickReadFields(
         ? formatNsidcSeaIceQuickRead(currentValue, previousValue)
       : integration.adapterId === "powerball-jackpot"
         ? formatPowerballJackpotQuickRead(currentValue, previousValue)
+      : integration.adapterId === "pump-fun-buybacks"
+        ? formatPumpFunBuybacksQuickRead(currentValue)
       : integration.adapterId === "isw-ukraine-map"
         ? formatIswUkraineMapQuickRead(currentValue)
       : integration.adapterId === "free-app-store" || integration.adapterId === "paid-app-store"
@@ -1672,6 +1674,21 @@ function formatTsaQuickRead(currentValue: string, previousValue: string | null):
     ...formatPreferredQuickReadLine(currentValue, "Window reported days")
   ];
   return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatPumpFunBuybacksQuickRead(currentValue: string): string {
+  const targetReached = extractValueLine(currentValue, "Target reached") === "yes";
+  const remaining = extractValueLine(currentValue, "Remaining");
+  const lines = [
+    targetReached ? "✅ **$500M target reached**" : `⏳ **$500M target not reached${remaining ? ` — ${remaining} remaining` : ""}**`,
+    ...formatPreferredQuickReadLine(currentValue, "Total purchases"),
+    ...formatPreferredQuickReadLine(currentValue, "Progress"),
+    ...formatPreferredQuickReadLine(currentValue, "Finalized date"),
+    ...formatPreferredQuickReadLine(currentValue, "Finalized day purchases"),
+    ...formatPreferredQuickReadLine(currentValue, "7-day daily average"),
+    ...formatPreferredQuickReadLine(currentValue, "Estimated target date at 7-day pace")
+  ];
+  return lines.join("\n");
 }
 
 function formatIswUkraineMapQuickRead(currentValue: string): string {

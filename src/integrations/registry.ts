@@ -93,6 +93,7 @@ import { polymarketStatusAdapter } from "./polymarketStatus.js";
 import { portwatchBabElMandebAdapter } from "./portwatchBabElMandeb.js";
 import { portwatchHormuzShipsAdapter } from "./portwatchHormuzShips.js";
 import { powerballJackpotAdapter } from "./powerballJackpot.js";
+import { pumpFunBuybacksAdapter } from "./pumpFunBuybacks.js";
 import { pumpFunGoAdapter } from "./pumpFunGo.js";
 import { pythNaturalGasAdapter } from "./pythNaturalGas.js";
 import { pythWtiAdapter } from "./pythWti.js";
@@ -230,6 +231,7 @@ const adapters = new Map<string, WebsiteAdapter>([
   [portwatchBabElMandebAdapter.id, portwatchBabElMandebAdapter],
   [portwatchHormuzShipsAdapter.id, portwatchHormuzShipsAdapter],
   [powerballJackpotAdapter.id, powerballJackpotAdapter],
+  [pumpFunBuybacksAdapter.id, pumpFunBuybacksAdapter],
   [pumpFunGoAdapter.id, pumpFunGoAdapter],
   [pythNaturalGasAdapter.id, pythNaturalGasAdapter],
   [pythWtiAdapter.id, pythWtiAdapter],

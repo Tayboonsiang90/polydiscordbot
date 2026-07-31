@@ -1132,6 +1132,11 @@ describe("adapter commands", () => {
       "white-house-tweets",
       "Current total: 22\nHourly new posts: 3\nHourly summary: 2026-07-31 09:00 ET: 3\nCapture source: Polymarket XTracker\nWindow: Jul 31 12:00 PM ET to Aug 7 12:00 PM ET",
       "**Capture source:** Polymarket XTracker"
+    ],
+    [
+      "pump-fun-buybacks",
+      "Metric: Pump.fun Total $PUMP Purchases (USD)\nTotal purchases: $416,968,962.58\nTarget: $500,000,000.00\nTarget reached: no\nProgress: 83.39%\nRemaining: $83,031,037.42\nFinalized date: 2026-07-30\nFinalized day purchases: $688,858.91\n7-day daily average: $625,000.00\nEstimated target date at 7-day pace: 2026-12-11",
+      "**$500M target not reached"
     ]
   ])("shows an actionable quick read for %s", (adapterId, currentValue, expected) => {
     const embed = buildAlertEmbed({
