@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   claudeCodeCommitsAdapter,
   claudeCommitsShouldAlertOnChange,
@@ -8,8 +8,14 @@ import {
   findClaudeCommitHits,
   formatClaudeCommitsMonitorValue
 } from "../src/integrations/claudeCodeCommits.js";
+import type { Integration } from "../src/integrations/types.js";
 
 const polymarketUrl = "https://polymarket.com/event/claude-code-commits-hit-by-june-30";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("Claude Code Commits adapter", () => {
   it("extracts daily rows from tracker JSON", () => {
@@ -161,5 +167,36 @@ describe("Claude Code Commits adapter", () => {
   it("registers hourly polling and strike support", () => {
     expect(claudeCodeCommitsAdapter.getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(claudeCodeCommitsAdapter.supportsStrikes).toBe(true);
+  });
+
+  it("keeps reporting tracker data when no unresolved strike market exists", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => [{ markets: [] }]
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: [
+              { date: "Wed, 29 Jul 2026 00:00:00 GMT", claude_code_count: 600000 },
+              { date: "Thu, 30 Jul 2026 00:00:00 GMT", claude_code_count: 625000 }
+            ]
+          })
+        })
+    );
+
+    const result = await claudeCodeCommitsAdapter.fetchCurrentValue({
+      polymarketUrl,
+      settingsJson: null,
+      lastValue: null
+    } as Integration);
+
+    expect(result.value).toContain("Latest commits: 625,000");
+    expect(result.value).toContain("Tracked Targets:\nnone");
+    expect(claudeCommitsShouldAlertOnChange(null, result.value)).toBe(false);
   });
 });

@@ -52,12 +52,14 @@ export function extractTrumpSchedule(html: string, targetDateEt: string): TrumpS
   };
 }
 
-export function formatTrumpScheduleValue(schedule: TrumpSchedule): string {
+export function formatTrumpScheduleValue(schedule: TrumpSchedule, now = new Date()): string {
   const flags = summarizeScheduleFlags(schedule.items);
+  const nextItem = findNextScheduleItem(schedule, now);
   return [
     `Date ET: ${schedule.dateEt}`,
     `Items: ${schedule.items.length}`,
     `Flags: ${flags.join(" | ")}`,
+    `Next item: ${nextItem ? formatScheduleItem(nextItem) : "none remaining today"}`,
     "Schedule:",
     ...(schedule.items.length ? schedule.items.map(formatScheduleItem) : ["No public schedule items found for this ET date yet."]),
     `Source: ${schedule.sourceUrl}`
@@ -97,13 +99,14 @@ export const trumpScheduleAdapter: WebsiteAdapter = {
       throw new Error(`Roll Call calendar returned HTTP ${response.status}`);
     }
 
-    const dateEt = getEasternParts(new Date()).date;
-    const value = formatTrumpScheduleValue(extractTrumpSchedule(await response.text(), dateEt));
+    const observedAt = new Date();
+    const dateEt = getEasternParts(observedAt).date;
+    const value = formatTrumpScheduleValue(extractTrumpSchedule(await response.text(), dateEt), observedAt);
     return {
       value,
       rawValue: value,
       unit: "daily schedule",
-      observedAt: new Date()
+      observedAt
     };
   }
 };
@@ -167,6 +170,16 @@ function summarizeScheduleFlags(items: TrumpScheduleItem[]): string[] {
 
 function sortScheduleItems(items: TrumpScheduleItem[]): TrumpScheduleItem[] {
   return [...items].sort((left, right) => (parseTimeToMinutes(left.timeEt) ?? 0) - (parseTimeToMinutes(right.timeEt) ?? 0));
+}
+
+function findNextScheduleItem(schedule: TrumpSchedule, now: Date): TrumpScheduleItem | null {
+  const parts = getEasternParts(now);
+  if (schedule.dateEt !== parts.date) {
+    return schedule.items[0] ?? null;
+  }
+
+  const currentMinutes = parts.hour * 60 + parts.minute;
+  return schedule.items.find((item) => (parseTimeToMinutes(item.timeEt) ?? -1) >= currentMinutes) ?? null;
 }
 
 function parseRollCallDate(text: string): string | null {

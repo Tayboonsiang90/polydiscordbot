@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildWhiteHouseTweetsMonitorValue,
+  normalizeWhiteHouseTweetFromXTracker,
+  normalizeWhiteHouseTweetTracking,
   normalizeWhiteHouseTweetFromTrumpFeed,
   parseWhiteHouseTweetsNitterFeed,
   parseWhiteHouseTweetsMarketWindow,
@@ -105,33 +107,50 @@ describe("White House X posts adapter", () => {
     ]);
   });
 
-  it("uses The Trump Feed public archive as the primary public source", async () => {
+  it("normalizes Polymarket XTracker posts and active market links", () => {
+    expect(
+      normalizeWhiteHouseTweetFromXTracker({
+        platformId: "2061970387349426334",
+        content: "RT @example: repost",
+        createdAt: "2026-06-03T00:37:00.000Z"
+      })
+    ).toEqual({
+      id: "2061970387349426334",
+      text: "RT @example: repost",
+      createdAt: "2026-06-03T00:37:00.000Z",
+      type: "Repost",
+      url: "https://x.com/WhiteHouse/status/2061970387349426334"
+    });
+    expect(
+      normalizeWhiteHouseTweetTracking(
+        {
+          marketLink: "https://polymarket.com/event/white-house-of-tweets-may-29-june-5-2026",
+          isActive: true
+        },
+        new Date("2026-05-31T12:00:00.000Z")
+      )
+    ).toEqual({
+      slug: "white-house-of-tweets-may-29-june-5-2026",
+      url: "https://polymarket.com/event/white-house-of-tweets-may-29-june-5-2026"
+    });
+  });
+
+  it("uses Polymarket XTracker as the primary public source", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        text: async () =>
-          JSON.stringify({
+        json: async () => ({
+          data: {
             posts: [
               {
-                id: 1,
-                platform: "potus-x",
-                authorHandle: "@WhiteHouse",
-                sourceUrl: "https://x.com/WhiteHouse/status/200",
-                postedAt: "2026-05-29T13:00:00.000Z",
-                contentText: "feed post"
-              },
-              {
-                id: 2,
-                platform: "potus-x",
-                authorHandle: "@POTUS",
-                sourceUrl: "https://x.com/POTUS/status/201",
-                postedAt: "2026-05-29T13:01:00.000Z",
-                contentText: "POTUS post"
+                platformId: "200",
+                createdAt: "2026-05-29T13:00:00.000Z",
+                content: "tracker post"
               }
-            ],
-            totalPages: 1
-          })
+            ]
+          }
+        })
       })
     );
 
@@ -141,13 +160,18 @@ describe("White House X posts adapter", () => {
     } as Integration);
 
     expect(result.value).toContain("Current total: 1");
-    expect(result.value).toContain("Capture source: The Trump Feed public archive");
+    expect(result.value).toContain("Capture source: Polymarket XTracker");
   });
 
   it("skips XCancel whitelist placeholders and tries the backup RSS feed", async () => {
     vi.stubEnv("WHITE_HOUSE_TWEETS_NITTER_FEEDS", "https://xcancel.com/WhiteHouse/rss");
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({})
+      })
       .mockResolvedValueOnce({
         ok: false,
         status: 503,
@@ -184,7 +208,7 @@ describe("White House X posts adapter", () => {
       lastValue: null
     } as Integration);
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(result.value).toContain("Current total: 1");
     expect(result.value).toContain("https://x.com/WhiteHouse/status/201");
   });
@@ -251,30 +275,29 @@ describe("White House X posts adapter", () => {
   });
 
   it("auto-discovers overlapping weekly tweet markets with exact noon ET windows", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      return {
         ok: true,
-        json: async () => ({
-          events: [
-            {
-              slug: "white-house-of-tweets-may-26-june-2-2026",
-              title: "White House # posts May 26 - June 2, 2026?",
-              active: true,
-              closed: false,
-              tags: [{ slug: "tweets-markets" }]
-            },
-            {
-              slug: "white-house-of-tweets-may-29-june-5-2026",
-              title: "White House # posts May 29 - June 5, 2026?",
-              active: true,
-              closed: false,
-              tags: [{ slug: "tweets-markets" }]
-            }
-          ]
-        })
-      })
-    );
+        json: async () =>
+          url.includes("xtracker.polymarket.com")
+            ? {
+                data: {
+                  trackings: [
+                    {
+                      marketLink: "https://polymarket.com/event/white-house-of-tweets-may-26-june-2-2026",
+                      isActive: true
+                    },
+                    {
+                      marketLink: "https://polymarket.com/event/white-house-of-tweets-may-29-june-5-2026",
+                      isActive: true
+                    }
+                  ]
+                }
+              }
+            : { events: [] }
+      };
+    }));
 
     const result = await refreshWhiteHouseTweetsPolymarketQueue(
       {

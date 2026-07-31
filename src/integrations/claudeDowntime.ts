@@ -12,13 +12,14 @@ const defaultMonth = 6;
 const greenColor = "#76ad2a";
 const futureGreyColors = new Set(["#eaeaea", "#b0aea5"]);
 const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
-  searchQuery: "will claude go down on days in",
+  searchQuery: "will claude go down",
   slugPrefix: "will-claude-go-down-on-days-in-",
-  titlePrefix: "Will Claude go down on days in",
+  titlePrefix: "Will Claude go down on",
   lastDiscoveryAtKey: "lastClaudeDowntimeDiscoveryAt",
   activeIntervalMs: 2 * 60 * 60_000,
   noActiveIntervalMs: 30 * 60_000,
-  lookaheadMs: 21 * 24 * 60 * 60_000
+  lookaheadMs: 21 * 24 * 60 * 60_000,
+  fallbackToCurrentMonthWhenExpired: true
 };
 
 export type ClaudeDowntimePeriod = {

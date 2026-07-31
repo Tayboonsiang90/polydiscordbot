@@ -1085,6 +1085,68 @@ describe("adapter commands", () => {
     expect(quickRead).not.toContain("Window:");
   });
 
+  it.each([
+    [
+      "isw-ukraine-map",
+      "Notice: ISW has completed updating our frontline geometry. The map is finalized.\nMap status: Assessed Control of Terrain as of July 30, 2026, 5:00 PM ET",
+      "✅ Finalized"
+    ],
+    ["free-app-store", "1. Capital One Mobile\n2. TikTok\n3. ChatGPT\n4. Netflix\n5. Atom", "**#1** Capital One Mobile"],
+    [
+      "openai-chatgpt-outages",
+      "Period: 2026-07 ET\nQualifying days: 4\nDays: 2026-07-14, 2026-07-18\nNew Daily Report:\n2026-07-30: no qualifying outage\nReported Daily Dates:\n2026-07-30",
+      "**Daily report:** 2026-07-30"
+    ],
+    [
+      "claude-downtime",
+      "Period: 2026-07\nDowntime days: 2\nLatest finalized day: 2026-07-30 color #76ad2a (green)\nNew Daily Report:\n2026-07-30 color #76ad2a (green)\nReported Daily Dates:\n2026-07-30\nNew Downtime Days:\nnone\nAlerted Downtime Days:\nnone",
+      "**Downtime days:** 2"
+    ],
+    [
+      "claude-code-commits",
+      "Latest date: 2026-07-30\nLatest commits: 625,000\nDay-over-day: +25,000 (+4.2%)\nWindow high: 625,000 on 2026-07-30\nWindow low: 600,000 on 2026-07-29\nNewly Hit Targets:\nnone\nAlerted Targets:\nnone",
+      "**Latest commits:** 625,000"
+    ],
+    [
+      "fdic-failed-banks",
+      "Bank: Small Business Bank\nLocation: Lenexa, KS\nClosing date: July 17, 2026\nAcquiring institution: Dream First Bank",
+      "**Bank:** Small Business Bank"
+    ],
+    ["aws-disrupted-events", "No disrupted AWS service interruption events found", "✅ No disrupted AWS incident found"],
+    [
+      "discord-critical-incidents",
+      "CRITICAL INCIDENT DETECTED\nIncident: API unavailable\nStatus: resolved\nStarted: 2026-07-30T12:00:00.000Z\nResolved: 2026-07-30T13:00:00.000Z",
+      "🔴 Critical incident detected"
+    ],
+    [
+      "trump-schedule",
+      "Date ET: 2026-07-31\nItems: 4\nFlags: lid: none | travel: yes | press: yes | remarks: yes\nNext item: 11:00 AM - The President delivers remarks",
+      "**Next item:** 11:00 AM"
+    ],
+    [
+      "white-house-briefings",
+      "Title: Presidential Message\nCategory: Briefings & Statements\nPublished at: 2026-07-31T12:00:00.000Z\nURL: https://www.whitehouse.gov/example/",
+      "**Title:** Presidential Message"
+    ],
+    [
+      "white-house-tweets",
+      "Current total: 22\nHourly new posts: 3\nHourly summary: 2026-07-31 09:00 ET: 3\nCapture source: Polymarket XTracker\nWindow: Jul 31 12:00 PM ET to Aug 7 12:00 PM ET",
+      "**Capture source:** Polymarket XTracker"
+    ]
+  ])("shows an actionable quick read for %s", (adapterId, currentValue, expected) => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId, displayName: adapterId },
+      previousValue: null,
+      previousCheckedAt: null,
+      currentValue,
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    expect(quickRead).toContain(expected);
+  });
+
   it("keeps a quick-read fallback when only low-priority links are present", () => {
     const embed = buildAlertEmbed({
       integration: checkedIntegration,

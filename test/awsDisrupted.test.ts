@@ -16,15 +16,6 @@ const noDisruptedResponse: AwsHistoryEventsResponse = {
       summary: "Increased API Error Rates",
       status: "2",
       event_log: [{ status: "2", timestamp: 1770040800 }]
-    },
-    {
-      arn: "arn:old-disrupted",
-      date: "1762000000",
-      region_name: "N. Virginia",
-      service_name: "Amazon Elastic Compute Cloud",
-      summary: "Old Disrupted Event",
-      status: "3",
-      event_log: [{ status: "3", timestamp: 1762000000 }]
     }
   ]
 };
@@ -59,7 +50,7 @@ const disruptedResponse: AwsHistoryEventsResponse = {
 describe("AWS disrupted events adapter", () => {
   it("returns a stable no-disrupted value when no qualifying events exist", () => {
     expect(extractAwsDisruptedEventValue(noDisruptedResponse)).toBe(
-      "No disrupted AWS service interruption events found in the June 30 market window"
+      "No disrupted AWS service interruption events found"
     );
   });
 
@@ -78,5 +69,20 @@ describe("AWS disrupted events adapter", () => {
       "arn:newer-disrupted",
       "arn:older-disrupted"
     ]);
+  });
+
+  it("keeps monitoring disrupted events after the original June market window", () => {
+    const response: AwsHistoryEventsResponse = {
+      "ec2-us-east-1": [
+        {
+          arn: "arn:post-june-disrupted",
+          date: String(Date.parse("2026-07-15T12:00:00.000Z") / 1000),
+          summary: "Post-June Disrupted Event",
+          status: "3"
+        }
+      ]
+    };
+
+    expect(getDisruptedAwsEvents(response).map((event) => event.arn)).toEqual(["arn:post-june-disrupted"]);
   });
 });

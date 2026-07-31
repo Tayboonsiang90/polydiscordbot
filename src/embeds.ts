@@ -1591,8 +1591,30 @@ function formatAlertQuickReadFields(
         ? formatNsidcSeaIceQuickRead(currentValue, previousValue)
       : integration.adapterId === "powerball-jackpot"
         ? formatPowerballJackpotQuickRead(currentValue, previousValue)
+      : integration.adapterId === "isw-ukraine-map"
+        ? formatIswUkraineMapQuickRead(currentValue)
+      : integration.adapterId === "free-app-store" || integration.adapterId === "paid-app-store"
+        ? formatAppStoreQuickRead(currentValue, previousValue)
+      : integration.adapterId === "openai-chatgpt-outages"
+        ? formatChatGptOutageQuickRead(currentValue)
+      : integration.adapterId === "claude-downtime"
+        ? formatClaudeDowntimeQuickRead(currentValue)
+      : integration.adapterId === "claude-code-commits"
+        ? formatClaudeCommitsQuickRead(currentValue)
+      : integration.adapterId === "fdic-failed-banks"
+        ? formatFdicFailedBankQuickRead(currentValue)
+      : integration.adapterId === "aws-disrupted-events"
+        ? formatAwsDisruptedQuickRead(currentValue)
+      : integration.adapterId === "discord-critical-incidents" || integration.adapterId === "cloudflare-critical-incidents"
+        ? formatCriticalIncidentQuickRead(currentValue)
       : integration.adapterId === "silver-trump-approval"
         ? formatSilverTrumpApprovalQuickRead(currentValue, previousValue)
+      : integration.adapterId === "trump-schedule"
+        ? formatTrumpScheduleQuickRead(currentValue)
+      : integration.adapterId === "white-house-briefings"
+        ? formatWhiteHouseBriefingQuickRead(currentValue)
+      : integration.adapterId === "white-house-tweets"
+        ? formatWhiteHouseTweetsQuickRead(currentValue)
       : integration.adapterId === "polymarket-mention-schedule"
         ? formatPolymarketMentionScheduleQuickRead(currentValue)
       : integration.adapterId === "spotify-bieber-monthly-listeners"
@@ -1650,6 +1672,162 @@ function formatTsaQuickRead(currentValue: string, previousValue: string | null):
     ...formatPreferredQuickReadLine(currentValue, "Window reported days")
   ];
   return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatIswUkraineMapQuickRead(currentValue: string): string {
+  const notice = extractValueLine(currentValue, "Notice");
+  const finalized = Boolean(notice && /\bcompleted\b|\bfinalized\b/i.test(notice));
+  const lines = [
+    `**Map status:** ${finalized ? "✅ Finalized" : "🟡 Updating"}`,
+    ...formatPreferredQuickReadLine(currentValue, "Map status"),
+    ...(notice ? [`**Notice:** ${truncatePlainText(notice, 420)}`] : [])
+  ];
+  return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatAppStoreQuickRead(currentValue: string, previousValue: string | null): string {
+  const currentRows = extractNumberedRows(currentValue).slice(0, 5);
+  const previousRows = extractNumberedRows(previousValue ?? "").slice(0, 2);
+  const topTwoChanged =
+    previousRows.length === 2 &&
+    currentRows.length >= 2 &&
+    previousRows.map((row) => row.text).join("|") !== currentRows.slice(0, 2).map((row) => row.text).join("|");
+  const lines = [
+    ...(topTwoChanged ? ["**Top 2 changed:** yes"] : []),
+    ...currentRows.map((row) => `${row.position <= 2 ? `**#${row.position}**` : `#${row.position}`} ${row.text}`)
+  ];
+  return lines.length ? lines.join("\n") : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatChatGptOutageQuickRead(currentValue: string): string {
+  const dailyReport = extractSectionFirstLine(currentValue, "New Daily Report", "Reported Daily Dates");
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Period"),
+    ...formatPreferredQuickReadLine(currentValue, "Qualifying days"),
+    ...formatPreferredQuickReadLine(currentValue, "Days"),
+    ...(dailyReport && dailyReport !== "none" ? [`**Daily report:** ${truncatePlainText(dailyReport, 300)}`] : [])
+  ];
+  return lines.join("\n");
+}
+
+function formatClaudeDowntimeQuickRead(currentValue: string): string {
+  const dailyReport = extractSectionFirstLine(currentValue, "New Daily Report", "Reported Daily Dates");
+  const newDowntime = extractSectionFirstLine(currentValue, "New Downtime Days", "Alerted Downtime Days");
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Period"),
+    ...formatPreferredQuickReadLine(currentValue, "Downtime days"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest finalized day"),
+    ...(newDowntime && newDowntime !== "none" ? [`**New downtime:** ${truncatePlainText(newDowntime, 300)}`] : []),
+    ...(dailyReport && dailyReport !== "none" ? [`**Daily report:** ${truncatePlainText(dailyReport, 300)}`] : [])
+  ];
+  return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatClaudeCommitsQuickRead(currentValue: string): string {
+  const newlyHit = extractSectionFirstLine(currentValue, "Newly Hit Targets", "Alerted Targets");
+  const lines = [
+    ...(newlyHit && newlyHit !== "none" ? [`**Strike hit:** ${truncatePlainText(newlyHit, 300)}`] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Latest date"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest commits"),
+    ...formatPreferredQuickReadLine(currentValue, "Day-over-day"),
+    ...formatPreferredQuickReadLine(currentValue, "Window high"),
+    ...formatPreferredQuickReadLine(currentValue, "Window low")
+  ];
+  return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatFdicFailedBankQuickRead(currentValue: string): string {
+  return [
+    ...formatPreferredQuickReadLine(currentValue, "Bank"),
+    ...formatPreferredQuickReadLine(currentValue, "Location"),
+    ...formatPreferredQuickReadLine(currentValue, "Closing date"),
+    ...formatPreferredQuickReadLine(currentValue, "Acquiring institution")
+  ].join("\n");
+}
+
+function formatAwsDisruptedQuickRead(currentValue: string): string {
+  if (/^No disrupted AWS service interruption events found/m.test(currentValue)) {
+    return "**Status:** ✅ No disrupted AWS incident found";
+  }
+
+  return [
+    "**Status:** 🔴 Disrupted incident detected",
+    ...formatPreferredQuickReadLine(currentValue, "Event"),
+    ...formatPreferredQuickReadLine(currentValue, "Service"),
+    ...formatPreferredQuickReadLine(currentValue, "Region"),
+    ...formatPreferredQuickReadLine(currentValue, "Started"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest update")
+  ].join("\n");
+}
+
+function formatCriticalIncidentQuickRead(currentValue: string): string {
+  if (/^No critical incidents found/m.test(currentValue)) {
+    return "**Status:** ✅ No critical incident found";
+  }
+
+  return [
+    "**Status:** 🔴 Critical incident detected",
+    ...formatPreferredQuickReadLine(currentValue, "Incident"),
+    ...formatPreferredQuickReadLine(currentValue, "Status"),
+    ...formatPreferredQuickReadLine(currentValue, "Started"),
+    ...formatPreferredQuickReadLine(currentValue, "Resolved"),
+    ...formatPreferredQuickReadLine(currentValue, "Link")
+  ].join("\n");
+}
+
+function formatTrumpScheduleQuickRead(currentValue: string): string {
+  return [
+    ...formatPreferredQuickReadLine(currentValue, "Date ET"),
+    ...formatPreferredQuickReadLine(currentValue, "Next item"),
+    ...formatPreferredQuickReadLine(currentValue, "Items"),
+    ...formatPreferredQuickReadLine(currentValue, "Flags")
+  ].join("\n");
+}
+
+function formatWhiteHouseBriefingQuickRead(currentValue: string): string {
+  return [
+    ...formatPreferredQuickReadLine(currentValue, "Title"),
+    ...formatPreferredQuickReadLine(currentValue, "Category"),
+    ...formatPreferredQuickReadLine(currentValue, "Published at"),
+    ...formatPreferredQuickReadLine(currentValue, "URL")
+  ].join("\n");
+}
+
+function formatWhiteHouseTweetsQuickRead(currentValue: string): string {
+  return truncateEmbedValue(
+    [
+      ...formatPreferredQuickReadLine(currentValue, "Current total"),
+      ...formatPreferredQuickReadLine(currentValue, "Hourly new posts"),
+      ...formatPreferredQuickReadLine(currentValue, "Hourly summary"),
+      ...formatPreferredQuickReadLine(currentValue, "Window"),
+      ...formatPreferredQuickReadLine(currentValue, "Capture source"),
+      ...formatPreferredQuickReadLine(currentValue, "Latest captured posts")
+    ].join("\n"),
+    900
+  );
+}
+
+function extractNumberedRows(value: string): Array<{ position: number; text: string }> {
+  return value.split(/\r?\n/).flatMap((line) => {
+    const match = line.trim().match(/^(\d+)\.\s+(.+)$/);
+    if (!match) {
+      return [];
+    }
+
+    return [{ position: Number(match[1]), text: match[2].trim() }];
+  });
+}
+
+function extractSectionFirstLine(value: string, heading: string, nextHeading: string): string | null {
+  const lines = value.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `${heading}:`);
+  if (start === -1) {
+    return null;
+  }
+
+  const end = lines.findIndex((line, index) => index > start && line.trim() === `${nextHeading}:`);
+  const section = lines.slice(start + 1, end === -1 ? undefined : end).map((line) => line.trim()).filter(Boolean);
+  return section[0] ?? null;
 }
 
 function formatFredPriceQuickRead(currentValue: string, previousValue: string | null, periodLabel: string): string {

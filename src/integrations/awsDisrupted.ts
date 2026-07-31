@@ -3,9 +3,7 @@ import { fetchWithTimeout } from "../http.js";
 
 const apiUrl = "https://history-events-eu-west-1-prod.s3.amazonaws.com/historyevents.json";
 const sourceUrl = "https://health.aws.amazon.com/health/status";
-const noDisruptedValue = "No disrupted AWS service interruption events found in the June 30 market window";
-const marketWindowStart = Date.parse("2026-01-01T05:00:00.000Z");
-const marketWindowEnd = Date.parse("2026-07-01T03:59:59.999Z");
+const noDisruptedValue = "No disrupted AWS service interruption events found";
 const disruptedStatus = "3";
 
 export type AwsHealthEventLog = {
@@ -63,7 +61,6 @@ export function getDisruptedAwsEvents(response: AwsHistoryEventsResponse): AwsHe
     .flatMap(([service, events]) => events.map((event) => ({ service, ...event })))
     .flat()
     .filter(isAwsHealthEvent)
-    .filter(isInMarketWindow)
     .filter(isDisruptedEvent)
     .sort((left, right) => getEventSortTime(right) - getEventSortTime(left));
 }
@@ -101,11 +98,6 @@ export const awsDisruptedAdapter: WebsiteAdapter = {
 
 function isAwsHealthEvent(value: unknown): value is AwsHealthEvent {
   return typeof value === "object" && value !== null;
-}
-
-function isInMarketWindow(event: AwsHealthEvent): boolean {
-  const timestamp = getEventSortTime(event);
-  return timestamp >= marketWindowStart && timestamp <= marketWindowEnd;
 }
 
 function isDisruptedEvent(event: AwsHealthEvent): boolean {

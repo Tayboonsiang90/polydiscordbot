@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   claudeDowntimeAdapter,
   claudeDowntimeShouldAlertOnChange,
@@ -49,6 +49,12 @@ const sampleProps = {
 };
 
 const sampleHtml = `<html><body><div data-react-class="UptimeCalendar" data-react-props='${JSON.stringify(sampleProps)}'></div></body></html>`;
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("Claude downtime adapter", () => {
   it("parses Claude Status uptime boxes and only finalizes days with a following non-grey day", () => {
@@ -212,6 +218,46 @@ describe("Claude downtime adapter", () => {
         new Date("2026-05-29T12:00:00.000Z")
       )
     ).toEqual({ year: 2026, month: 4, label: "2026-04" });
+  });
+
+  it("auto-discovers current titles that include the day-count blank", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-31T12:00:00.000Z"));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "will-claude-go-down-on-days-in-august-20260728182414700",
+              title: "Will Claude go down on __ days in August?",
+              active: true,
+              closed: false
+            }
+          ]
+        })
+      })
+    );
+
+    const settingsJson = await claudeDowntimeAdapter.refreshSettings?.({
+      settingsJson: null,
+      polymarketUrl
+    } as Integration);
+    const settings = JSON.parse(settingsJson ?? "{}") as {
+      year?: number;
+      month?: number;
+      polymarketMarkets?: Array<{ slug: string }>;
+    };
+
+    expect(settings).toMatchObject({ year: 2026, month: 7 });
+    expect(settings.polymarketMarkets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: "will-claude-go-down-on-days-in-august-20260728182414700"
+        })
+      ])
+    );
   });
 
   it("uses fixed hourly polling with month/year support", () => {

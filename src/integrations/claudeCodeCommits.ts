@@ -29,6 +29,12 @@ export type ClaudeCommitHit = {
   row: ClaudeCommitRow;
 };
 
+type ClaudeCommitMarket = {
+  targets: ClaudeCommitTarget[];
+  windowStartDate?: string;
+  windowEndDate?: string;
+};
+
 export type ClaudeCommitsSettings = {
   claudeCommitTargets?: ClaudeCommitTarget[];
   parsedFromUrl?: string;
@@ -82,14 +88,13 @@ export const claudeCodeCommitsAdapter: WebsiteAdapter = {
     const observedAt = new Date();
     const polymarketUrl = integration?.polymarketUrl ?? defaultPolymarketUrl;
     const settings = parseClaudeCommitsSettings(integration?.settingsJson);
-    const market =
-      settings.claudeCommitTargets?.length
-        ? {
-            targets: settings.claudeCommitTargets,
-            windowStartDate: settings.windowStartDate,
-            windowEndDate: settings.windowEndDate
-          }
-        : await fetchClaudeCommitMarket(polymarketUrl);
+    const market = settings.claudeCommitTargets?.length
+      ? {
+          targets: settings.claudeCommitTargets,
+          windowStartDate: settings.windowStartDate,
+          windowEndDate: settings.windowEndDate
+        }
+      : await fetchClaudeCommitMarketOrEmpty(polymarketUrl, settings);
     const targets = market.targets;
     const rows = await fetchClaudeCommitRows();
     const hits = findClaudeCommitHits(rows, targets, {
@@ -273,6 +278,17 @@ async function refreshClaudeCommitsSettings(integration: Integration, options?: 
       windowEndDate: market.windowEndDate ?? parseEndDateFromSlug(polymarketUrl)
     });
   } catch (error) {
+    if (isNoUnresolvedTargetsError(error)) {
+      return stringifySettingsJson({
+        ...parseSettingsJson(integration.settingsJson),
+        claudeCommitTargets: [],
+        parsedFromUrl: polymarketUrl,
+        lastParsedAt: new Date().toISOString(),
+        windowStartDate: existing.windowStartDate,
+        windowEndDate: existing.windowEndDate ?? parseEndDateFromSlug(polymarketUrl)
+      });
+    }
+
     if (!options?.force && existing.claudeCommitTargets?.length) {
       return integration.settingsJson ?? stringifySettingsJson(existing as Record<string, unknown>);
     }
@@ -281,7 +297,26 @@ async function refreshClaudeCommitsSettings(integration: Integration, options?: 
   }
 }
 
-async function fetchClaudeCommitMarket(polymarketUrl: string): Promise<ReturnType<typeof extractClaudeCommitTargetsFromGamma>> {
+async function fetchClaudeCommitMarketOrEmpty(
+  polymarketUrl: string,
+  settings: ClaudeCommitsSettings
+): Promise<ClaudeCommitMarket> {
+  try {
+    return await fetchClaudeCommitMarket(polymarketUrl);
+  } catch (error) {
+    if (!isNoUnresolvedTargetsError(error)) {
+      throw error;
+    }
+
+    return {
+      targets: [],
+      windowStartDate: settings.windowStartDate,
+      windowEndDate: settings.windowEndDate ?? parseEndDateFromSlug(polymarketUrl)
+    };
+  }
+}
+
+async function fetchClaudeCommitMarket(polymarketUrl: string): Promise<ClaudeCommitMarket> {
   const slug = getPolymarketSlug(polymarketUrl);
   if (!slug) {
     throw new Error(`Could not parse Polymarket slug from ${polymarketUrl}`);
@@ -306,6 +341,10 @@ async function fetchClaudeCommitMarket(polymarketUrl: string): Promise<ReturnTyp
     ...market,
     windowEndDate: market.windowEndDate ?? parseEndDateFromSlug(polymarketUrl)
   };
+}
+
+function isNoUnresolvedTargetsError(error: unknown): boolean {
+  return error instanceof Error && error.message === "Could not find unresolved Claude Code Commit targets from Polymarket Gamma";
 }
 
 async function fetchClaudeCommitRows(): Promise<ClaudeCommitRow[]> {

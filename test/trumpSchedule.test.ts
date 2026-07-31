@@ -65,11 +65,15 @@ describe("Trump schedule monitor", () => {
   });
 
   it("formats a compact daily digest value", () => {
-    const value = formatTrumpScheduleValue(extractTrumpSchedule(sampleCalendarHtml, "2026-05-29"));
+    const value = formatTrumpScheduleValue(
+      extractTrumpSchedule(sampleCalendarHtml, "2026-05-29"),
+      new Date("2026-05-29T13:30:00.000Z")
+    );
 
     expect(value).toContain("Date ET: 2026-05-29");
     expect(value).toContain("Items: 2");
     expect(value).toContain("Flags: lid: none | travel: no | press: yes | remarks: no");
+    expect(value).toContain("Next item: 11:00 AM - The President receives his Intelligence Briefing");
     expect(value).toContain("8:00 AM - The President participates in Executive Time | The White House | In-Town Pool | Official Schedule");
   });
 

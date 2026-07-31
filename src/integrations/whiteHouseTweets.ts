@@ -5,8 +5,9 @@ import { resolveIntegrationPolymarketQueue, type PolymarketQueueMarket } from ".
 import { parseSettingsJson } from "../settingsJson.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
-const sourceUrl = "https://x.com/WhiteHouse";
+const sourceUrl = "https://xtracker.polymarket.com/";
 const defaultPolymarketUrl = "https://polymarket.com/event/white-house-of-tweets-may-26-june-2-2026";
+const xTrackerApiBaseUrl = "https://xtracker.polymarket.com/api";
 const trumpFeedPostsUrl = "https://thetrumpfeed.org/api/posts";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const marketSearchQuery = "white house tweets";
@@ -77,6 +78,17 @@ type TrumpFeedPost = {
   contentText?: unknown;
   excerpt?: unknown;
   postedAt?: unknown;
+};
+
+type XTrackerPost = {
+  platformId?: unknown;
+  content?: unknown;
+  createdAt?: unknown;
+};
+
+type XTrackerTracking = {
+  marketLink?: unknown;
+  isActive?: unknown;
 };
 
 export const whiteHouseTweetsAdapter: WebsiteAdapter = {
@@ -169,7 +181,7 @@ export function buildWhiteHouseTweetsMonitorValue(
   polymarketUrl: string,
   window: WhiteHouseTweetsMarketWindow,
   now: Date,
-  source = "The Trump Feed public archive"
+  source = "Polymarket XTracker"
 ): string {
   const previousState = parseWhiteHouseTweetsStoredState(previousValue);
   const sameMarket = previousState.polymarketUrl === polymarketUrl;
@@ -261,8 +273,16 @@ export async function refreshWhiteHouseTweetsPolymarketQueue(
     activeUrl: resolved.activeUrl
   };
 
+  const candidateGroups: Array<Array<{ slug: string; url: string }>> = [];
   try {
-    const candidates = await fetchWhiteHouseTweetMarketSearchCandidates(now);
+    candidateGroups.push(await fetchWhiteHouseTweetTrackingCandidates(now));
+  } catch {}
+  try {
+    candidateGroups.push(await fetchWhiteHouseTweetMarketSearchCandidates(now));
+  } catch {}
+
+  try {
+    const candidates = candidateGroups.flat();
     const existingSlugs = new Set((settings.polymarketMarkets ?? []).map((market) => market.slug));
     for (const candidate of candidates) {
       if (existingSlugs.has(candidate.slug)) {
@@ -323,6 +343,12 @@ async function fetchWhiteHouseTweets(
 ): Promise<{ tweets: WhiteHouseTweet[]; source: string }> {
   const errors: string[] = [];
   try {
+    return { tweets: await fetchWhiteHouseTweetsFromXTracker(window), source: "Polymarket XTracker" };
+  } catch (error) {
+    errors.push(`Polymarket XTracker: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
     return { tweets: await fetchWhiteHouseTweetsFromTrumpFeed(window, now), source: "The Trump Feed public archive" };
   } catch (error) {
     errors.push(`The Trump Feed public archive: ${error instanceof Error ? error.message : String(error)}`);
@@ -334,6 +360,48 @@ async function fetchWhiteHouseTweets(
     errors.push(`Nitter/XCancel RSS: ${error instanceof Error ? error.message : String(error)}`);
     throw new Error(`Public White House X polling failed: ${errors.join(" | ")}`);
   }
+}
+
+async function fetchWhiteHouseTweetsFromXTracker(window: WhiteHouseTweetsMarketWindow): Promise<WhiteHouseTweet[]> {
+  const url = new URL(`${xTrackerApiBaseUrl}/users/WhiteHouse/posts`);
+  url.searchParams.set("platform", "X");
+  url.searchParams.set("startDate", window.startAt);
+  url.searchParams.set("endDate", window.endAt);
+  url.searchParams.set("timezone", "EST");
+
+  const response = await fetchWithTimeout(
+    url.toString(),
+    {
+      headers: {
+        accept: "application/json",
+        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+      }
+    },
+    publicFeedTimeoutMs
+  );
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const posts = extractXTrackerArray<XTrackerPost>(await response.json(), "posts");
+  return uniqueTweets(posts.map(normalizeWhiteHouseTweetFromXTracker).filter((tweet) => tweet !== null));
+}
+
+export function normalizeWhiteHouseTweetFromXTracker(post: XTrackerPost): WhiteHouseTweet | null {
+  const id = typeof post.platformId === "string" || typeof post.platformId === "number" ? String(post.platformId) : "";
+  const createdAt = isNonEmptyString(post.createdAt) ? new Date(post.createdAt) : null;
+  if (!id || !createdAt || Number.isNaN(createdAt.getTime())) {
+    return null;
+  }
+
+  const text = isNonEmptyString(post.content) ? post.content : "";
+  return {
+    id,
+    text,
+    createdAt: createdAt.toISOString(),
+    type: inferTrumpFeedTweetType(text),
+    url: `https://x.com/WhiteHouse/status/${id}`
+  };
 }
 
 async function fetchWhiteHouseTweetsFromTrumpFeed(window: WhiteHouseTweetsMarketWindow, now: Date): Promise<WhiteHouseTweet[]> {
@@ -462,6 +530,29 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function extractXTrackerArray<T>(payload: unknown, key: string): T[] {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const record = payload as Record<string, unknown>;
+  if (Array.isArray(record[key])) {
+    return record[key] as T[];
+  }
+  if (Array.isArray(record.data)) {
+    return record.data as T[];
+  }
+  if (record.data && typeof record.data === "object") {
+    const nested = record.data as Record<string, unknown>;
+    return Array.isArray(nested[key]) ? (nested[key] as T[]) : [];
+  }
+
+  return [];
+}
+
 function resolveWhiteHouseTweetsQueue(
   settings: WhiteHouseTweetsDiscoverySettings,
   currentUrl: string | null,
@@ -536,6 +627,41 @@ async function fetchWhiteHouseTweetMarketSearchCandidates(now: Date): Promise<Ar
   return (payload.events ?? [])
     .map((event) => normalizeWhiteHouseTweetSearchEvent(event, now))
     .filter((candidate) => candidate !== null);
+}
+
+async function fetchWhiteHouseTweetTrackingCandidates(now: Date): Promise<Array<{ slug: string; url: string }>> {
+  const url = new URL(`${xTrackerApiBaseUrl}/users/WhiteHouse/trackings`);
+  url.searchParams.set("platform", "X");
+  url.searchParams.set("activeOnly", "true");
+  const response = await fetchWithTimeout(url.toString(), {
+    headers: {
+      accept: "application/json",
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket XTracker returned HTTP ${response.status}`);
+  }
+
+  return extractXTrackerArray<XTrackerTracking>(await response.json(), "trackings")
+    .map((tracking) => normalizeWhiteHouseTweetTracking(tracking, now))
+    .filter((candidate) => candidate !== null);
+}
+
+export function normalizeWhiteHouseTweetTracking(
+  tracking: XTrackerTracking,
+  now = new Date()
+): { slug: string; url: string } | null {
+  if (tracking.isActive === false || !isNonEmptyString(tracking.marketLink)) {
+    return null;
+  }
+
+  const slug = getPolymarketSlug(tracking.marketLink);
+  if (!slug || !slug.startsWith("white-house-of-tweets-") || !parseWhiteHouseTweetsMarketWindow(tracking.marketLink, now)) {
+    return null;
+  }
+
+  return { slug, url: tracking.marketLink };
 }
 
 function normalizeWhiteHouseTweetSearchEvent(event: GammaSearchEvent, now: Date): { slug: string; url: string } | null {
