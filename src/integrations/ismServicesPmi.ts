@@ -1,13 +1,25 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
+import { getPolymarketSlug } from "../marketEnd.js";
+import { parseSettingsJson } from "../settingsJson.js";
+import {
+  refreshGammaPolymarketQueue,
+  upsertGammaPolymarketQueueUrl,
+  type GammaPolymarketDiscoveryConfig
+} from "./gammaPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/";
-const targetReportUrl = "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/services/may/";
-const targetPeriod = "May 2026";
-const scheduledReleaseLabel = "June 3, 2026 10:00 AM ET";
-const releaseDateEt = "2026-06-03";
+const defaultPolymarketUrl =
+  "https://polymarket.com/event/ism-services-pmi-july-2026-20260710153544980";
+const gammaEventsUrl = "https://gamma-api.polymarket.com/events";
 const easternTimeZone = "America/New_York";
+const discoveryConfig: GammaPolymarketDiscoveryConfig = {
+  searchQuery: "ism services pmi",
+  slugPrefixes: ["ism-services-pmi-"],
+  titlePrefixes: ["ISM Services PMI"],
+  lastDiscoveryAtKey: "lastIsmServicesPmiDiscoveryAt"
+};
 
 const monthNames = [
   "January",
@@ -28,6 +40,13 @@ export type IsmServicesPmiReport = {
   period: string;
   value: string;
   reportUrl: string;
+};
+
+export type IsmServicesPmiTarget = {
+  period: string;
+  reportUrl: string;
+  releaseDateEt: string | null;
+  releaseLabel: string;
 };
 
 export function extractCurrentServicesReportUrl(html: string): string | null {
@@ -56,11 +75,15 @@ export function extractIsmServicesPmiReport(html: string, reportUrl: string): Is
   return { period, value, reportUrl };
 }
 
-export function buildIsmServicesPmiValue(targetReport: IsmServicesPmiReport | null, latestReport: IsmServicesPmiReport | null): string {
+export function buildIsmServicesPmiValue(
+  targetReport: IsmServicesPmiReport | null,
+  latestReport: IsmServicesPmiReport | null,
+  target: IsmServicesPmiTarget = parseIsmServicesPmiTarget(defaultPolymarketUrl)
+): string {
   if (targetReport) {
     return [
       "Report: ISM Services PMI Report On Business",
-      `Target period: ${targetPeriod}`,
+      `Target period: ${target.period}`,
       `Value: ${targetReport.value}`,
       "Precision: one decimal point",
       `Report URL: ${targetReport.reportUrl}`
@@ -69,22 +92,23 @@ export function buildIsmServicesPmiValue(targetReport: IsmServicesPmiReport | nu
 
   return [
     "Report: ISM Services PMI Report On Business",
-    `Target period: ${targetPeriod}`,
+    `Target period: ${target.period}`,
     "Value: not published yet",
-    `Scheduled release: ${scheduledReleaseLabel}`,
+    `Scheduled release: ${target.releaseLabel}`,
     `Latest available: ${latestReport ? `${latestReport.period} = ${latestReport.value}` : "none"}`,
-    `Report URL: ${latestReport?.reportUrl ?? targetReportUrl}`
+    `Report URL: ${latestReport?.reportUrl ?? target.reportUrl}`
   ].join("\n");
 }
 
 export function getIsmServicesPmiPollIntervalMinutes(integration: Integration, now: Date = new Date()): number {
-  return isReleaseWatchDay(now) ? 1 : 60;
+  return isReleaseWatchDay(resolveIsmServicesPmiTarget(integration), now) ? 1 : 60;
 }
 
 export function getIsmServicesPmiPollIntervalReason(integration: Integration, now: Date = new Date()): string {
-  return isReleaseWatchDay(now)
-    ? `ISM release watch: day before/day of ${releaseDateEt} ET`
-    : `ISM normal mode outside day before/day of ${releaseDateEt} ET`;
+  const target = resolveIsmServicesPmiTarget(integration);
+  return isReleaseWatchDay(target, now)
+    ? `ISM release watch: ${target.releaseLabel}`
+    : `ISM normal mode outside the release window for ${target.period}`;
 }
 
 export const ismServicesPmiAdapter: WebsiteAdapter = {
@@ -92,13 +116,35 @@ export const ismServicesPmiAdapter: WebsiteAdapter = {
   commandName: "ismpmi",
   displayName: "ISM Services PMI",
   sourceUrl,
-  defaultPolymarketUrl: "https://polymarket.com/event/ism-services-pmi-may-2026",
+  defaultPolymarketUrl,
   defaultChannelName: "ismpmi",
   alertRoleName: "ISM PMI Alerts",
   alertRoleEmoji: "\uD83D\uDCCA",
   getPollIntervalMinutes: getIsmServicesPmiPollIntervalMinutes,
   getPollIntervalReason: getIsmServicesPmiPollIntervalReason,
-  async fetchCurrentValue(): Promise<AdapterValue> {
+  async refreshSettings(integration: Integration): Promise<string> {
+    const discovered = await refreshGammaPolymarketQueue(integration, discoveryConfig);
+    const activeUrl = discovered.activeUrl ?? integration.polymarketUrl ?? defaultPolymarketUrl;
+    const metadata = await fetchIsmServicesPmiMarketMetadata(activeUrl).catch(() => null);
+    return JSON.stringify({
+      ...parseSettingsJson(discovered.settingsJson),
+      ...(metadata
+        ? {
+            ismServicesReleaseDateEt: metadata.releaseDateEt,
+            ismServicesReleaseLabel: metadata.releaseLabel,
+            ismServicesTargetPeriod: metadata.period
+          }
+        : {})
+    });
+  },
+  async upsertPolymarketMarket(
+    integration: Integration,
+    url: string
+  ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+    return upsertGammaPolymarketQueueUrl(integration, url, discoveryConfig);
+  },
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
+    const target = resolveIsmServicesPmiTarget(integration);
     const landingResponse = await fetchWithTimeout(sourceUrl, {
       headers: {
         "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
@@ -111,7 +157,7 @@ export const ismServicesPmiAdapter: WebsiteAdapter = {
 
     const landingHtml = await landingResponse.text();
     const currentReportUrl = extractCurrentServicesReportUrl(landingHtml);
-    const candidateUrls = uniqueUrls([targetReportUrl, currentReportUrl]);
+    const candidateUrls = uniqueUrls([target.reportUrl, currentReportUrl]);
     let targetReport: IsmServicesPmiReport | null = null;
     let latestReport: IsmServicesPmiReport | null = null;
 
@@ -132,13 +178,13 @@ export const ismServicesPmiAdapter: WebsiteAdapter = {
       }
 
       latestReport ??= report;
-      if (report.period === targetPeriod) {
+      if (report.period === target.period) {
         targetReport = report;
         break;
       }
     }
 
-    const value = buildIsmServicesPmiValue(targetReport, latestReport);
+    const value = buildIsmServicesPmiValue(targetReport, latestReport, target);
     return {
       value,
       rawValue: targetReport?.value ?? "not published yet",
@@ -147,6 +193,53 @@ export const ismServicesPmiAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export function parseIsmServicesPmiTarget(url: string): IsmServicesPmiTarget {
+  const slug = getPolymarketSlug(url) ?? url;
+  const match = slug.match(/ism-services-pmi-([a-z]+)-(20\d{2})(?:-|$)/i);
+  const month = titleCaseMonth(match?.[1] ?? "July");
+  const year = Number(match?.[2] ?? 2026);
+  return {
+    period: `${month} ${year}`,
+    reportUrl: `https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/services/${month.toLowerCase()}/`,
+    releaseDateEt: null,
+    releaseLabel: "official ISM release date not parsed; broad early-month watch enabled"
+  };
+}
+
+export async function fetchIsmServicesPmiMarketMetadata(url: string): Promise<IsmServicesPmiTarget> {
+  const target = parseIsmServicesPmiTarget(url);
+  const slug = getPolymarketSlug(url);
+  if (!slug) {
+    return target;
+  }
+
+  const response = await fetchWithTimeout(`${gammaEventsUrl}?slug=${encodeURIComponent(slug)}`, {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    return target;
+  }
+
+  const payload = (await response.json()) as unknown;
+  const event = Array.isArray(payload) && payload[0] && typeof payload[0] === "object"
+    ? payload[0] as { description?: unknown }
+    : null;
+  const description = typeof event?.description === "string" ? event.description : "";
+  const release = description.match(
+    /scheduled to be released on ([A-Za-z]+ \d{1,2}, 20\d{2}), at (\d{1,2}:\d{2} [AP]M ET)/i
+  );
+  if (!release) {
+    return target;
+  }
+
+  const releaseDate = new Date(`${release[1]} 12:00:00 UTC`);
+  return {
+    ...target,
+    releaseDateEt: Number.isNaN(releaseDate.getTime()) ? null : releaseDate.toISOString().slice(0, 10),
+    releaseLabel: `${release[1]} ${release[2]}`
+  };
+}
 
 function extractReportPeriod(text: string): string | null {
   const escapedMonths = monthNames.join("|");
@@ -184,9 +277,35 @@ function formatOneDecimal(value: string): string {
   return Number.parseFloat(value).toFixed(1);
 }
 
-function isReleaseWatchDay(now: Date): boolean {
+function resolveIsmServicesPmiTarget(integration?: Integration): IsmServicesPmiTarget {
+  const target = parseIsmServicesPmiTarget(integration?.polymarketUrl ?? defaultPolymarketUrl);
+  const settings = parseSettingsJson(integration?.settingsJson ?? null);
+  const releaseDateEt =
+    typeof settings.ismServicesReleaseDateEt === "string" ? settings.ismServicesReleaseDateEt : null;
+  const releaseLabel =
+    typeof settings.ismServicesReleaseLabel === "string" ? settings.ismServicesReleaseLabel : target.releaseLabel;
+  return { ...target, releaseDateEt, releaseLabel };
+}
+
+function isReleaseWatchDay(target: IsmServicesPmiTarget, now: Date): boolean {
   const currentDate = getEasternDate(now);
-  return currentDate === "2026-06-02" || currentDate === releaseDateEt;
+  if (target.releaseDateEt) {
+    return currentDate === addDays(target.releaseDateEt, -1) || currentDate === target.releaseDateEt;
+  }
+
+  const [targetMonth, targetYearText] = target.period.split(" ");
+  const targetMonthIndex = monthNames.findIndex((month) => month === targetMonth);
+  const targetYear = Number(targetYearText);
+  const releaseMonth = targetMonthIndex === 11 ? 1 : targetMonthIndex + 2;
+  const releaseYear = targetMonthIndex === 11 ? targetYear + 1 : targetYear;
+  const [currentYear, currentMonth, currentDay] = currentDate.split("-").map(Number);
+  return currentYear === releaseYear && currentMonth === releaseMonth && currentDay >= 1 && currentDay <= 10;
+}
+
+function addDays(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function getEasternDate(date: Date): string {

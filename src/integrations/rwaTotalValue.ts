@@ -56,13 +56,15 @@ export const rwaTotalValueAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\uD83C\uDFE6",
   getPollIntervalMinutes: () => 60,
   getPollIntervalReason: () => "Fixed hourly check for RWA.xyz Total RWA Value chart updates",
+  shouldAlertOnChange: rwaTotalValueShouldAlertOnChange,
   async fetchCurrentValue(): Promise<AdapterValue> {
     const points = extractRwaTotalValuePoints(await fetchRwaTimeseries());
-    const point = getLatestRwaTotalValuePoint(points);
-    const value = formatRwaTotalValue(point, points);
+    const provisionalPoint = getLatestRwaTotalValuePoint(points);
+    const finalizedPoint = selectFinalizedRwaTotalValuePoint(points);
+    const value = formatRwaTotalValue(finalizedPoint, points, provisionalPoint);
     return {
       value,
-      rawValue: `${point.date}:${point.totalValue.toFixed(2)}`,
+      rawValue: `${finalizedPoint.date}:${finalizedPoint.totalValue.toFixed(2)}`,
       unit: "total RWA value",
       observedAt: new Date()
     };
@@ -105,17 +107,32 @@ export function extractRwaTotalValuePoints(data: unknown): RwaTotalValuePoint[] 
   return points;
 }
 
-export function formatRwaTotalValue(point: RwaTotalValuePoint, history: RwaTotalValuePoint[] = [point]): string {
+export function formatRwaTotalValue(
+  point: RwaTotalValuePoint,
+  history: RwaTotalValuePoint[] = [point],
+  provisionalPoint: RwaTotalValuePoint = point
+): string {
   return [
     "Metric: RWA.xyz Total RWA Value",
-    `Chart date: ${point.date}`,
-    `Total RWA Value: ${formatCompactCurrency(point.totalValue)} (${formatCurrency(point.totalValue)})`,
+    `Finalized chart date: ${point.date}`,
+    `Finalized Total RWA Value: ${formatCompactCurrency(point.totalValue)} (${formatCurrency(point.totalValue)})`,
+    `Latest provisional date: ${provisionalPoint.date}`,
+    `Latest provisional Total RWA Value: ${formatCompactCurrency(provisionalPoint.totalValue)} (${formatCurrency(provisionalPoint.totalValue)})`,
     "Rate of change:",
     formatRateChanges(point, history),
     "Chart mode: Distributed assets, excluding stablecoins and cryptocurrency",
     `Top categories: ${formatTopGroups(point.groups)}`,
     `Resolution: ${sourceUrl}`
   ].join("\n");
+}
+
+export function rwaTotalValueShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+  if (!previousValue) {
+    return false;
+  }
+  const previousSignature = extractFinalizedSignature(previousValue);
+  const currentSignature = extractFinalizedSignature(currentValue);
+  return Boolean(previousSignature && currentSignature && previousSignature !== currentSignature);
 }
 
 export function decodeRwaCompressedPayload(value: string): unknown {
@@ -159,6 +176,20 @@ function getLatestRwaTotalValuePoint(points: RwaTotalValuePoint[]): RwaTotalValu
     throw new Error("Could not find RWA.xyz Total RWA Value chart points");
   }
   return latest;
+}
+
+export function selectFinalizedRwaTotalValuePoint(points: RwaTotalValuePoint[]): RwaTotalValuePoint {
+  const finalized = points.at(-2);
+  if (!finalized) {
+    throw new Error("RWA.xyz needs a following daily point before the latest value is finalized");
+  }
+  return finalized;
+}
+
+function extractFinalizedSignature(value: string): string | null {
+  const date = value.match(/^Finalized chart date:\s*(.+)$/m)?.[1]?.trim();
+  const total = value.match(/^Finalized Total RWA Value:\s*(.+)$/m)?.[1]?.trim();
+  return date && total ? `${date}|${total}` : null;
 }
 
 function formatRateChanges(latest: RwaTotalValuePoint, history: RwaTotalValuePoint[]): string {

@@ -1,11 +1,23 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
-import type { AdapterValue, WebsiteAdapter } from "./types.js";
+import {
+  refreshGammaPolymarketQueue,
+  upsertGammaPolymarketQueueUrl,
+  type GammaPolymarketDiscoveryConfig
+} from "./gammaPolymarketDiscovery.js";
+import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.pbc.gov.cn/en/3688110/3688181/index.html";
-const defaultPolymarketUrl = "https://polymarket.com/event/peoples-bank-of-china-rate-change-in-june";
+const defaultPolymarketUrl =
+  "https://polymarket.com/event/peoples-bank-of-china-rate-change-by-september-30-20260630000252021";
 const pbocRetryDelaysMs = [10_000, 30_000];
 const pbocFetchTimeoutMs = 30_000;
+const polymarketDiscoveryConfig: GammaPolymarketDiscoveryConfig = {
+  searchQuery: "People's Bank of China rate change",
+  slugPrefixes: ["peoples-bank-of-china-rate-change-"],
+  titlePrefixes: ["People's Bank of China rate change"],
+  lastDiscoveryAtKey: "lastPbocRateChangeDiscoveryAt"
+};
 
 export type PbocAnnouncement = {
   title: string;
@@ -30,6 +42,15 @@ export const pbocRateChangeAdapter: WebsiteAdapter = {
   getPollIntervalMinutes: () => 15,
   getPollIntervalReason: () => "Fixed 15-minute check for PBoC announcement/rate changes",
   shouldAlertOnChange: pbocRateChangeShouldAlertOnChange,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshPbocRateChangePolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  async upsertPolymarketMarket(
+    integration: Integration,
+    url: string
+  ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+    return upsertGammaPolymarketQueueUrl(integration, url, polymarketDiscoveryConfig);
+  },
   async fetchCurrentValue(): Promise<AdapterValue> {
     const latest = await fetchLatestPbocAnnouncement();
     const detail = await fetchPbocAnnouncementDetail(latest.url);
@@ -42,6 +63,13 @@ export const pbocRateChangeAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export function refreshPbocRateChangePolymarketQueue(
+  integration: Integration,
+  now: Date = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  return refreshGammaPolymarketQueue(integration, polymarketDiscoveryConfig, now);
+}
 
 export function extractLatestPbocAnnouncementValue(html: string, detail: PbocAnnouncementDetail = { rates: [], summary: "not fetched" }): string {
   return formatPbocAnnouncementValue(extractLatestPbocAnnouncement(html), detail);

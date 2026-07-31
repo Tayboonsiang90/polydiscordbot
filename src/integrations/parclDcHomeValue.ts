@@ -1,13 +1,25 @@
 import { fetchWithTimeout } from "../http.js";
+import { getPolymarketSlug, parseManualEasternDateTime } from "../marketEnd.js";
+import {
+  refreshGammaPolymarketQueue,
+  upsertGammaPolymarketQueueUrl,
+  type GammaPolymarketDiscoveryConfig
+} from "./gammaPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
-const sourceUrl = "https://app.parcllabs.com/prediction-market-resolutions/45";
+const sourceUrl = "https://app.parcllabs.com/prediction-market-resolutions/53";
 const apiUrl = "https://api-app-service.parcllabs.com/v1/price-feeds/history";
-const targetDate = "2026-06-30";
-const fallbackDeadline = new Date("2026-07-11T03:59:00.000Z");
+const defaultPolymarketUrl =
+  "https://polymarket.com/event/what-will-the-median-home-value-in-the-dc-metro-area-be-on-september-30-20260630181851462";
 const parclId = 2_900_475;
 const medianHomeSizeSqft = 1_800;
 const easternTimeZone = "America/New_York";
+const discoveryConfig: GammaPolymarketDiscoveryConfig = {
+  searchQuery: "median home value DC Metro",
+  slugPrefixes: ["what-will-the-median-home-value-in-the-dc-metro-area-be-on-"],
+  titlePrefixes: ["What will the median home value in the DC Metro area be on"],
+  lastDiscoveryAtKey: "lastParclDcHomeValueDiscoveryAt"
+};
 
 export type ParclPriceFeedRow = {
   date: string;
@@ -19,17 +31,25 @@ export const parclDcHomeValueAdapter: WebsiteAdapter = {
   commandName: "dchomevalue",
   displayName: "Parcl DC Metro Home Value",
   sourceUrl,
-  defaultPolymarketUrl:
-    "https://polymarket.com/event/what-will-the-median-home-value-in-the-dc-metro-area-be-on-june-30-20260602001432202",
+  defaultPolymarketUrl,
   defaultChannelName: "dchomevalue",
   alertRoleName: "DC Home Value Alerts",
   alertRoleEmoji: "\uD83C\uDFE0",
   getPollIntervalMinutes: getParclDcHomeValuePollIntervalMinutes,
   getPollIntervalReason: getParclDcHomeValuePollIntervalReason,
   shouldAlertOnChange: parclDcHomeValueShouldAlertOnChange,
-  async fetchCurrentValue(): Promise<AdapterValue> {
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshGammaPolymarketQueue(integration, discoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  async upsertPolymarketMarket(
+    integration: Integration,
+    url: string
+  ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+    return upsertGammaPolymarketQueueUrl(integration, url, discoveryConfig);
+  },
+  async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const rows = await fetchParclDcHomeValueRows();
-    const value = extractParclDcHomeValue(rows, new Date());
+    const value = extractParclDcHomeValue(rows, new Date(), integration?.polymarketUrl ?? defaultPolymarketUrl);
     return {
       value,
       rawValue: extractRawHomeValue(value) ?? value,
@@ -39,22 +59,27 @@ export const parclDcHomeValueAdapter: WebsiteAdapter = {
   }
 };
 
-export function extractParclDcHomeValue(rows: ParclPriceFeedRow[], now: Date): string {
+export function extractParclDcHomeValue(
+  rows: ParclPriceFeedRow[],
+  now: Date,
+  polymarketUrl = defaultPolymarketUrl
+): string {
+  const target = parseParclDcTarget(polymarketUrl, now);
   const sortedRows = [...rows].sort((left, right) => left.date.localeCompare(right.date));
-  const target = sortedRows.find((row) => row.date === targetDate) ?? null;
+  const targetRow = sortedRows.find((row) => row.date === target.targetDate) ?? null;
   const latest = sortedRows.at(-1) ?? null;
-  const fallbackActive = !target && now.getTime() > fallbackDeadline.getTime();
+  const fallbackActive = !targetRow && now.getTime() > target.fallbackDeadline.getTime();
 
-  if (target) {
+  if (targetRow) {
     return [
       "Metric: Parcl Labs Sales Price Index",
       "Market: Washington, D.C. Metro",
       `Parcl ID: ${parclId}`,
-      `Target date: ${targetDate}`,
+      `Target date: ${target.targetDate}`,
       "Target date status: published",
-      `Price index: ${formatPricePerSqft(target.pricePerSqft)}`,
+      `Price index: ${formatPricePerSqft(targetRow.pricePerSqft)}`,
       `Median home size: ${formatInteger(medianHomeSizeSqft)} sqft`,
-      `Settlement home value: ${formatHomeValue(calculateHomeValue(target.pricePerSqft))}`,
+      `Settlement home value: ${formatHomeValue(calculateHomeValue(targetRow.pricePerSqft))}`,
       `Latest available: ${formatRow(latest)}`,
       "Fallback status: not needed",
       `Resolution: ${sourceUrl}`
@@ -65,7 +90,7 @@ export function extractParclDcHomeValue(rows: ParclPriceFeedRow[], now: Date): s
     "Metric: Parcl Labs Sales Price Index",
     "Market: Washington, D.C. Metro",
     `Parcl ID: ${parclId}`,
-    `Target date: ${targetDate}`,
+    `Target date: ${target.targetDate}`,
     "Target date status: not published yet",
     "Price index: not published yet",
     `Median home size: ${formatInteger(medianHomeSizeSqft)} sqft`,
@@ -73,8 +98,8 @@ export function extractParclDcHomeValue(rows: ParclPriceFeedRow[], now: Date): s
     `Latest available: ${formatRow(latest)}`,
     `Fallback status: ${
       fallbackActive
-        ? "active; use latest available data if 2026-06-30 remains unavailable"
-        : "waiting until 2026-07-10 23:59 ET"
+        ? `active; use latest available data if ${target.targetDate} remains unavailable`
+        : `waiting until ${target.fallbackDate} 23:59 ET`
     }`,
     `Resolution: ${sourceUrl}`
   ].join("\n");
@@ -104,12 +129,13 @@ export function getParclDcHomeValuePollIntervalMinutes(integration: Integration,
     return 1_440;
   }
 
+  const target = parseParclDcTarget(integration.polymarketUrl ?? defaultPolymarketUrl, now);
   const easternDate = getEasternDate(now);
-  if (easternDate < targetDate) {
+  if (easternDate < target.targetDate) {
     return 1_440;
   }
 
-  return now.getTime() <= fallbackDeadline.getTime() ? 1 : 60;
+  return now.getTime() <= target.fallbackDeadline.getTime() ? 1 : 60;
 }
 
 export function getParclDcHomeValuePollIntervalReason(integration: Integration, now: Date = new Date()): string {
@@ -117,14 +143,39 @@ export function getParclDcHomeValuePollIntervalReason(integration: Integration, 
     return "Parcl target date already published; daily verification only";
   }
 
+  const target = parseParclDcTarget(integration.polymarketUrl ?? defaultPolymarketUrl, now);
   const easternDate = getEasternDate(now);
-  if (easternDate < targetDate) {
-    return "Parcl normal mode before June 30, 2026 ET; daily check only";
+  if (easternDate < target.targetDate) {
+    return `Parcl normal mode before ${target.targetDate} ET; daily check only`;
   }
 
-  return now.getTime() <= fallbackDeadline.getTime()
-    ? "Parcl release watch from June 30 through July 10 ET"
+  return now.getTime() <= target.fallbackDeadline.getTime()
+    ? `Parcl release watch from ${target.targetDate} through ${target.fallbackDate} ET`
     : "Parcl fallback window passed; hourly check for late/revised data";
+}
+
+export function parseParclDcTarget(
+  polymarketUrl: string,
+  now = new Date()
+): { targetDate: string; fallbackDate: string; fallbackDeadline: Date } {
+  const slug = getPolymarketSlug(polymarketUrl) ?? polymarketUrl;
+  const match = slug.match(/on-([a-z]+)-(\d{1,2})(?:-|$)/i);
+  const month = monthNumber(match?.[1]);
+  const day = Number(match?.[2]);
+  if (!month || !Number.isInteger(day) || day < 1 || day > 31) {
+    throw new Error(`Could not parse Parcl DC target date from Polymarket URL: ${polymarketUrl}`);
+  }
+
+  const timestampYear = Number(slug.match(/-(20\d{2})\d{8,}$/)?.[1]);
+  const year = Number.isInteger(timestampYear) ? timestampYear : Number(getEasternDate(now).slice(0, 4));
+  const targetDate = `${year}-${padNumber(month)}-${padNumber(day)}`;
+  const fallbackDate = addDays(targetDate, 10);
+  const fallbackDeadline = parseManualEasternDateTime(`${fallbackDate} 23:59`);
+  if (!fallbackDeadline) {
+    throw new Error(`Could not build Parcl DC fallback deadline for ${targetDate}`);
+  }
+
+  return { targetDate, fallbackDate, fallbackDeadline };
 }
 
 export function parclDcHomeValueShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
@@ -210,6 +261,25 @@ function getEasternDate(date: Date): string {
     month: "2-digit",
     day: "2-digit"
   }).format(date);
+}
+
+function monthNumber(value: string | undefined): number | null {
+  const month = value?.toLowerCase();
+  const index = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december"
+  ].indexOf(month ?? "");
+  return index === -1 ? null : index + 1;
+}
+
+function addDays(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function padNumber(value: number): string {
+  return value.toString().padStart(2, "0");
 }
 
 function parseNumber(value: unknown): number | null {

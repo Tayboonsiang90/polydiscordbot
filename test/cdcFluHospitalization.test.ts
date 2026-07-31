@@ -34,13 +34,14 @@ describe("CDC flu hospitalization adapter", () => {
     });
   });
 
-  it("extracts the FluSurv-NET cumulative hospitalization rate from a CDC weekly report", () => {
+  it("extracts the FluSurv-NET weekly hospitalization rate and ignores the cumulative value", () => {
     const report = extractCdcFluHospitalizationReport(
       `
       <html>
         <body>
           <time class="cdc-page-title-bar__item--date">May 29, 2026</time>
           <h1>Weekly US Influenza Surveillance Report: Key Updates for Week 20, ending May 23, 2026</h1>
+          <p>The weekly hospitalization rate observed in Week 20 was 0.1 per 100,000 population.</p>
           <p>The cumulative hospitalization rate observed in Week 20 was 87.2 per 100,000 population.</p>
         </body>
       </html>
@@ -49,7 +50,7 @@ describe("CDC flu hospitalization adapter", () => {
     );
 
     expect(report).toMatchObject({
-      rate: 87.2,
+      rate: 0.1,
       reportDate: "May 29, 2026",
       reportUrl: "https://www.cdc.gov/fluview/surveillance/2026-week-20.html",
       period: {
@@ -61,20 +62,30 @@ describe("CDC flu hospitalization adapter", () => {
     });
   });
 
+  it("can still parse cumulative reports explicitly for historical rule audits", () => {
+    const report = extractCdcFluHospitalizationReport(
+      "<p>The cumulative hospitalization rate observed in Week 20 was 87.2 per 100,000 population.</p>",
+      "https://www.cdc.gov/fluview/surveillance/2026-week-20.html",
+      "cumulative"
+    );
+
+    expect(report?.rate).toBe(87.2);
+  });
+
   it("formats published and not-published target weeks", () => {
     const targetPeriod = parseFluHospitalizationMarketPeriod(
       "https://polymarket.com/event/flu-hospitalization-rate-week-21-2026"
     );
     const latestReport = {
       period: parseFluHospitalizationMarketPeriod("https://polymarket.com/event/flu-hospitalization-rate-week-20-2026"),
-      rate: 87.2,
+      rate: 0.1,
       reportDate: "May 29, 2026",
       reportUrl: "https://www.cdc.gov/fluview/surveillance/2026-week-20.html"
     };
 
     expect(formatCdcFluHospitalizationValue(targetPeriod, null, latestReport)).toContain("Status: not published yet");
     expect(formatCdcFluHospitalizationValue(targetPeriod, null, latestReport)).toContain(
-      "Latest available: Week 20, 2026 = 87.2 per 100,000"
+      "Latest available: Week 20, 2026 = 0.1 per 100,000"
     );
     expect(formatCdcFluHospitalizationValue(targetPeriod, { ...latestReport, period: targetPeriod }, latestReport)).toContain(
       "Status: published"

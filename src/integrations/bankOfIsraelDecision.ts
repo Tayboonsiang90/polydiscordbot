@@ -8,6 +8,7 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/";
 const pressReleasesUrl = "https://www.boi.org.il/en/communication-and-publications/press-releases/?category=interest-rate";
+const interestApiUrl = "https://www.boi.org.il/PublicApi/GetInterest";
 const defaultPolymarketUrl = "https://polymarket.com/event/bank-of-israel-decision-in-august";
 const requestHeaders = {
   "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
@@ -42,6 +43,12 @@ export type BankOfIsraelScheduleEntry = {
   rawLine: string;
 };
 
+export type BankOfIsraelInterestSnapshot = {
+  currentInterest: number;
+  nextInterestDate: string;
+  lastPublishedDate: string | null;
+};
+
 export const bankOfIsraelDecisionAdapter: WebsiteAdapter = {
   id: "bank-of-israel-decision",
   commandName: "boidecision",
@@ -64,31 +71,72 @@ export const bankOfIsraelDecisionAdapter: WebsiteAdapter = {
     return upsertPolymarketQueueUrl(integration, url);
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
-    const [scheduleMarkdown, releasesMarkdown] = await Promise.all([
-      fetchBankOfIsraelMarkdown(sourceUrl),
-      fetchBankOfIsraelMarkdown(pressReleasesUrl)
-    ]);
-    const schedule = extractBankOfIsraelSchedule(scheduleMarkdown);
-    const latestAnnouncement = extractLatestBankOfIsraelInterestRateAnnouncement(releasesMarkdown);
-    const detail = latestAnnouncement
-      ? extractBankOfIsraelDecisionDetail(await fetchBankOfIsraelMarkdown(latestAnnouncement.url))
-      : null;
-    const nextPublication = findNextBankOfIsraelPublicationDate(schedule);
-    const value = buildBankOfIsraelDecisionValue(
-      latestAnnouncement,
-      detail,
-      nextPublication,
+    const snapshot = await fetchBankOfIsraelInterestSnapshot();
+    const previousRate = extractStoredRate(integration?.lastValue ?? null);
+    const value = buildBankOfIsraelInterestValue(
+      snapshot,
+      getBankOfIsraelDecisionDirection(previousRate, snapshot.currentInterest),
       integration?.polymarketUrl ?? defaultPolymarketUrl
     );
 
     return {
       value,
-      rawValue: latestAnnouncement?.url ?? "not published yet",
+      rawValue: `${snapshot.currentInterest}:${snapshot.lastPublishedDate ?? "unknown"}`,
       unit: "Bank of Israel interest rate decision",
       observedAt: new Date()
     };
   }
 };
+
+export function extractBankOfIsraelInterestSnapshot(data: unknown): BankOfIsraelInterestSnapshot {
+  if (!isRecord(data)) {
+    throw new Error("Bank of Israel interest API returned an invalid payload");
+  }
+
+  const currentInterest = Number(data.currentInterest);
+  const nextInterestDate = typeof data.nextInterestDate === "string" ? data.nextInterestDate : "";
+  const lastPublishedDate = typeof data.lastPublishedDate === "string" ? data.lastPublishedDate : null;
+  if (!Number.isFinite(currentInterest) || !isValidIsoDate(nextInterestDate)) {
+    throw new Error("Bank of Israel interest API omitted the current rate or next publication date");
+  }
+
+  return {
+    currentInterest,
+    nextInterestDate,
+    lastPublishedDate: lastPublishedDate && isValidIsoDate(lastPublishedDate) ? lastPublishedDate : null
+  };
+}
+
+export function buildBankOfIsraelInterestValue(
+  snapshot: BankOfIsraelInterestSnapshot,
+  decision: string,
+  polymarketUrl: string
+): string {
+  return [
+    "Report: Bank of Israel interest rate decision",
+    `Decision: ${decision}`,
+    `Rate: ${formatInterestRate(snapshot.currentInterest)}`,
+    `Last official update: ${snapshot.lastPublishedDate ? formatEasternTimestamp(snapshot.lastPublishedDate) : "not found"}`,
+    `Next scheduled publication: ${snapshot.nextInterestDate.slice(0, 10)}`,
+    `Official API: ${interestApiUrl}`,
+    `Resolution: ${sourceUrl}`,
+    `Press releases: ${pressReleasesUrl}`,
+    `Polymarket: ${polymarketUrl}`
+  ].join("\n");
+}
+
+export function getBankOfIsraelDecisionDirection(previousRate: number | null, currentRate: number): string {
+  if (previousRate === null) {
+    return "Current rate";
+  }
+  if (currentRate < previousRate) {
+    return "Decrease";
+  }
+  if (currentRate > previousRate) {
+    return "Increase";
+  }
+  return "No change";
+}
 
 export async function refreshBankOfIsraelDecisionPolymarketQueue(
   integration: Integration,
@@ -205,9 +253,13 @@ export function getBankOfIsraelDecisionPollIntervalReason(integration: Integrati
 }
 
 export function shouldAlertOnBankOfIsraelDecisionChange(previousValue: string | null, currentValue: string): boolean {
-  const previousReleaseUrl = extractReleaseUrl(previousValue);
-  const currentReleaseUrl = extractReleaseUrl(currentValue);
-  return Boolean(currentReleaseUrl && currentReleaseUrl !== "not found" && previousReleaseUrl && previousReleaseUrl !== currentReleaseUrl);
+  if (!previousValue) {
+    return false;
+  }
+
+  const previousSignature = extractOfficialDecisionSignature(previousValue);
+  const currentSignature = extractOfficialDecisionSignature(currentValue);
+  return Boolean(currentSignature && previousSignature && currentSignature !== previousSignature);
 }
 
 function parseBankOfIsraelAnnouncementLink(label: string, url: string): BankOfIsraelAnnouncement | null {
@@ -249,16 +301,32 @@ async function fetchBankOfIsraelMarkdown(url: string): Promise<string> {
   return response.text();
 }
 
+async function fetchBankOfIsraelInterestSnapshot(): Promise<BankOfIsraelInterestSnapshot> {
+  const response = await fetchWithTimeout(interestApiUrl, { headers: requestHeaders }, 30_000);
+  if (!response.ok) {
+    throw new Error(`Bank of Israel interest API returned HTTP ${response.status}`);
+  }
+
+  return extractBankOfIsraelInterestSnapshot(await response.json());
+}
+
 function toJinaUrl(url: string): string {
   return `https://r.jina.ai/http://${url}`;
 }
 
-function extractReleaseUrl(value: string | null): string | null {
-  return value?.match(/^Release URL:\s*(.+)$/m)?.[1]?.trim() ?? null;
-}
-
 function extractNextPublicationIso(value: string | null): string | null {
   return value?.match(/^Next scheduled publication:\s*(\d{4}-\d{2}-\d{2})\b/m)?.[1] ?? null;
+}
+
+function extractStoredRate(value: string | null): number | null {
+  const rate = value?.match(/^Rate:\s*(\d+(?:\.\d+)?)%/m)?.[1];
+  return rate ? Number(rate) : null;
+}
+
+function extractOfficialDecisionSignature(value: string): string | null {
+  const rate = value.match(/^Rate:\s*(.+)$/m)?.[1]?.trim();
+  const lastOfficialUpdate = value.match(/^Last official update:\s*(.+)$/m)?.[1]?.trim();
+  return rate && lastOfficialUpdate ? `${rate}|${lastOfficialUpdate}` : null;
 }
 
 function extractDecisionDirection(text: string): string {
@@ -311,6 +379,31 @@ function getEasternDate(date: Date): string {
     month: "2-digit",
     day: "2-digit"
   }).format(date);
+}
+
+function formatEasternTimestamp(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: easternTimeZone,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  }).format(new Date(value)) + " ET";
+}
+
+function formatInterestRate(value: number): string {
+  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(value)}%`;
+}
+
+function isValidIsoDate(value: string): boolean {
+  return value.length > 0 && !Number.isNaN(Date.parse(value));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function normalizeText(value: string): string {

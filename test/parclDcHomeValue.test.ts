@@ -4,9 +4,15 @@ import {
   extractParclDcHomeValue,
   extractParclPriceFeedRows,
   getParclDcHomeValuePollIntervalMinutes,
+  parseParclDcTarget,
   parclDcHomeValueShouldAlertOnChange
 } from "../src/integrations/parclDcHomeValue.js";
 import type { Integration } from "../src/integrations/types.js";
+
+const juneMarketUrl =
+  "https://polymarket.com/event/what-will-the-median-home-value-in-the-dc-metro-area-be-on-june-30-20260602001432202";
+const septemberMarketUrl =
+  "https://polymarket.com/event/what-will-the-median-home-value-in-the-dc-metro-area-be-on-september-30-20260630181851462";
 
 describe("Parcl DC Metro home value adapter", () => {
   it("extracts Parcl price-feed rows", () => {
@@ -34,7 +40,8 @@ describe("Parcl DC Metro home value adapter", () => {
         { date: "2026-06-29", pricePerSqft: 310 },
         { date: "2026-06-30", pricePerSqft: 312.34 }
       ],
-      new Date("2026-07-01T12:00:00.000Z")
+      new Date("2026-07-01T12:00:00.000Z"),
+      juneMarketUrl
     );
 
     expect(value).toContain("Target date status: published");
@@ -44,8 +51,16 @@ describe("Parcl DC Metro home value adapter", () => {
   });
 
   it("formats waiting and fallback states before target data is published", () => {
-    const waiting = extractParclDcHomeValue([{ date: "2026-06-29", pricePerSqft: 310 }], new Date("2026-07-01T12:00:00.000Z"));
-    const fallback = extractParclDcHomeValue([{ date: "2026-06-29", pricePerSqft: 310 }], new Date("2026-07-11T04:00:00.000Z"));
+    const waiting = extractParclDcHomeValue(
+      [{ date: "2026-06-29", pricePerSqft: 310 }],
+      new Date("2026-07-01T12:00:00.000Z"),
+      juneMarketUrl
+    );
+    const fallback = extractParclDcHomeValue(
+      [{ date: "2026-06-29", pricePerSqft: 310 }],
+      new Date("2026-07-11T04:00:00.000Z"),
+      juneMarketUrl
+    );
 
     expect(waiting).toContain("Target date status: not published yet");
     expect(waiting).toContain("Fallback status: waiting until 2026-07-10 23:59 ET");
@@ -77,6 +92,13 @@ describe("Parcl DC Metro home value adapter", () => {
   it("uses the current public Parcl price-feed history endpoint", () => {
     expect(buildParclDcHomeValueApiUrl()).toBe("https://api-app-service.parcllabs.com/v1/price-feeds/history");
   });
+
+  it("derives the current target and fallback dates from the active market URL", () => {
+    expect(parseParclDcTarget(septemberMarketUrl, new Date("2026-07-31T12:00:00.000Z"))).toMatchObject({
+      targetDate: "2026-09-30",
+      fallbackDate: "2026-10-10"
+    });
+  });
 });
 
 function buildIntegration(lastValue: string | null = null): Integration {
@@ -86,8 +108,8 @@ function buildIntegration(lastValue: string | null = null): Integration {
     channelId: "channel",
     adapterId: "parcl-dc-home-value",
     displayName: "Parcl DC Metro Home Value",
-    sourceUrl: "https://app.parcllabs.com/prediction-market-resolutions/45",
-    polymarketUrl: "https://polymarket.com/event/what-will-the-median-home-value-in-the-dc-metro-area-be-on-june-30-20260602001432202",
+    sourceUrl: "https://app.parcllabs.com/prediction-market-resolutions/53",
+    polymarketUrl: juneMarketUrl,
     alertRoleId: null,
     roleMessageId: null,
     roleChannelId: null,

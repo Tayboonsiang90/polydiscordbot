@@ -7,7 +7,8 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.cdc.gov/fluview/index.html";
 const fluSurvNetUrl = "https://gis.cdc.gov/grasp/fluview/fluhosprates.html";
-const defaultPolymarketUrl = "https://polymarket.com/event/flu-hospitalization-rate-week-20-2026";
+const defaultPolymarketUrl =
+  "https://polymarket.com/event/flu-hospitalization-rate-week-29-2026-20260724143139842";
 const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
 const fluHospitalizationMarketSearchQuery = "flu hospitalization rate week";
 const fluHospitalizationMarketSearchTag = "flu";
@@ -34,6 +35,8 @@ export type CdcFluHospitalizationReport = {
   reportDate: string | null;
   reportUrl: string;
 };
+
+export type FluHospitalizationMetric = "weekly" | "cumulative";
 
 type FluHospitalizationDiscoverySettings = {
   polymarketMarkets?: PolymarketQueueMarket[];
@@ -71,13 +74,19 @@ export function parseFluHospitalizationMarketPeriod(url: string): FluHospitaliza
 
 export function extractCdcFluHospitalizationReport(
   html: string,
-  reportUrl: string
+  reportUrl: string,
+  metric: FluHospitalizationMetric = "weekly"
 ): CdcFluHospitalizationReport | null {
   const $ = cheerio.load(html);
   const text = normalizeText($.root().text());
-  const rateMatch = text.match(
-    /cumulative hospitalization rate observed in Week\s+(\d{1,2})\s+was\s+([0-9]+(?:\.[0-9]+)?)\s+per\s+100,000 population/i
-  );
+  const rateMatch =
+    metric === "weekly"
+      ? text.match(
+          /weekly hospitalization rate observed (?:during|in) Week\s+(\d{1,2})\s+was\s+([0-9]+(?:\.[0-9]+)?)\s+per\s+100,000 population/i
+        )
+      : text.match(
+          /cumulative hospitalization rate observed (?:during|in) Week\s+(\d{1,2})\s+was\s+([0-9]+(?:\.[0-9]+)?)\s+per\s+100,000 population/i
+        );
   if (!rateMatch) {
     return null;
   }
@@ -102,11 +111,16 @@ export function extractCdcFluHospitalizationReport(
 export function formatCdcFluHospitalizationValue(
   targetPeriod: FluHospitalizationPeriod,
   targetReport: CdcFluHospitalizationReport | null,
-  latestReport: CdcFluHospitalizationReport | null
+  latestReport: CdcFluHospitalizationReport | null,
+  metric: FluHospitalizationMetric = "weekly"
 ): string {
+  const metricLabel =
+    metric === "weekly"
+      ? "CDC FluSurv-NET weekly influenza-associated hospitalization rate"
+      : "CDC FluSurv-NET cumulative influenza-associated hospitalization rate";
   if (targetReport) {
     return [
-      "Metric: CDC FluSurv-NET cumulative influenza-associated hospitalization rate",
+      `Metric: ${metricLabel}`,
       `Target week: ${targetPeriod.label}`,
       `Week dates: ${targetPeriod.weekStartDate} to ${targetPeriod.weekEndDate}`,
       "Status: published",
@@ -119,7 +133,7 @@ export function formatCdcFluHospitalizationValue(
   }
 
   return [
-    "Metric: CDC FluSurv-NET cumulative influenza-associated hospitalization rate",
+    `Metric: ${metricLabel}`,
     `Target week: ${targetPeriod.label}`,
     `Week dates: ${targetPeriod.weekStartDate} to ${targetPeriod.weekEndDate}`,
     "Status: not published yet",
@@ -192,10 +206,11 @@ export const cdcFluHospitalizationAdapter: WebsiteAdapter = {
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const polymarketUrl = integration?.polymarketUrl ?? defaultPolymarketUrl;
     const targetPeriod = parseFluHospitalizationMarketPeriod(polymarketUrl);
-    const targetReport = await fetchCdcFluHospitalizationWeeklyReport(targetPeriod.year, targetPeriod.week);
+    const targetReport = await fetchCdcFluHospitalizationWeeklyReport(targetPeriod.year, targetPeriod.week, "weekly");
     const latestReport =
-      targetReport ?? (await fetchLatestPriorCdcFluHospitalizationReport(targetPeriod, latestPriorReportSearchWeeks));
-    const value = formatCdcFluHospitalizationValue(targetPeriod, targetReport, latestReport);
+      targetReport ??
+      (await fetchLatestPriorCdcFluHospitalizationReport(targetPeriod, latestPriorReportSearchWeeks, "weekly"));
+    const value = formatCdcFluHospitalizationValue(targetPeriod, targetReport, latestReport, "weekly");
     return {
       value,
       rawValue: targetReport ? formatRate(targetReport.rate) : "not published yet",
@@ -280,7 +295,8 @@ export function buildCdcFluWeeklyReportUrl(year: number, week: number): string {
 
 export async function fetchCdcFluHospitalizationWeeklyReport(
   year: number,
-  week: number
+  week: number,
+  metric: FluHospitalizationMetric = "weekly"
 ): Promise<CdcFluHospitalizationReport | null> {
   const reportUrl = buildCdcFluWeeklyReportUrl(year, week);
   const response = await fetchCdcWeeklyReportResponse(reportUrl);
@@ -295,9 +311,9 @@ export async function fetchCdcFluHospitalizationWeeklyReport(
     throw new Error(`CDC FluView weekly report returned HTTP ${response.status}`);
   }
 
-  const report = extractCdcFluHospitalizationReport(await response.text(), reportUrl);
+  const report = extractCdcFluHospitalizationReport(await response.text(), reportUrl, metric);
   if (!report && response.status === 200) {
-    throw new Error(`Could not find FluSurv-NET cumulative hospitalization rate in ${reportUrl}`);
+    throw new Error(`Could not find FluSurv-NET ${metric} hospitalization rate in ${reportUrl}`);
   }
 
   return report;
@@ -305,12 +321,13 @@ export async function fetchCdcFluHospitalizationWeeklyReport(
 
 async function fetchLatestPriorCdcFluHospitalizationReport(
   targetPeriod: FluHospitalizationPeriod,
-  maxWeeks: number
+  maxWeeks: number,
+  metric: FluHospitalizationMetric
 ): Promise<CdcFluHospitalizationReport | null> {
   const minWeek = Math.max(1, targetPeriod.week - maxWeeks);
   const reports = await Promise.all(
     Array.from({ length: targetPeriod.week - minWeek }, (_, index) =>
-      fetchCdcFluHospitalizationWeeklyReport(targetPeriod.year, targetPeriod.week - index - 1)
+      fetchCdcFluHospitalizationWeeklyReport(targetPeriod.year, targetPeriod.week - index - 1, metric)
     )
   );
   return reports.find((report) => report !== null) ?? null;

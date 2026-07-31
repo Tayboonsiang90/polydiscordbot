@@ -5,8 +5,11 @@ import {
   extractPbocAnnouncementDetail,
   fetchPbocUrl,
   formatPbocAnnouncementValue,
-  pbocRateChangeShouldAlertOnChange
+  pbocRateChangeShouldAlertOnChange,
+  pbocRateChangeAdapter,
+  refreshPbocRateChangePolymarketQueue
 } from "../src/integrations/pbocRateChange.js";
+import type { Integration } from "../src/integrations/types.js";
 
 const listHtml = `
   <ul>
@@ -117,4 +120,58 @@ describe("PBoC rate change adapter", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
+
+  it("uses and discovers the active PBoC decision market", async () => {
+    expect(pbocRateChangeAdapter.defaultPolymarketUrl).toContain("peoples-bank-of-china-rate-change-by-september-30");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            events: [
+              {
+                slug: "peoples-bank-of-china-rate-change-by-september-30-20260630000252021",
+                title: "People's Bank of China rate change by September 30?",
+                active: true,
+                closed: false,
+                startDate: "2026-06-30T04:00:00Z",
+                endDate: "2026-10-01T03:59:00Z"
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+      )
+    );
+
+    const result = await refreshPbocRateChangePolymarketQueue(buildIntegration(), new Date("2026-07-31T12:00:00Z"));
+    expect(result.activeUrl).toContain("peoples-bank-of-china-rate-change-by-september-30");
+  });
 });
+
+function buildIntegration(): Integration {
+  return {
+    id: 1,
+    guildId: "guild",
+    channelId: "channel",
+    adapterId: "pboc-rate-change",
+    displayName: "PBoC Rate Change",
+    sourceUrl: "https://www.pbc.gov.cn/en/3688110/3688181/index.html",
+    polymarketUrl: null,
+    alertRoleId: null,
+    roleMessageId: null,
+    roleChannelId: null,
+    roleEmoji: null,
+    settingsJson: null,
+    pollIntervalMinutes: 15,
+    status: "active",
+    lastValue: null,
+    lastCheckedAt: null,
+    lastChangedAt: null,
+    snapshotValue: null,
+    snapshotCheckedAt: null,
+    snapshotDate: null,
+    createdAt: "2026-07-31T00:00:00.000Z",
+    updatedAt: "2026-07-31T00:00:00.000Z"
+  };
+}

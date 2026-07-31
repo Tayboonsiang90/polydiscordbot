@@ -6,6 +6,8 @@ import {
   extractLatestRwaTotalValuePoint,
   extractRwaTotalValuePoints,
   formatRwaTotalValue,
+  rwaTotalValueShouldAlertOnChange,
+  selectFinalizedRwaTotalValuePoint,
   rwaTotalValueAdapter
 } from "../src/integrations/rwaTotalValue.js";
 
@@ -52,16 +54,37 @@ describe("RWA Total Value integration", () => {
 
   it("formats the monitored value with source mode context", () => {
     const points = extractRwaTotalValuePoints(sampleDecodedResponse);
-    const value = formatRwaTotalValue(extractLatestRwaTotalValuePoint(sampleDecodedResponse), points);
+    const provisional = extractLatestRwaTotalValuePoint(sampleDecodedResponse);
+    const finalized = selectFinalizedRwaTotalValuePoint(points);
+    const value = formatRwaTotalValue(finalized, points, provisional);
 
     expect(value).toContain("Metric: RWA.xyz Total RWA Value");
-    expect(value).toContain("Chart date: 2026-06-14");
-    expect(value).toContain("Total RWA Value: $1.85B ($1,850,000,000.00)");
+    expect(value).toContain("Finalized chart date: 2026-06-13");
+    expect(value).toContain("Finalized Total RWA Value: $1.51B ($1,510,000,000.00)");
+    expect(value).toContain("Latest provisional date: 2026-06-14");
+    expect(value).toContain("Latest provisional Total RWA Value: $1.85B ($1,850,000,000.00)");
     expect(value).toContain("Rate of change:");
-    expect(value).toContain("7d: +$350M (+23.33%), +$50M/day vs 2026-06-07");
-    expect(value).toContain("30d: +$550M (+42.31%), +$18.33M/day vs 2026-05-15");
+    expect(value).toContain("7d: +$210M (+16.15%), +$30M/day vs 2026-05-15");
+    expect(value).toContain("30d: not enough history");
     expect(value).toContain("Chart mode: Distributed assets, excluding stablecoins and cryptocurrency");
-    expect(value).toContain("Top categories: US Treasury Debt $1.25B; Commodities $600M");
+    expect(value).toContain("Top categories: US Treasury Debt $1B; Commodities $500M; Real Estate $10M");
+  });
+
+  it("alerts only when the finalized daily point changes", () => {
+    const previous = [
+      "Finalized chart date: 2026-06-13",
+      "Finalized Total RWA Value: $1.51B ($1,510,000,000.00)",
+      "Latest provisional date: 2026-06-14"
+    ].join("\n");
+    expect(rwaTotalValueShouldAlertOnChange(previous, previous.replace("2026-06-14", "2026-06-15"))).toBe(false);
+    expect(
+      rwaTotalValueShouldAlertOnChange(
+        previous,
+        previous
+          .replace("2026-06-13", "2026-06-14")
+          .replace("$1.51B ($1,510,000,000.00)", "$1.85B ($1,850,000,000.00)")
+      )
+    ).toBe(true);
   });
 
   it("decodes the compressed RWA.xyz tRPC payload wrapper", () => {

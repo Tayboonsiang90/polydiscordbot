@@ -4,9 +4,15 @@ import {
   extractParclNycHomeValue,
   extractParclNycPriceFeedRows,
   getParclNycHomeValuePollIntervalMinutes,
+  parseParclNycTarget,
   parclNycHomeValueShouldAlertOnChange
 } from "../src/integrations/parclNycHomeValue.js";
 import type { Integration } from "../src/integrations/types.js";
+
+const juneMarketUrl =
+  "https://polymarket.com/event/what-will-the-median-home-value-in-new-york-city-be-on-june-30-20260602003325294";
+const septemberMarketUrl =
+  "https://polymarket.com/event/what-will-the-median-home-value-in-new-york-city-be-on-september-30-20260630180215064";
 
 describe("Parcl NYC home value adapter", () => {
   it("extracts Parcl price-feed rows", () => {
@@ -34,7 +40,8 @@ describe("Parcl NYC home value adapter", () => {
         { date: "2026-06-29", pricePerSqft: 603.71 },
         { date: "2026-06-30", pricePerSqft: 606.25 }
       ],
-      new Date("2026-07-01T12:00:00.000Z")
+      new Date("2026-07-01T12:00:00.000Z"),
+      juneMarketUrl
     );
 
     expect(value).toContain("Market: New York City, New York");
@@ -47,8 +54,16 @@ describe("Parcl NYC home value adapter", () => {
   });
 
   it("formats waiting and fallback states before target data is published", () => {
-    const waiting = extractParclNycHomeValue([{ date: "2026-06-29", pricePerSqft: 603.71 }], new Date("2026-07-01T12:00:00.000Z"));
-    const fallback = extractParclNycHomeValue([{ date: "2026-06-29", pricePerSqft: 603.71 }], new Date("2026-07-11T04:00:00.000Z"));
+    const waiting = extractParclNycHomeValue(
+      [{ date: "2026-06-29", pricePerSqft: 603.71 }],
+      new Date("2026-07-01T12:00:00.000Z"),
+      juneMarketUrl
+    );
+    const fallback = extractParclNycHomeValue(
+      [{ date: "2026-06-29", pricePerSqft: 603.71 }],
+      new Date("2026-07-11T04:00:00.000Z"),
+      juneMarketUrl
+    );
 
     expect(waiting).toContain("Target date status: not published yet");
     expect(waiting).toContain("Fallback status: waiting until 2026-07-10 23:59 ET");
@@ -80,6 +95,13 @@ describe("Parcl NYC home value adapter", () => {
   it("uses the current public Parcl price-feed history endpoint", () => {
     expect(buildParclNycHomeValueApiUrl()).toBe("https://api-app-service.parcllabs.com/v1/price-feeds/history");
   });
+
+  it("derives the current target and fallback dates from the active market URL", () => {
+    expect(parseParclNycTarget(septemberMarketUrl, new Date("2026-07-31T12:00:00.000Z"))).toMatchObject({
+      targetDate: "2026-09-30",
+      fallbackDate: "2026-10-10"
+    });
+  });
 });
 
 function buildIntegration(lastValue: string | null = null): Integration {
@@ -89,8 +111,8 @@ function buildIntegration(lastValue: string | null = null): Integration {
     channelId: "channel",
     adapterId: "parcl-nyc-home-value",
     displayName: "Parcl NYC Home Value",
-    sourceUrl: "https://app.parcllabs.com/prediction-market-resolutions/42",
-    polymarketUrl: "https://polymarket.com/event/what-will-the-median-home-value-in-new-york-city-be-on-june-30-20260602003325294",
+    sourceUrl: "https://app.parcllabs.com/prediction-market-resolutions/50",
+    polymarketUrl: juneMarketUrl,
     alertRoleId: null,
     roleMessageId: null,
     roleChannelId: null,

@@ -1,10 +1,21 @@
 import { fetchWithTimeout } from "../http.js";
+import {
+  refreshGammaPolymarketQueue,
+  upsertGammaPolymarketQueueUrl,
+  type GammaPolymarketDiscoveryConfig
+} from "./gammaPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://charts.volmex.finance/symbol/BVIV";
 const volmexHistoryBaseUrl = "https://rest-v2.volmex.finance/public/history";
 const defaultPolymarketUrl =
-  "https://polymarket.com/event/what-will-the-bitcoin-implied-volatility-index-hit-by-may-31/will-the-bitcoin-volatility-index-dip-to-25-by-may-31";
+  "https://polymarket.com/event/what-will-the-bitcoin-implied-volatility-index-hit-by-july-31";
+const discoveryConfig: GammaPolymarketDiscoveryConfig = {
+  searchQuery: "Bitcoin implied volatility index",
+  slugPrefixes: ["what-will-the-bitcoin-implied-volatility-index-hit-by-"],
+  titlePrefixes: ["What will the Bitcoin implied volatility index hit by"],
+  lastDiscoveryAtKey: "lastVolmexBvivDiscoveryAt"
+};
 
 export type VolmexBvivCandle = {
   high: number;
@@ -16,6 +27,7 @@ export type VolmexBvivCandle = {
 export type VolmexBvivStrike = {
   display: string;
   value: number;
+  direction?: "high" | "low";
 };
 
 export type VolmexBvivStrikeCrossing = VolmexBvivStrike & {
@@ -39,22 +51,31 @@ type GammaMarket = {
 export const volmexBvivAdapter: WebsiteAdapter = {
   id: "volmex-bviv-low-strikes",
   commandName: "bviv",
-  displayName: "Volmex BVIV Low Strikes",
+  displayName: "Volmex BVIV Strikes",
   sourceUrl,
   defaultPolymarketUrl,
   defaultChannelName: "bviv",
   alertRoleName: "BVIV Alerts",
   alertRoleEmoji: "\uD83D\uDCC9",
   getPollIntervalMinutes: () => 1,
-  getPollIntervalReason: () => "Fixed 1-minute BVIV low strike watch; normal value changes do not alert",
+  getPollIntervalReason: () => "Fixed 1-minute BVIV high/low strike watch; normal value changes do not alert",
   getErrorNoticeWindowMinutes: () => 30,
   shouldAlertOnChange: volmexBvivShouldAlertOnChange,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshGammaPolymarketQueue(integration, discoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  async upsertPolymarketMarket(
+    integration: Integration,
+    url: string
+  ): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+    return upsertGammaPolymarketQueueUrl(integration, url, discoveryConfig);
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const value = await fetchVolmexBvivStrikeMonitorValue(integration);
     return {
       value,
       rawValue: value,
-      unit: "BVIV 1m low strike crossings",
+      unit: "BVIV 1m strike crossings",
       observedAt: new Date()
     };
   }
@@ -62,13 +83,13 @@ export const volmexBvivAdapter: WebsiteAdapter = {
 
 export async function fetchVolmexBvivStrikeMonitorValue(integration?: Integration): Promise<string> {
   const polymarketUrl = integration?.polymarketUrl ?? defaultPolymarketUrl;
-  const strikes = await fetchVolmexBvivLowStrikes(
+  const strikes = await fetchVolmexBvivStrikes(
     polymarketUrl,
     parseStoredTrackedStrikes(integration?.lastValue ?? null, polymarketUrl)
   );
   const candles = await fetchVolmexBvivCandles(getHistoryRange(integration));
   const previousPrice = parseStoredLastPrice(integration?.lastValue ?? null);
-  const allCrossings = previousPrice === null ? [] : findVolmexBvivLowStrikeCrossings(strikes, previousPrice, candles);
+  const allCrossings = previousPrice === null ? [] : findVolmexBvivStrikeCrossings(strikes, previousPrice, candles);
   const alertState = filterNewVolmexBvivStrikeCrossings(integration?.lastValue ?? null, polymarketUrl, allCrossings);
   const latestCandle = candles.at(-1);
   const lastPrice = latestCandle?.close ?? previousPrice;
@@ -131,6 +152,54 @@ export function extractVolmexBvivLowStrikesFromGamma(data: unknown): VolmexBvivS
   return strikes.sort((left, right) => left.value - right.value);
 }
 
+export function extractVolmexBvivStrikesFromGamma(data: unknown): VolmexBvivStrike[] {
+  const event = Array.isArray(data) ? (data[0] as GammaEvent | undefined) : (data as GammaEvent | undefined);
+  const strikes = new Map<string, VolmexBvivStrike>();
+  for (const market of event?.markets ?? []) {
+    if (isResolvedGammaMarket(market)) {
+      continue;
+    }
+
+    const text = [market.groupItemTitle, market.question].filter(Boolean).join(" ");
+    const strike = extractHighStrikeFromText(text) ?? extractLowStrikeFromText(text);
+    if (!strike) {
+      continue;
+    }
+    const direction = strike.direction ?? "low";
+    const display = `${direction === "high" ? "↑" : "↓"} ${formatStrikeDisplay(strike.value)}`;
+    strikes.set(display, { ...strike, direction, display });
+  }
+
+  return [...strikes.values()].sort(compareStrikes);
+}
+
+export function findVolmexBvivStrikeCrossings(
+  strikes: VolmexBvivStrike[],
+  previousPrice: number,
+  candles: VolmexBvivCandle[]
+): VolmexBvivStrikeCrossing[] {
+  const crossings: VolmexBvivStrikeCrossing[] = [];
+  let referencePrice = previousPrice;
+  for (const candle of candles) {
+    for (const strike of strikes) {
+      const direction = strike.direction ?? "low";
+      if (
+        (direction === "high" && referencePrice < strike.value && candle.high >= strike.value) ||
+        (direction === "low" && referencePrice > strike.value && candle.low <= strike.value)
+      ) {
+        crossings.push({
+          ...strike,
+          direction,
+          price: direction === "high" ? candle.high : candle.low,
+          timestamp: candle.timestamp
+        });
+      }
+    }
+    referencePrice = candle.close;
+  }
+  return dedupeCrossings(crossings);
+}
+
 export function findVolmexBvivLowStrikeCrossings(
   strikes: VolmexBvivStrike[],
   previousPrice: number,
@@ -182,11 +251,11 @@ export function formatVolmexBvivStrikeMonitorValue(input: {
     "Symbol: BVIV",
     `Last Price: ${input.lastPrice === null ? "not available" : formatPrice(input.lastPrice)}`,
     `Last Price Time: ${input.lastPriceTime}`,
-    "Crossed Low Strikes:",
+    "Crossed Strikes:",
     input.crossings.length > 0 ? input.crossings.map(formatCrossing).join("\n") : "none",
     "Alerted Strikes:",
     input.alertedStrikes && input.alertedStrikes.length > 0 ? input.alertedStrikes.join(", ") : "none",
-    "Tracked Low Strikes:",
+    "Tracked Strikes:",
     input.strikes.length > 0 ? input.strikes.map((strike) => strike.display).join(", ") : "none",
     `Resolution: ${sourceUrl}`,
     `Alerted For: ${input.polymarketUrl ?? "not set"}`
@@ -210,7 +279,7 @@ function buildVolmexBvivHistoryUrlForResolution(range: { from: Date; to: Date },
   return url.toString();
 }
 
-async function fetchVolmexBvivLowStrikes(polymarketUrl: string, fallbackStrikes: VolmexBvivStrike[] = []): Promise<VolmexBvivStrike[]> {
+async function fetchVolmexBvivStrikes(polymarketUrl: string, fallbackStrikes: VolmexBvivStrike[] = []): Promise<VolmexBvivStrike[]> {
   let lastError: unknown = null;
   for (const slug of getPolymarketSlugCandidates(polymarketUrl)) {
     try {
@@ -224,7 +293,7 @@ async function fetchVolmexBvivLowStrikes(polymarketUrl: string, fallbackStrikes:
         throw new Error(`Polymarket Gamma returned HTTP ${response.status}`);
       }
 
-      const strikes = extractVolmexBvivLowStrikesFromGamma(await response.json());
+      const strikes = extractVolmexBvivStrikesFromGamma(await response.json());
       if (strikes.length > 0) {
         return strikes;
       }
@@ -233,7 +302,7 @@ async function fetchVolmexBvivLowStrikes(polymarketUrl: string, fallbackStrikes:
     }
   }
 
-  const explicitStrike = extractLowStrikeFromPolymarketUrl(polymarketUrl);
+  const explicitStrike = extractHighStrikeFromPolymarketUrl(polymarketUrl) ?? extractLowStrikeFromPolymarketUrl(polymarketUrl);
   if (explicitStrike) {
     return [explicitStrike];
   }
@@ -330,7 +399,7 @@ function extractLowStrikeFromPolymarketUrl(polymarketUrl: string): VolmexBvivStr
   }
 
   const value = parseNumber(match[1].replace("pt", "."));
-  return value === null ? null : { display: formatStrikeDisplay(value), value };
+  return value === null ? null : { display: formatStrikeDisplay(value), value, direction: "low" };
 }
 
 function extractLowStrikeFromText(text: string): VolmexBvivStrike | null {
@@ -346,7 +415,33 @@ function extractLowStrikeFromText(text: string): VolmexBvivStrike | null {
   }
 
   const value = parseNumber(match[1]);
-  return value === null ? null : { display: formatStrikeDisplay(value), value };
+  return value === null ? null : { display: formatStrikeDisplay(value), value, direction: "low" };
+}
+
+function extractHighStrikeFromPolymarketUrl(polymarketUrl: string): VolmexBvivStrike | null {
+  const slug = getPolymarketSlugCandidates(polymarketUrl)[0] ?? "";
+  const normalized = decodeURIComponent(slug).toLowerCase();
+  const match =
+    normalized.match(/(?:hit|hits|high|above|over|reach|reaches|rise|rises)-to-([\d]+(?:pt[\d]+)?)/) ??
+    normalized.match(/(?:hit|hits|high|above|over|reach|reaches|rise|rises)-([\d]+(?:pt[\d]+)?)/);
+  if (!match) {
+    return null;
+  }
+
+  const value = parseNumber(match[1].replace("pt", "."));
+  return value === null ? null : { display: formatStrikeDisplay(value), value, direction: "high" };
+}
+
+function extractHighStrikeFromText(text: string): VolmexBvivStrike | null {
+  if (!/(?:↑|hit|hits|high|above|over|reach|reaches|at least|greater)/i.test(text)) {
+    return null;
+  }
+
+  const match =
+    text.match(/(?:↑|hit(?:s)?(?:\s+to)?|high|above|over|reach(?:es)?|at least|greater than|>=)\s*([\d,]+(?:\.\d+)?)/i) ??
+    text.match(/([\d,]+(?:\.\d+)?)/);
+  const value = match ? parseNumber(match[1]) : null;
+  return value === null ? null : { display: formatStrikeDisplay(value), value, direction: "high" };
 }
 
 function isResolvedGammaMarket(market: GammaMarket): boolean {
@@ -378,7 +473,7 @@ function parseStoredAlertedStrikes(value: string | null, polymarketUrl: string):
 
   const lines = value.split(/\r?\n/);
   const start = lines.findIndex((line) => line === "Alerted Strikes:");
-  const end = lines.findIndex((line) => line === "Tracked Low Strikes:");
+  const end = lines.findIndex((line) => line === "Tracked Strikes:" || line === "Tracked Low Strikes:");
   if (start === -1 || end === -1 || end <= start) {
     return new Set();
   }
@@ -388,7 +483,7 @@ function parseStoredAlertedStrikes(value: string | null, polymarketUrl: string):
     return new Set();
   }
 
-  return new Set(alertedText.match(/\b\d+(?:\.\d+)?\b/g) ?? []);
+  return new Set(parseStrikeDisplays(alertedText));
 }
 
 function parseStoredTrackedStrikes(value: string | null, polymarketUrl: string): VolmexBvivStrike[] {
@@ -397,7 +492,7 @@ function parseStoredTrackedStrikes(value: string | null, polymarketUrl: string):
   }
 
   const lines = value.split(/\r?\n/);
-  const start = lines.findIndex((line) => line === "Tracked Low Strikes:");
+  const start = lines.findIndex((line) => line === "Tracked Strikes:" || line === "Tracked Low Strikes:");
   const end = lines.findIndex((line, index) => index > start && line.startsWith("Resolution:"));
   if (start === -1 || end === -1 || end <= start) {
     return [];
@@ -408,20 +503,21 @@ function parseStoredTrackedStrikes(value: string | null, polymarketUrl: string):
     return [];
   }
 
-  return (trackedText.match(/\b\d+(?:\.\d+)?\b/g) ?? [])
-    .map((display) => {
-      const value = parseNumber(display);
-      return value === null ? null : { display: formatStrikeDisplay(value), value };
+  return parseStrikeDisplays(trackedText)
+    .map((display): VolmexBvivStrike | null => {
+      const value = parseNumber(display.replace(/[↑↓]/g, ""));
+      const direction: "high" | "low" = display.startsWith("↑") ? "high" : "low";
+      return value === null ? null : { display, value, direction };
     })
     .filter((strike): strike is VolmexBvivStrike => strike !== null)
-    .sort((left, right) => left.value - right.value);
+    .sort(compareStrikes);
 }
 
 function parseCurrentCrossings(value: string): string[] {
   const lines = value.split(/\r?\n/);
-  const start = lines.findIndex((line) => line === "Crossed Low Strikes:");
+  const start = lines.findIndex((line) => line === "Crossed Strikes:" || line === "Crossed Low Strikes:");
   const alertedStart = lines.findIndex((line) => line === "Alerted Strikes:");
-  const trackedStart = lines.findIndex((line) => line === "Tracked Low Strikes:");
+  const trackedStart = lines.findIndex((line) => line === "Tracked Strikes:" || line === "Tracked Low Strikes:");
   const end = alertedStart === -1 ? trackedStart : alertedStart;
   if (start === -1 || end === -1 || end <= start) {
     return [];
@@ -444,7 +540,8 @@ function dedupeCrossings(crossings: VolmexBvivStrikeCrossing[]): VolmexBvivStrik
 }
 
 function formatCrossing(crossing: VolmexBvivStrikeCrossing): string {
-  return `${crossing.display} crossed down; BVIV 1m low ${formatPrice(crossing.price)} at ${crossing.timestamp}`;
+  const direction = crossing.direction ?? "low";
+  return `${crossing.display} crossed ${direction === "high" ? "up" : "down"}; BVIV 1m ${direction} ${formatPrice(crossing.price)} at ${crossing.timestamp}`;
 }
 
 function formatStrikeDisplay(value: number): string {
@@ -455,7 +552,19 @@ function formatStrikeDisplay(value: number): string {
 }
 
 function compareStrikeDisplays(left: string, right: string): number {
-  return (parseNumber(left) ?? 0) - (parseNumber(right) ?? 0);
+  return (parseNumber(left.replace(/[↑↓]/g, "")) ?? 0) - (parseNumber(right.replace(/[↑↓]/g, "")) ?? 0);
+}
+
+function compareStrikes(left: VolmexBvivStrike, right: VolmexBvivStrike): number {
+  return left.value - right.value || (left.direction ?? "low").localeCompare(right.direction ?? "low");
+}
+
+function parseStrikeDisplays(value: string): string[] {
+  const directional = value.match(/[↑↓]\s*\d+(?:\.\d+)?/g);
+  if (directional?.length) {
+    return directional.map((display) => display.replace(/\s+/, " "));
+  }
+  return value.match(/\b\d+(?:\.\d+)?\b/g) ?? [];
 }
 
 function parseNumber(value: unknown): number | null {

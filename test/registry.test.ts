@@ -230,7 +230,7 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("eia").getPollIntervalMinutes?.({} as never, new Date("2026-05-12T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("ethgasmonthly").getPollIntervalMinutes?.({} as never)).toBe(60);
     expect(getAdapterByCommandName("jobsadded").getPollIntervalMinutes?.({ polymarketUrl: "https://polymarket.com/event/how-many-jobs-added-in-may-945" } as never, new Date("2026-06-04T16:00:00.000Z"))).toBe(1);
-    expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("ismpmi").getPollIntervalMinutes?.({} as never, new Date("2026-08-04T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("durablegoods").getPollIntervalMinutes?.({} as never, new Date("2026-06-25T13:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("umichsentiment").getPollIntervalMinutes?.({} as never, new Date("2026-07-31T14:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("trumpschedule").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T13:00:00.000Z"))).toBe(15);
@@ -247,8 +247,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("arb").configureArbitrageWatch).toBeDefined();
     expect(getAdapterByCommandName("arb").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("fluhosp").refreshSettings).toBeDefined();
-    expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never, new Date("2026-05-28T17:00:00.000Z"))).toBe(60);
-    expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never, new Date("2026-05-29T17:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never, new Date("2026-07-30T17:00:00.000Z"))).toBe(60);
+    expect(getAdapterByCommandName("fluhosp").getPollIntervalMinutes?.({} as never, new Date("2026-07-31T17:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("fdic").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("fdic").upsertPolymarketMarket).toBeDefined();
     expect(getAdapterByCommandName("measles").refreshSettings).toBeDefined();
@@ -261,8 +261,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("ornnh100").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("ornnh200").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("ornnb200").refreshSettings).toBeDefined();
-    expect(getAdapterByCommandName("dchomevalue").getPollIntervalMinutes?.({} as never, new Date("2026-06-30T16:00:00.000Z"))).toBe(1);
-    expect(getAdapterByCommandName("nychomevalue").getPollIntervalMinutes?.({} as never, new Date("2026-06-30T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("dchomevalue").getPollIntervalMinutes?.({} as never, new Date("2026-09-30T16:00:00.000Z"))).toBe(1);
+    expect(getAdapterByCommandName("nychomevalue").getPollIntervalMinutes?.({} as never, new Date("2026-09-30T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("pboc").getPollIntervalMinutes?.({} as never)).toBe(15);
     expect(getAdapterByCommandName("billboard200").refreshSettings).toBeDefined();
     expect(getAdapterByCommandName("billboard200").getPollIntervalMinutes?.({} as never)).toBe(60);

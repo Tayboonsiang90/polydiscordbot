@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildBankOfIsraelDecisionValue,
+  buildBankOfIsraelInterestValue,
   extractBankOfIsraelDecisionDetail,
+  extractBankOfIsraelInterestSnapshot,
   extractBankOfIsraelSchedule,
   extractLatestBankOfIsraelInterestRateAnnouncement,
   findNextBankOfIsraelPublicationDate,
+  getBankOfIsraelDecisionDirection,
   getBankOfIsraelDecisionPollIntervalMinutes,
   refreshBankOfIsraelDecisionPolymarketQueue,
   shouldAlertOnBankOfIsraelDecisionChange
@@ -92,31 +94,33 @@ describe("Bank of Israel decision adapter", () => {
   });
 
   it("formats latest decision state and suppresses first-run alert", () => {
-    const value = buildBankOfIsraelDecisionValue(
-      {
-        date: "06/07/2026",
-        title: "The Monetary Committee decides on July 6, 2026 to lower the interest rate to 3.5 percent.",
-        url: "https://www.boi.org.il/en/communication-and-publications/press-releases/the-monetary-committee-decides-on-july-6-2026-to-lower-the-interest-rate-to-35-percent/"
-      },
-      {
-        decision: "Decrease",
-        rate: "3.5%",
-        documentUrl: "https://www.boi.org.il/media/cpchclgz/july-6-2026.docx",
-        summary: "The Monetary Committee lowered the interest rate."
-      },
-      {
-        publicationDate: "01/09/2026",
-        publicationDateIso: "2026-09-01",
-        rawLine: "03/09/2026 03/09/2026 01/09/2026"
-      },
-      augustMarketUrl
-    );
+    const snapshot = extractBankOfIsraelInterestSnapshot({
+      currentInterest: 3.5,
+      nextInterestDate: "2026-09-01T00:00:00Z",
+      lastPublishedDate: "2026-07-12T08:59:20.943Z"
+    });
+    const value = buildBankOfIsraelInterestValue(snapshot, getBankOfIsraelDecisionDirection(4, 3.5), augustMarketUrl);
 
     expect(value).toContain("Decision: Decrease");
     expect(value).toContain("Rate: 3.5%");
-    expect(value).toContain("Next scheduled publication: 2026-09-01 16:00 Israel time");
+    expect(value).toContain("Next scheduled publication: 2026-09-01");
+    expect(value).toContain("Official API: https://www.boi.org.il/PublicApi/GetInterest");
     expect(shouldAlertOnBankOfIsraelDecisionChange(null, value)).toBe(false);
-    expect(shouldAlertOnBankOfIsraelDecisionChange(value, value.replace("july-6-2026", "new-release"))).toBe(true);
+    expect(shouldAlertOnBankOfIsraelDecisionChange(value, value)).toBe(false);
+    expect(
+      shouldAlertOnBankOfIsraelDecisionChange(
+        value,
+        buildBankOfIsraelInterestValue(
+          {
+            currentInterest: 3.25,
+            nextInterestDate: "2026-10-21T00:00:00Z",
+            lastPublishedDate: "2026-09-01T12:59:20.943Z"
+          },
+          "Decrease",
+          septemberMarketUrl
+        )
+      )
+    ).toBe(true);
   });
 
   it("polls every minute on the day before and day of the next scheduled BOI publication", () => {

@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildIsmServicesPmiValue,
   extractCurrentServicesReportUrl,
   extractIsmServicesPmiReport,
-  getIsmServicesPmiPollIntervalMinutes
+  fetchIsmServicesPmiMarketMetadata,
+  getIsmServicesPmiPollIntervalMinutes,
+  parseIsmServicesPmiTarget
 } from "../src/integrations/ismServicesPmi.js";
 
 const reportsPageHtml = `
@@ -33,6 +35,11 @@ const mayReportHtml = `
 `;
 
 describe("ISM Services PMI adapter", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("extracts the current Services report URL from the reports page", () => {
     expect(extractCurrentServicesReportUrl(reportsPageHtml)).toBe(
       "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/services/april/"
@@ -53,14 +60,53 @@ describe("ISM Services PMI adapter", () => {
     expect(buildIsmServicesPmiValue(null, latestReport)).toContain("Latest available: April 2026 = 53.6");
   });
 
-  it("formats the target May 2026 value when released", () => {
+  it("formats a dynamically selected target value when released", () => {
     const targetReport = extractIsmServicesPmiReport(mayReportHtml, "https://example.com/may/");
-    expect(buildIsmServicesPmiValue(targetReport, null)).toContain("Value: 51.0");
+    expect(
+      buildIsmServicesPmiValue(targetReport, null, parseIsmServicesPmiTarget("https://polymarket.com/event/ism-services-pmi-may-2026"))
+    ).toContain("Value: 51.0");
   });
 
-  it("polls every minute on the day before and day of scheduled release in ET", () => {
-    expect(getIsmServicesPmiPollIntervalMinutes({} as never, new Date("2026-06-02T16:00:00.000Z"))).toBe(1);
-    expect(getIsmServicesPmiPollIntervalMinutes({} as never, new Date("2026-06-03T16:00:00.000Z"))).toBe(1);
-    expect(getIsmServicesPmiPollIntervalMinutes({} as never, new Date("2026-06-04T16:00:00.000Z"))).toBe(60);
+  it("parses the active target period and report URL from the market", () => {
+    expect(
+      parseIsmServicesPmiTarget(
+        "https://polymarket.com/event/ism-services-pmi-july-2026-20260710153544980"
+      )
+    ).toMatchObject({
+      period: "July 2026",
+      reportUrl: "https://www.ismworld.org/supply-management-news-and-reports/reports/ism-pmi-reports/services/july/"
+    });
+  });
+
+  it("parses the exact release date from current Gamma rules", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{
+        description: "The report is currently scheduled to be released on August 5, 2026, at 10:00 AM ET."
+      }]
+    }));
+
+    await expect(
+      fetchIsmServicesPmiMarketMetadata(
+        "https://polymarket.com/event/ism-services-pmi-july-2026-20260710153544980"
+      )
+    ).resolves.toMatchObject({
+      period: "July 2026",
+      releaseDateEt: "2026-08-05",
+      releaseLabel: "August 5, 2026 10:00 AM ET"
+    });
+  });
+
+  it("polls every minute on the day before and day of the discovered release", () => {
+    const integration = {
+      polymarketUrl: "https://polymarket.com/event/ism-services-pmi-july-2026-20260710153544980",
+      settingsJson: JSON.stringify({
+        ismServicesReleaseDateEt: "2026-08-05",
+        ismServicesReleaseLabel: "August 5, 2026 10:00 AM ET"
+      })
+    } as never;
+    expect(getIsmServicesPmiPollIntervalMinutes(integration, new Date("2026-08-04T16:00:00.000Z"))).toBe(1);
+    expect(getIsmServicesPmiPollIntervalMinutes(integration, new Date("2026-08-05T16:00:00.000Z"))).toBe(1);
+    expect(getIsmServicesPmiPollIntervalMinutes(integration, new Date("2026-08-06T16:00:00.000Z"))).toBe(60);
   });
 });

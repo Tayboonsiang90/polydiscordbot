@@ -3,9 +3,11 @@ import {
   buildVolmexBvivHistoryUrl,
   extractVolmexBvivCandles,
   extractVolmexBvivLowStrikesFromGamma,
+  extractVolmexBvivStrikesFromGamma,
   fetchVolmexBvivCandles,
   filterNewVolmexBvivStrikeCrossings,
   findVolmexBvivLowStrikeCrossings,
+  findVolmexBvivStrikeCrossings,
   formatVolmexBvivStrikeMonitorValue,
   volmexBvivShouldAlertOnChange
 } from "../src/integrations/volmexBviv.js";
@@ -31,7 +33,28 @@ describe("Volmex BVIV low strike monitor", () => {
           ]
         }
       ])
-    ).toEqual([{ display: "30", value: 30 }]);
+    ).toEqual([{ display: "30", value: 30, direction: "low" }]);
+  });
+
+  it("tracks unresolved high and low market strikes together", () => {
+    const strikes = extractVolmexBvivStrikesFromGamma([{
+      markets: [
+        { question: "Will BVIV hit 70 by July 31?", groupItemTitle: "↑ 70", active: true },
+        { question: "Will BVIV dip to 40 by July 31?", groupItemTitle: "↓ 40", active: true }
+      ]
+    }]);
+    expect(strikes).toEqual([
+      { display: "↓ 40", value: 40, direction: "low" },
+      { display: "↑ 70", value: 70, direction: "high" }
+    ]);
+    expect(
+      findVolmexBvivStrikeCrossings(strikes, 55, [{
+        high: 71,
+        low: 39,
+        close: 55,
+        timestamp: "2026-07-31T12:00:00.000Z"
+      }]).map((crossing) => crossing.display)
+    ).toEqual(["↓ 40", "↑ 70"]);
   });
 
   it("extracts Volmex UDF history candles", () => {
@@ -110,7 +133,7 @@ describe("Volmex BVIV low strike monitor", () => {
       crossings: [{ display: "25", value: 25, price: 24.9, timestamp: "2026-05-29T00:27:40.000Z" }]
     });
 
-    expect(noCrossingValue).toContain("Crossed Low Strikes:\nnone");
+    expect(noCrossingValue).toContain("Crossed Strikes:\nnone");
     expect(crossingValue).toContain("25 crossed down; BVIV 1m low 24.9");
     expect(volmexBvivShouldAlertOnChange(noCrossingValue, noCrossingValue)).toBe(false);
     expect(volmexBvivShouldAlertOnChange(noCrossingValue, crossingValue)).toBe(true);

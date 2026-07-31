@@ -3,9 +3,11 @@ import {
   buildVolmexEvivHistoryUrl,
   extractVolmexEvivCandles,
   extractVolmexEvivHighStrikesFromGamma,
+  extractVolmexEvivStrikesFromGamma,
   fetchVolmexEvivCandles,
   filterNewVolmexEvivStrikeCrossings,
   findVolmexEvivHighStrikeCrossings,
+  findVolmexEvivStrikeCrossings,
   formatVolmexEvivStrikeMonitorValue,
   volmexEvivShouldAlertOnChange
 } from "../src/integrations/volmexEviv.js";
@@ -33,9 +35,30 @@ describe("Volmex EVIV high strike monitor", () => {
         }
       ])
     ).toEqual([
-      { display: "80", value: 80 },
-      { display: "100", value: 100 }
+      { display: "80", value: 80, direction: "high" },
+      { display: "100", value: 100, direction: "high" }
     ]);
+  });
+
+  it("tracks unresolved high and low market strikes together", () => {
+    const strikes = extractVolmexEvivStrikesFromGamma([{
+      markets: [
+        { question: "Will EVIV hit 70 by July 31?", groupItemTitle: "↑ 70", active: true },
+        { question: "Will EVIV dip to 50 by July 31?", groupItemTitle: "↓ 50", active: true }
+      ]
+    }]);
+    expect(strikes).toEqual([
+      { display: "↓ 50", value: 50, direction: "low" },
+      { display: "↑ 70", value: 70, direction: "high" }
+    ]);
+    expect(
+      findVolmexEvivStrikeCrossings(strikes, 60, [{
+        high: 71,
+        low: 49,
+        close: 60,
+        timestamp: "2026-07-31T12:00:00.000Z"
+      }]).map((crossing) => crossing.display)
+    ).toEqual(["↓ 50", "↑ 70"]);
   });
 
   it("extracts Volmex UDF history candles", () => {
@@ -113,7 +136,7 @@ describe("Volmex EVIV high strike monitor", () => {
       crossings: [{ display: "60", value: 60, price: 60.2, timestamp: "2026-05-29T00:27:40.000Z" }]
     });
 
-    expect(noCrossingValue).toContain("Crossed High Strikes:\nnone");
+    expect(noCrossingValue).toContain("Crossed Strikes:\nnone");
     expect(crossingValue).toContain("60 crossed up; EVIV 1m high 60.2");
     expect(volmexEvivShouldAlertOnChange(noCrossingValue, noCrossingValue)).toBe(false);
     expect(volmexEvivShouldAlertOnChange(noCrossingValue, crossingValue)).toBe(true);
