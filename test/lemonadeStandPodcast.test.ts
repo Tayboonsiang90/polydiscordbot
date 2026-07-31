@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildLemonadeQueueMarketFromUrl,
   extractLatestLemonadeStandEpisode,
+  extractLatestLemonadeStandPageVideo,
   extractLatestLemonadeStandEpisodeValue,
+  extractYoutubePublishedAt,
   lemonadeStandPodcastAdapter,
   refreshLemonadePolymarketQueue
 } from "../src/integrations/lemonadeStandPodcast.js";
@@ -53,6 +55,22 @@ describe("Lemonade Stand Podcast adapter", () => {
     );
   });
 
+  it("parses the newest qualifying upload from the YouTube channel-page fallback", () => {
+    const html = [
+      '{"metadata":{"lockupMetadataViewModel":{"title":{"content":"News But Our Personalities Change | Lemonade Stand \ud83c\udf4b"}}},',
+      '"contentId":"oxu0mk4IXIA","contentType":"LOCKUP_CONTENT_TYPE_VIDEO"}'
+    ].join("");
+
+    expect(extractLatestLemonadeStandPageVideo(html)).toEqual({
+      title: "News But Our Personalities Change | Lemonade Stand \ud83c\udf4b",
+      videoId: "oxu0mk4IXIA",
+      url: "https://www.youtube.com/watch?v=oxu0mk4IXIA"
+    });
+    expect(extractYoutubePublishedAt('"publishDate":"2026-07-29T12:00:30-07:00"')).toBe(
+      "2026-07-29T12:00:30-07:00"
+    );
+  });
+
   it("polls the YouTube RSS feed every minute", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -66,6 +84,38 @@ describe("Lemonade Stand Podcast adapter", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://www.youtube.com/feeds/videos.xml?channel_id=UCwVevVbti5Uuxj6Mkl5NHRA");
     expect(result.value).toContain("The Tide is Turning | Lemonade Stand 🍋");
+  });
+
+  it("falls back to the YouTube channel and watch pages when the RSS feed is unavailable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          '{"metadata":{"lockupMetadataViewModel":{"title":{"content":"The News | Lemonade Stand"}}},"contentId":"oxu0mk4IXIA","contentType":"LOCKUP_CONTENT_TYPE_VIDEO"}'
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => '"publishDate":"2026-07-29T12:00:30-07:00"'
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await lemonadeStandPodcastAdapter.fetchCurrentValue();
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.value).toContain("Title: The News | Lemonade Stand");
+    expect(result.value).toContain("Published: 2026-07-29T12:00:30-07:00");
+    expect(result.value).toContain("Source: YouTube channel page fallback");
+  });
+
+  it("alerts only when the qualifying video URL changes", () => {
+    const previous = "Title: Old title\nPublished: 1 day ago\nURL: https://www.youtube.com/watch?v=sameVideo01";
+    const sameVideo = "Title: Old title\nPublished: 2 days ago\nURL: https://www.youtube.com/watch?v=sameVideo01";
+    const newVideo = "Title: New title\nPublished: now\nURL: https://www.youtube.com/watch?v=newVideo002";
+
+    expect(lemonadeStandPodcastAdapter.shouldAlertOnChange?.(previous, sameVideo)).toBe(false);
+    expect(lemonadeStandPodcastAdapter.shouldAlertOnChange?.(previous, newVideo)).toBe(true);
   });
 
   it("builds a release-day plus next-day ET window from Lemonade market slugs", () => {

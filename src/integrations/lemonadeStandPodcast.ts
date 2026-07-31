@@ -24,6 +24,12 @@ export type LemonadeStandEpisode = {
   url: string;
 };
 
+export type LemonadeStandPageVideo = {
+  title: string;
+  videoId: string;
+  url: string;
+};
+
 type LemonadeDiscoverySettings = {
   polymarketMarkets?: PolymarketQueueMarket[];
   lastLemonadeDiscoveryAt?: string;
@@ -76,6 +82,32 @@ export function extractLatestLemonadeStandEpisode(feedXml: string): LemonadeStan
   };
 }
 
+export function extractLatestLemonadeStandPageVideo(html: string): LemonadeStandPageVideo {
+  const pattern =
+    /"metadata":\{"lockupMetadataViewModel":\{"title":\{"content":"((?:\\.|[^"])*)"\}[\s\S]{0,12000}?"contentId":"([A-Za-z0-9_-]{11})","contentType":"LOCKUP_CONTENT_TYPE_VIDEO"/g;
+  for (const match of html.matchAll(pattern)) {
+    const title = decodeJsonString(match[1]);
+    const videoId = match[2];
+    if (title && isQualifyingLemonadeTitle(title)) {
+      return {
+        title,
+        videoId,
+        url: `https://www.youtube.com/watch?v=${videoId}`
+      };
+    }
+  }
+
+  throw new Error('Could not find a YouTube video with "Lemonade Stand" in the title on the channel page');
+}
+
+export function extractYoutubePublishedAt(html: string): string | null {
+  const match =
+    html.match(/"publishDate":"([^"]+)"/) ??
+    html.match(/"uploadDate":"([^"]+)"/) ??
+    html.match(/<meta itemprop="datePublished" content="([^"]+)"/);
+  return match?.[1]?.trim() || null;
+}
+
 export const lemonadeStandPodcastAdapter: WebsiteAdapter = {
   id: "lemonade-stand-podcast",
   commandName: "lemonade",
@@ -87,6 +119,11 @@ export const lemonadeStandPodcastAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\uD83C\uDF4B",
   getPollIntervalMinutes: () => 1,
   getPollIntervalReason: () => 'YouTube channel RSS polling every minute for new uploads with "Lemonade Stand" in the title',
+  shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
+    const previousUrl = extractValueLine(previousValue, "URL");
+    const currentUrl = extractValueLine(currentValue, "URL");
+    return previousUrl && currentUrl ? previousUrl !== currentUrl : previousValue !== currentValue;
+  },
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshLemonadePolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },
@@ -100,11 +137,43 @@ export const lemonadeStandPodcastAdapter: WebsiteAdapter = {
       }
     });
 
-    if (!response.ok) {
-      throw new Error(`Lemonade Stand YouTube feed returned HTTP ${response.status}`);
+    let episode: LemonadeStandEpisode;
+    let source = "YouTube RSS";
+    if (response.ok) {
+      episode = extractLatestLemonadeStandEpisode(await response.text());
+    } else {
+      const pageResponse = await fetchWithTimeout(`${lemonadeYoutubeChannelUrl}/videos`, {
+        headers: {
+          "accept-language": "en-US,en;q=0.9",
+          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+        }
+      });
+      if (!pageResponse.ok) {
+        throw new Error(
+          `Lemonade Stand YouTube feed returned HTTP ${response.status}; channel page returned HTTP ${pageResponse.status}`
+        );
+      }
+
+      const pageVideo = extractLatestLemonadeStandPageVideo(await pageResponse.text());
+      const watchResponse = await fetchWithTimeout(pageVideo.url, {
+        headers: {
+          "accept-language": "en-US,en;q=0.9",
+          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+        }
+      });
+      if (!watchResponse.ok) {
+        throw new Error(`Lemonade Stand YouTube watch page returned HTTP ${watchResponse.status}`);
+      }
+
+      episode = {
+        title: pageVideo.title,
+        publishedAt: extractYoutubePublishedAt(await watchResponse.text()) ?? "not listed",
+        url: pageVideo.url
+      };
+      source = "YouTube channel page fallback";
     }
 
-    const value = extractLatestLemonadeStandEpisodeValue(await response.text());
+    const value = formatLemonadeStandEpisodeValue(episode, source);
     return {
       value,
       rawValue: value,
@@ -195,8 +264,20 @@ export function buildLemonadeQueueMarketFromUrl(url: string, now = new Date()): 
   };
 }
 
-function formatLemonadeStandEpisodeValue(episode: LemonadeStandEpisode): string {
-  return [`Title: ${episode.title}`, `Published: ${episode.publishedAt}`, `URL: ${episode.url}`, "Source: YouTube RSS"].join("\n");
+function formatLemonadeStandEpisodeValue(episode: LemonadeStandEpisode, source = "YouTube RSS"): string {
+  return [`Title: ${episode.title}`, `Published: ${episode.publishedAt}`, `URL: ${episode.url}`, `Source: ${source}`].join("\n");
+}
+
+function extractValueLine(value: string | null, label: string): string | null {
+  return value?.match(new RegExp(`^${label}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
+}
+
+function decodeJsonString(value: string): string {
+  try {
+    return normalizeText(JSON.parse(`"${value}"`) as string);
+  } catch {
+    return normalizeText(value.replace(/\\"/g, '"'));
+  }
 }
 
 function shouldDiscoverLemonadeMarkets(settings: LemonadeDiscoverySettings, now: Date): boolean {

@@ -1,10 +1,17 @@
 import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlug, parseManualEasternDateTime } from "../marketEnd.js";
+import { resolveIntegrationPolymarketQueue, type PolymarketQueueMarket } from "../polymarketQueue.js";
+import { parseSettingsJson } from "../settingsJson.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.youtube.com/@MrBeast/about";
 const defaultPolymarketUrl = "https://polymarket.com/event/will-mrbeast-hit-million-subscribers-by-june-30";
 const gammaApiUrl = "https://gamma-api.polymarket.com/events";
+const gammaSearchUrl = "https://gamma-api.polymarket.com/public-search";
+const mrBeastSubscribersMarketSearchQuery = "mrbeast million subscribers";
+const marketDiscoveryActiveIntervalMs = 6 * 60 * 60_000;
+const marketDiscoveryNoActiveIntervalMs = 30 * 60_000;
+const marketDiscoveryLookaheadMs = 14 * 24 * 60 * 60_000;
 const minimumDailyRateWindowMs = 60 * 60_000;
 
 type GammaEvent = {
@@ -16,6 +23,24 @@ type GammaMarket = {
   closed?: boolean;
   outcomePrices?: string[] | string;
   outcomes?: string[] | string;
+};
+
+type GammaSearchResponse = {
+  events?: GammaSearchEvent[];
+};
+
+type GammaSearchEvent = {
+  slug?: unknown;
+  title?: unknown;
+  active?: unknown;
+  closed?: unknown;
+  archived?: unknown;
+  startDate?: unknown;
+};
+
+type MrBeastSubscribersDiscoverySettings = {
+  polymarketMarkets?: PolymarketQueueMarket[];
+  lastMrBeastSubscribersDiscoveryAt?: string;
 };
 
 export type MrBeastSubscriberTarget = {
@@ -73,7 +98,7 @@ export function extractMrBeastSubscriberTargetsFromGamma(markets: GammaMarket[])
 
 export function parseMrBeastSubscriberMarketDeadline(polymarketUrl: string | null, now = new Date()): Date | null {
   const slug = polymarketUrl ? getPolymarketSlug(polymarketUrl) : null;
-  const match = slug?.match(/by-([a-z]+)-(\d{1,2})$/i);
+  const match = slug?.match(/by-([a-z]+)-(\d{1,2})(?:-|$)/i);
   if (!match) {
     return null;
   }
@@ -122,6 +147,12 @@ export const mrBeastSubscribersAdapter: WebsiteAdapter = {
   defaultChannelName: "mrbeastsubs",
   alertRoleName: "MrBeast Subs Alerts",
   alertRoleEmoji: "\uD83D\uDC65",
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshMrBeastSubscribersPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
+  upsertPolymarketMarket(integration: Integration, url: string): { settingsJson: string | null; activeUrl: string | null } {
+    return upsertMrBeastSubscribersQueueUrl(integration, url);
+  },
   getPollIntervalMinutes: () => 1,
   getPollIntervalReason: () => "YouTube About metadata polling every minute for MrBeast subscriber counter changes",
   shouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
@@ -171,6 +202,215 @@ export const mrBeastSubscribersAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export async function refreshMrBeastSubscribersPolymarketQueue(
+  integration: Integration,
+  now = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  let resolved = resolveIntegrationPolymarketQueue(integration, now);
+  let settings = parseMrBeastSubscribersDiscoverySettings(resolved.settingsJson);
+  if (!shouldDiscoverMrBeastSubscribersMarkets(settings, now)) {
+    return resolved;
+  }
+
+  settings = { ...settings, lastMrBeastSubscribersDiscoveryAt: now.toISOString() };
+  resolved = { settingsJson: JSON.stringify(settings), activeUrl: resolved.activeUrl };
+
+  try {
+    const candidates = await fetchMrBeastSubscriberMarketSearchCandidates(now);
+    const existingSlugs = new Set((settings.polymarketMarkets ?? []).map((market) => market.slug));
+    for (const candidate of candidates) {
+      if (existingSlugs.has(candidate.slug)) {
+        continue;
+      }
+
+      resolved = upsertMrBeastSubscribersQueueUrl(
+        {
+          ...integration,
+          settingsJson: resolved.settingsJson,
+          polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
+        },
+        candidate.url,
+        now,
+        candidate.startDate,
+        candidate.endDate
+      );
+      settings = parseMrBeastSubscribersDiscoverySettings(resolved.settingsJson);
+      existingSlugs.add(candidate.slug);
+    }
+    return resolved;
+  } catch {
+    return resolved;
+  }
+}
+
+export function normalizeMrBeastSubscriberSearchEvent(
+  event: GammaSearchEvent,
+  now = new Date()
+): { slug: string; url: string; title: string; startDate: string | null; endDate: string } | null {
+  if (
+    event.active === false ||
+    event.closed === true ||
+    event.archived === true ||
+    typeof event.slug !== "string" ||
+    typeof event.title !== "string"
+  ) {
+    return null;
+  }
+
+  const slug = event.slug.trim();
+  const title = event.title.trim();
+  const lowerTitle = title.toLowerCase();
+  if (
+    !slug.startsWith("will-mrbeast-hit-million-subscribers-by-") ||
+    !lowerTitle.includes("mrbeast") ||
+    !lowerTitle.includes("million subscribers")
+  ) {
+    return null;
+  }
+
+  const url = `https://polymarket.com/event/${slug}`;
+  const deadline = parseMrBeastSubscriberMarketDeadline(url, now);
+  if (!deadline) {
+    return null;
+  }
+
+  return {
+    slug,
+    url,
+    title,
+    startDate: typeof event.startDate === "string" && !Number.isNaN(Date.parse(event.startDate)) ? event.startDate : null,
+    endDate: deadline.toISOString()
+  };
+}
+
+async function fetchMrBeastSubscriberMarketSearchCandidates(
+  now: Date
+): Promise<Array<{ slug: string; url: string; title: string; startDate: string | null; endDate: string }>> {
+  const searchUrl = new URL(gammaSearchUrl);
+  searchUrl.searchParams.set("q", mrBeastSubscribersMarketSearchQuery);
+  searchUrl.searchParams.set("events_status", "active");
+  searchUrl.searchParams.set("limit_per_type", "10");
+
+  const response = await fetchWithTimeout(searchUrl.toString(), {
+    headers: { "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1" }
+  });
+  if (!response.ok) {
+    throw new Error(`Polymarket Gamma search returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as GammaSearchResponse;
+  return (payload.events ?? [])
+    .map((event) => normalizeMrBeastSubscriberSearchEvent(event, now))
+    .filter((candidate) => candidate !== null);
+}
+
+function upsertMrBeastSubscribersQueueUrl(
+  integration: Integration,
+  url: string,
+  now = new Date(),
+  startAt?: string | null,
+  endAt?: string | null
+): { settingsJson: string | null; activeUrl: string | null } {
+  const settings = parseMrBeastSubscribersDiscoverySettings(integration.settingsJson);
+  const markets = normalizeMrBeastSubscribersQueueMarkets(settings.polymarketMarkets);
+  const slug = getPolymarketSlug(url);
+  if (!slug) {
+    throw new Error(`Could not parse Polymarket slug from ${url}`);
+  }
+
+  const market: PolymarketQueueMarket = {
+    url,
+    slug,
+    startAt: startAt ?? now.toISOString(),
+    endAt: endAt ?? parseMrBeastSubscriberMarketDeadline(url, now)?.toISOString() ?? null,
+    addedAt: now.toISOString()
+  };
+  const existingIndex = markets.findIndex((candidate) => candidate.slug === slug);
+  if (existingIndex === -1) {
+    markets.push(market);
+  } else {
+    markets[existingIndex] = { ...markets[existingIndex], ...market, addedAt: markets[existingIndex].addedAt };
+  }
+
+  return resolveIntegrationPolymarketQueue(
+    {
+      ...integration,
+      settingsJson: JSON.stringify({
+        ...settings,
+        polymarketMarkets: sortMrBeastSubscribersQueueMarkets(markets)
+      })
+    },
+    now
+  );
+}
+
+function shouldDiscoverMrBeastSubscribersMarkets(settings: MrBeastSubscribersDiscoverySettings, now: Date): boolean {
+  const markets = normalizeMrBeastSubscribersQueueMarkets(settings.polymarketMarkets);
+  if (markets.some((market) => Boolean(market.startAt) && Date.parse(market.startAt!) > now.getTime())) {
+    return false;
+  }
+
+  const activeMarket = markets.find(
+    (market) =>
+      Boolean(market.startAt) &&
+      Boolean(market.endAt) &&
+      now.getTime() >= Date.parse(market.startAt!) &&
+      now.getTime() <= Date.parse(market.endAt!)
+  );
+  const intervalMs = activeMarket ? marketDiscoveryActiveIntervalMs : marketDiscoveryNoActiveIntervalMs;
+  const lastDiscoveryMs = Date.parse(settings.lastMrBeastSubscribersDiscoveryAt ?? "");
+  if (!Number.isNaN(lastDiscoveryMs) && now.getTime() - lastDiscoveryMs < intervalMs) {
+    return false;
+  }
+
+  return !activeMarket || Date.parse(activeMarket.endAt!) - now.getTime() <= marketDiscoveryLookaheadMs;
+}
+
+function parseMrBeastSubscribersDiscoverySettings(settingsJson: string | null): MrBeastSubscribersDiscoverySettings {
+  const parsed = parseSettingsJson(settingsJson);
+  return {
+    ...parsed,
+    polymarketMarkets: normalizeMrBeastSubscribersQueueMarkets(parsed.polymarketMarkets),
+    lastMrBeastSubscribersDiscoveryAt:
+      typeof parsed.lastMrBeastSubscribersDiscoveryAt === "string" ? parsed.lastMrBeastSubscribersDiscoveryAt : undefined
+  };
+}
+
+function normalizeMrBeastSubscribersQueueMarkets(value: unknown): PolymarketQueueMarket[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return sortMrBeastSubscribersQueueMarkets(
+    value.flatMap((item) => {
+      if (!item || typeof item !== "object") {
+        return [];
+      }
+      const market = item as Partial<PolymarketQueueMarket>;
+      if (!market.url || !market.slug) {
+        return [];
+      }
+      return [
+        {
+          url: market.url,
+          slug: market.slug,
+          startAt: typeof market.startAt === "string" ? market.startAt : null,
+          endAt: typeof market.endAt === "string" ? market.endAt : null,
+          addedAt: typeof market.addedAt === "string" ? market.addedAt : new Date(0).toISOString()
+        }
+      ];
+    })
+  );
+}
+
+function sortMrBeastSubscribersQueueMarkets(markets: PolymarketQueueMarket[]): PolymarketQueueMarket[] {
+  return [...markets].sort((left, right) => {
+    const leftTime = left.startAt ? Date.parse(left.startAt) : Number.MAX_SAFE_INTEGER;
+    const rightTime = right.startAt ? Date.parse(right.startAt) : Number.MAX_SAFE_INTEGER;
+    return leftTime - rightTime || left.slug.localeCompare(right.slug);
+  });
+}
 
 async function fetchMrBeastSubscriberTargets(polymarketUrl: string | null): Promise<MrBeastSubscriberTarget[]> {
   const slug = polymarketUrl ? getPolymarketSlug(polymarketUrl) : null;

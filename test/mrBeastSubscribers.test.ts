@@ -1,14 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildMrBeastSubscriberValue,
   extractMrBeastSubscriberTargetsFromGamma,
   extractMrBeastSubscribers,
+  normalizeMrBeastSubscriberSearchEvent,
   parseMrBeastStoredSubscribers,
   parseMrBeastSubscriberMarketDeadline,
-  mrBeastSubscribersAdapter
+  mrBeastSubscribersAdapter,
+  refreshMrBeastSubscribersPolymarketQueue
 } from "../src/integrations/mrBeastSubscribers.js";
+import type { Integration } from "../src/integrations/types.js";
 
 describe("MrBeast YouTube subscribers adapter", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("extracts rounded subscribers from the YouTube about page metadata", () => {
     expect(extractMrBeastSubscribers('"subscriberCountText":"487M subscribers"')).toBe(487_000_000);
     expect(extractMrBeastSubscribers('"subscriberCountText":{"simpleText":"487M subscribers"}')).toBe(487_000_000);
@@ -43,6 +51,30 @@ describe("MrBeast YouTube subscribers adapter", () => {
         new Date("2026-05-19T00:00:00.000Z")
       )?.toISOString()
     ).toBe("2026-07-01T03:59:00.000Z");
+    expect(
+      parseMrBeastSubscriberMarketDeadline(
+        "https://polymarket.com/event/will-mrbeast-hit-million-subscribers-by-july-31-20260623145857879",
+        new Date("2026-07-01T00:00:00.000Z")
+      )?.toISOString()
+    ).toBe("2026-08-01T03:59:00.000Z");
+  });
+
+  it("recognizes active million-subscriber market search results", () => {
+    expect(
+      normalizeMrBeastSubscriberSearchEvent(
+        {
+          slug: "will-mrbeast-hit-million-subscribers-by-july-31-20260623145857879",
+          title: "Will MrBeast hit ___ Million subscribers by July 31?",
+          active: true,
+          closed: false,
+          startDate: "2026-06-23T20:30:59.562211Z"
+        },
+        new Date("2026-07-01T00:00:00.000Z")
+      )
+    ).toMatchObject({
+      endDate: "2026-08-01T03:59:00.000Z",
+      slug: "will-mrbeast-hit-million-subscribers-by-july-31-20260623145857879"
+    });
   });
 
   it("parses previous stored subscriber totals from bot values", () => {
@@ -99,5 +131,43 @@ describe("MrBeast YouTube subscribers adapter", () => {
   it("polls the YouTube counter every minute", () => {
     expect(mrBeastSubscribersAdapter.getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(mrBeastSubscribersAdapter.getPollIntervalReason?.({} as never)).toContain("every minute");
+  });
+
+  it("auto-discovers and activates the current subscriber market", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              slug: "will-mrbeast-hit-million-subscribers-by-july-31-20260623145857879",
+              title: "Will MrBeast hit ___ Million subscribers by July 31?",
+              active: true,
+              closed: false,
+              startDate: "2026-06-23T20:30:59.562211Z"
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await refreshMrBeastSubscribersPolymarketQueue(
+      {
+        settingsJson: null,
+        polymarketUrl: "https://polymarket.com/event/will-mrbeast-hit-million-subscribers-by-june-30"
+      } as Integration,
+      new Date("2026-07-30T12:00:00.000Z")
+    );
+
+    expect(result.activeUrl).toBe(
+      "https://polymarket.com/event/will-mrbeast-hit-million-subscribers-by-july-31-20260623145857879"
+    );
+    expect(JSON.parse(result.settingsJson ?? "{}").polymarketMarkets).toEqual([
+      expect.objectContaining({
+        slug: "will-mrbeast-hit-million-subscribers-by-july-31-20260623145857879",
+        endAt: "2026-08-01T03:59:00.000Z"
+      })
+    ]);
   });
 });

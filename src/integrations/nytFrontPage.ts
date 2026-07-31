@@ -157,7 +157,7 @@ export const nytFrontPageAdapter: WebsiteAdapter = {
     return {
       posts: [post],
       strikeTerms,
-      polymarketUrl: clockPolymarketUrl,
+      polymarketUrl,
       settingsJson,
       observedAt: new Date()
     };

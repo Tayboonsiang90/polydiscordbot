@@ -358,7 +358,7 @@ describe("NYT front page adapter", () => {
       nytStrikeTerms?: string[];
     };
 
-    expect(result.polymarketUrl).toBe(previousUrl);
+    expect(result.polymarketUrl).toBe(upcomingUrl);
     expect(result.strikeTerms).toEqual(["Fear"]);
     expect(result.posts[0].matchedTerms).toEqual(["Fear"]);
     expect(result.posts[0].polymarketUrl).toBe(upcomingUrl);

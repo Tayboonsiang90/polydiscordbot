@@ -493,6 +493,82 @@ describe("adapter commands", () => {
     }
   });
 
+  it.each([
+    {
+      adapterId: "big-brother-episodes",
+      currentValue: [
+        "Metric: CBS Big Brother latest full episode",
+        "Title: Episode 12",
+        "Season: 28",
+        "Episode: 12",
+        "Air date: 2026-07-30",
+        "URL: https://www.cbs.com/shows/video/episode-12/"
+      ].join("\n"),
+      expected: ["**Latest episode:**", "Episode 12", "**Season:** 28", "**Air date:** 2026-07-30"]
+    },
+    {
+      adapterId: "all-in-podcast",
+      currentValue: [
+        "Title: Episode #283",
+        "Date: 7/31/2026",
+        "URL: https://www.youtube.com/watch?v=episode283",
+        "Source: allin.com"
+      ].join("\n"),
+      expected: ["**Latest release:**", "Episode #283", "**Date:** 7/31/2026", "**Source:** allin.com"]
+    },
+    {
+      adapterId: "mrbeast-views",
+      currentValue: [
+        "Metric: MrBeast YouTube channel total views",
+        "Total views: 135.11B",
+        "Change: +12.3M since last stored total",
+        "Rate: +28.4M/day since last counter change",
+        "Next target: 136B - 890M away",
+        "Needed by deadline: 31.2M/day"
+      ].join("\n"),
+      expected: ["**Total views:** 135.11B", "**Next target:** 136B - 890M away"]
+    },
+    {
+      adapterId: "airnow-philadelphia-aqi",
+      currentValue: [
+        "Metric: AirNow finalized Daily AQI for PM2.5",
+        "Area: Philadelphia, Pennsylvania",
+        "Market window: 2026-07-17 to 2026-07-21 ET",
+        "Below 100 observed: YES - 2026-07-19 = 79",
+        "Minimum PM2.5 AQI: 64 on 2026-07-20",
+        "Latest finalized day: 2026-07-21 = 64",
+        "Reported days: 5/5"
+      ].join("\n"),
+      expected: ["**Below 100 observed:** YES", "**Latest finalized day:** 2026-07-21 = 64", "**Minimum PM2.5 AQI:** 64"]
+    },
+    {
+      adapterId: "trump-getty-photos",
+      currentValue: [
+        "Metric: Getty Images tagged editorial Donald Trump photos",
+        "Window: 2026-07-27 to 2026-08-02",
+        "Upload deadline: 2026-08-03 23:59 ET",
+        "Covered days: 4/7",
+        "Covered dates: 2026-07-27, 2026-07-28, 2026-07-29, 2026-07-30",
+        "Missing dates: 2026-07-31, 2026-08-01, 2026-08-02",
+        "Every day covered: no"
+      ].join("\n"),
+      expected: ["**Every day covered:** no", "**Covered days:** 4/7", "**Missing dates:** 2026-07-31"]
+    }
+  ])("gives $adapterId a human-first alert summary", ({ adapterId, currentValue, expected }) => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId },
+      previousValue: currentValue.replace("Episode 12", "Episode 11").replace("135.11B", "135.10B").replace("4/7", "3/7"),
+      previousCheckedAt: "2026-07-30T00:00:00.000Z",
+      currentValue,
+      changed: true,
+      marketRollover: null
+    }).toJSON();
+    const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
+    for (const text of expected) {
+      expect(quickRead).toContain(text);
+    }
+  });
+
   it("adds direct article links from release values to the Links field", () => {
     const embed = buildAlertEmbed({
       integration: { ...checkedIntegration, adapterId: "bea-current-releases", sourceUrl: "https://www.bea.gov/news/current-releases" },
@@ -636,6 +712,9 @@ describe("adapter commands", () => {
     );
     const quickRead = embed.fields?.find((field) => field.name === "Quick read")?.value ?? "";
     expect(quickRead).toContain("**Source URL:** https://bnonews.com/whpool/example");
+    expect(embed.fields?.find((field) => field.name === "Links")?.value).toContain(
+      "[Source report](https://bnonews.com/whpool/example)"
+    );
     expect(embed.fields?.some((field) => field.name === "Current snapshot")).toBe(false);
     expect(embed.fields?.some((field) => field.name === "Previous snapshot")).toBe(false);
   });

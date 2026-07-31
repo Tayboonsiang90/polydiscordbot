@@ -54,6 +54,20 @@ const precipitationAdapterIds = new Set([
 ]);
 const spotifyTop50AdapterIds = new Set(["spotify-top-50-usa", "spotify-top-50-global"]);
 const netflixTop10AdapterIds = new Set(["netflix-top-10"]);
+const mediaReleaseAdapterIds = new Set([
+  "all-in-podcast",
+  "big-brother-episodes",
+  "joe-rogan-podcast",
+  "lemonade-stand-podcast",
+  "mrbeast-gaming-video",
+  "spider-man-trailer"
+]);
+const airNowDailyAdapterIds = new Set([
+  "airnow-chicago-aqi",
+  "airnow-columbus-aqi",
+  "airnow-nyc-aqi",
+  "airnow-philadelphia-aqi"
+]);
 const arenaAiAdapterIds = new Set([
   "arena-ai-no-style-control",
   "arena-ai-style-control-on",
@@ -1285,11 +1299,14 @@ function extractCurrentValueLinks(value: string | undefined, excludedUrls: Set<s
   const labels: Record<string, string> = {
     URL: "Latest release",
     "Press URL": "Press release",
-    "SEC Filing": "SEC filing"
+    "SEC Filing": "SEC filing",
+    "First lid URL": "Source report",
+    "F6 PDF": "Current F6 PDF",
+    CSV: "Daily data"
   };
   const seen = new Set<string>();
   return value.split(/\r?\n/).flatMap((line) => {
-    const match = line.match(/^(URL|Press URL|SEC Filing):\s*(https?:\/\/\S+)$/);
+    const match = line.match(/^(URL|Press URL|SEC Filing|First lid URL|F6 PDF|CSV):\s*(https?:\/\/\S+)$/);
     if (!match || excludedUrls.has(match[2]) || seen.has(match[2])) {
       return [];
     }
@@ -1544,6 +1561,18 @@ function formatAlertQuickReadFields(
         ? formatSilverTrumpApprovalQuickRead(currentValue, previousValue)
       : integration.adapterId === "polymarket-mention-schedule"
         ? formatPolymarketMentionScheduleQuickRead(currentValue)
+      : mediaReleaseAdapterIds.has(integration.adapterId)
+        ? formatMediaReleaseQuickRead(currentValue, previousValue, integration.adapterId)
+      : integration.adapterId === "mrbeast-subscribers"
+        ? formatMrBeastSubscribersQuickRead(currentValue, previousValue)
+      : integration.adapterId === "mrbeast-views"
+        ? formatMrBeastViewsQuickRead(currentValue, previousValue)
+      : integration.adapterId === "trump-getty-photos"
+        ? formatTrumpGettyQuickRead(currentValue, previousValue)
+      : airNowDailyAdapterIds.has(integration.adapterId)
+        ? formatAirNowDailyQuickRead(currentValue, previousValue)
+      : integration.adapterId === "airnow-stadium-aqi"
+        ? formatAirNowStadiumQuickRead(currentValue, previousValue)
       : formatGenericQuickRead(previousValue, currentValue);
 
   return value ? [{ name: "Quick read", value, inline: false }] : [];
@@ -1897,6 +1926,91 @@ function formatPolymarketMentionScheduleQuickRead(currentValue: string): string 
   ];
 
   return truncateEmbedValue(lines.join("\n"), 900);
+}
+
+function formatMediaReleaseQuickRead(currentValue: string, previousValue: string | null, adapterId: string): string {
+  const currentTitle = extractValueLine(currentValue, "Title");
+  const previousTitle = extractValueLine(previousValue ?? "", "Title");
+  const headlineLabel = adapterId === "big-brother-episodes" ? "Latest episode" : "Latest release";
+  const lines = [
+    ...(currentTitle
+      ? [
+          `**${headlineLabel}:** ${
+            previousTitle && previousTitle !== currentTitle
+              ? `${truncatePlainText(previousTitle, 90)} → **${truncatePlainText(currentTitle, 180)}**`
+              : truncatePlainText(currentTitle, 180)
+          }`
+        ]
+      : []),
+    ...formatPreferredQuickReadLine(currentValue, "Season"),
+    ...formatPreferredQuickReadLine(currentValue, "Episode"),
+    ...formatPreferredQuickReadLine(currentValue, "Air date"),
+    ...formatPreferredQuickReadLine(currentValue, "Published"),
+    ...formatPreferredQuickReadLine(currentValue, "Date"),
+    ...formatPreferredQuickReadLine(currentValue, "Channel"),
+    ...formatPreferredQuickReadLine(currentValue, "Source")
+  ];
+
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatMrBeastSubscribersQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Subscribers"),
+    ...formatPreferredQuickReadLine(currentValue, "Change since previous check"),
+    ...formatPreferredQuickReadLine(currentValue, "Dailyized rate"),
+    ...formatPreferredQuickReadLine(currentValue, "Next open target"),
+    ...formatPreferredQuickReadLine(currentValue, "Market deadline")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatMrBeastViewsQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Total views"),
+    ...formatPreferredQuickReadLine(currentValue, "Change"),
+    ...formatPreferredQuickReadLine(currentValue, "Rate"),
+    ...formatPreferredQuickReadLine(currentValue, "Next target"),
+    ...formatPreferredQuickReadLine(currentValue, "Needed by deadline")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatTrumpGettyQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Every day covered"),
+    ...formatPreferredQuickReadLine(currentValue, "Covered days"),
+    ...formatPreferredQuickReadLine(currentValue, "Covered dates"),
+    ...formatPreferredQuickReadLine(currentValue, "Missing dates"),
+    ...formatPreferredQuickReadLine(currentValue, "Window"),
+    ...formatPreferredQuickReadLine(currentValue, "Upload deadline")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatAirNowDailyQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Below 100 observed"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest finalized day"),
+    ...formatPreferredQuickReadLine(currentValue, "Minimum PM2.5 AQI"),
+    ...formatPreferredQuickReadLine(currentValue, "Reported days"),
+    ...formatPreferredQuickReadLine(currentValue, "Area"),
+    ...formatPreferredQuickReadLine(currentValue, "Market window"),
+    ...formatPreferredQuickReadLine(currentValue, "Source updated")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatAirNowStadiumQuickRead(currentValue: string, previousValue: string | null): string {
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Current PM2.5 AQI"),
+    ...formatPreferredQuickReadLine(currentValue, "Highest tracked AQI"),
+    ...formatPreferredQuickReadLine(currentValue, "Hit thresholds"),
+    ...formatPreferredQuickReadLine(currentValue, "Status"),
+    ...formatPreferredQuickReadLine(currentValue, "Reading time (ET)"),
+    ...formatPreferredQuickReadLine(currentValue, "Current monitor")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
 }
 
 function extractScheduleRows(value: string): string[] {
