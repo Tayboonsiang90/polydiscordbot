@@ -109,6 +109,7 @@ import { spiderManTrailerAdapter } from "./spiderManTrailer.js";
 import { spotifyTop50GlobalAdapter } from "./spotifyTop50Global.js";
 import { spotifyTop50UsaAdapter } from "./spotifyTop50Usa.js";
 import { strategyBitcoinPurchasesAdapter } from "./strategyBitcoinPurchases.js";
+import { strategyStrcMarketCapAdapter } from "./strategyStrcMarketCap.js";
 import { teslaDeliveriesAdapter } from "./teslaDeliveries.js";
 import { ticketDataWorldCupFinalAdapter } from "./ticketDataWorldCupFinal.js";
 import { trumpGettyPhotosAdapter } from "./trumpGettyPhotos.js";
@@ -247,6 +248,7 @@ const adapterEntries: Array<readonly [string, WebsiteAdapter]> = [
   [spotifyTop50GlobalAdapter.id, spotifyTop50GlobalAdapter],
   [spotifyTop50UsaAdapter.id, spotifyTop50UsaAdapter],
   [strategyBitcoinPurchasesAdapter.id, strategyBitcoinPurchasesAdapter],
+  [strategyStrcMarketCapAdapter.id, strategyStrcMarketCapAdapter],
   [teslaDeliveriesAdapter.id, teslaDeliveriesAdapter],
   [ticketDataWorldCupFinalAdapter.id, ticketDataWorldCupFinalAdapter],
   [trumpGettyPhotosAdapter.id, trumpGettyPhotosAdapter],

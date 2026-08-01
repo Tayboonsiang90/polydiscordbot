@@ -1609,6 +1609,8 @@ function formatAlertQuickReadFields(
         ? formatPowerballJackpotQuickRead(currentValue, previousValue)
       : integration.adapterId === "pump-fun-buybacks"
         ? formatPumpFunBuybacksQuickRead(currentValue)
+      : integration.adapterId === "strategy-strc-market-cap"
+        ? formatStrategyStrcMarketCapQuickRead(currentValue)
       : integration.adapterId === "isw-ukraine-map"
         ? formatIswUkraineMapQuickRead(currentValue)
       : integration.adapterId === "free-app-store" || integration.adapterId === "paid-app-store"
@@ -1705,6 +1707,18 @@ function formatPumpFunBuybacksQuickRead(currentValue: string): string {
     ...formatPreferredQuickReadLine(currentValue, "Estimated target date at 7-day pace")
   ];
   return lines.join("\n");
+}
+
+function formatStrategyStrcMarketCapQuickRead(currentValue: string): string {
+  const newlyHit = extractValueLine(currentValue, "Newly hit strikes");
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Market cap"),
+    ...(newlyHit && newlyHit !== "none" ? [`**Strike hit:** ${newlyHit}`] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Next open strike"),
+    ...formatPreferredQuickReadLine(currentValue, "Monitoring high-water"),
+    ...formatPreferredQuickReadLine(currentValue, "Source time")
+  ];
+  return lines.length ? lines.join("\n") : currentValue;
 }
 
 function formatIswUkraineMapQuickRead(currentValue: string): string {

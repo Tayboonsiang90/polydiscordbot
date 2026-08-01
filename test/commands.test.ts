@@ -727,6 +727,18 @@ describe("adapter commands", () => {
       expected: ["**Monthly listeners:** 123,100,000", "**Next strike:** 130M", "**Open strikes:** 125M, 130M"]
     },
     {
+      adapterId: "strategy-strc-market-cap",
+      previousValue: "Market cap: $9,900.0M ($9.900B)\nNewly hit strikes: none",
+      currentValue: [
+        "Market cap: $10,005.0M ($10.005B)",
+        "Newly hit strikes: $10B",
+        "Next open strike: $12B ($1,995.0M away)",
+        "Monitoring high-water: $10,005.0M ($10.005B)",
+        "Source time: Jul 31, 2026, 4:00:00 PM ET"
+      ].join("\n"),
+      expected: ["**Market cap:** $10,005.0M", "**Strike hit:** $10B", "**Next open strike:** $12B"]
+    },
+    {
       adapterId: "spotify-top-artist-monthly",
       previousValue: "Leader: Justin Bieber 123.0M",
       currentValue: [
