@@ -188,6 +188,61 @@ describe("Polymarket resolvable watchlist", () => {
     expect(JSON.parse(result.settingsJson ?? "{}").watches).toEqual([]);
   });
 
+  it("batches all on-chain checks during one-second turbo polling", async () => {
+    const rpcUrl = "https://rpc.example";
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      expect(url.toString()).toBe(rpcUrl);
+      const requests = JSON.parse(String(init?.body)) as Array<{
+        id: number;
+        params: Array<{ to: string; data: string }>;
+      }>;
+      expect(requests).toHaveLength(polymarketUmaCtfAdapterAddresses.length + 1);
+
+      return jsonResponse(
+        requests.map((request) => ({
+          jsonrpc: "2.0",
+          id: request.id,
+          result:
+            request.params[0].to === polymarketUmaCtfAdapterAddresses[1]
+              ? boolWord(true)
+              : boolWord(false)
+        }))
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchPolymarketResolvableUpdates(
+      {
+        settingsJson: JSON.stringify({
+          rpcUrl,
+          turboPolling: {
+            intervalSeconds: 1,
+            startedAt: "2026-06-15T00:55:00.000Z",
+            until: "2026-06-15T01:30:00.000Z"
+          },
+          watches: [
+            {
+              question: "New Rihanna Album before GTA VI?",
+              url: marketUrl,
+              questionId,
+              conditionId,
+              addedAt: "2026-06-15T00:00:00.000Z",
+              lastStatus: "pending"
+            }
+          ]
+        })
+      } as Integration,
+      new Date("2026-06-15T01:00:00.000Z")
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0]).toMatchObject({
+      alertTitle: "Polymarket market ready to resolve",
+      polymarketUrl: marketUrl
+    });
+  });
+
   it("alerts and removes a watched market when the CTF condition is already resolved", async () => {
     const rpcUrl = "https://rpc.example";
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {

@@ -2,6 +2,7 @@ import { keccak_256 } from "@noble/hashes/sha3";
 import { fetchWithTimeout } from "../http.js";
 import { getPolymarketSlugCandidates } from "../marketEnd.js";
 import { parseSettingsJson } from "../settingsJson.js";
+import { getTurboPollingSettings } from "../turboPolling.js";
 import { defaultPolygonRpcUrls } from "./polymarketClarifications.js";
 import { polymarketUmaCtfAdapterAddresses } from "./polymarketDisputes.js";
 import type {
@@ -24,8 +25,16 @@ const payoutDenominatorSelector = functionSelector("payoutDenominator(bytes32)")
 const rpcTimeoutMs = 5_000;
 
 type JsonRpcResponse<T> = {
+  id?: number;
   result?: T;
   error?: { code: number; message: string };
+};
+
+type JsonRpcBatchRequest = {
+  jsonrpc: "2.0";
+  id: number;
+  method: "eth_call";
+  params: unknown[];
 };
 
 type PolygonRpcResult<T> = {
@@ -231,6 +240,7 @@ export async function fetchPolymarketResolvableUpdates(
   }
 
   const rpcUrls = getPolymarketResolvableRpcUrls(settings);
+  const useBatchRpc = getTurboPollingSettings(integration.settingsJson, now)?.intervalSeconds === 1;
   const posts: EventMonitorPost[] = [];
   const remainingWatches: ResolvableWatchlistEntry[] = [];
   let onChainCallCount = 0;
@@ -239,7 +249,7 @@ export async function fetchPolymarketResolvableUpdates(
 
   for (const watch of watches) {
     try {
-      const check = await checkResolvableStatus(watch, rpcUrls, activeRpcUrl);
+      const check = await checkResolvableStatus(watch, rpcUrls, activeRpcUrl, useBatchRpc);
       onChainCallCount += check.checkedCallCount;
       activeRpcUrl = check.rpcUrl ?? activeRpcUrl;
 
@@ -386,8 +396,16 @@ function normalizePolymarketResolvablePost(
 async function checkResolvableStatus(
   watch: ResolvableWatchlistEntry,
   rpcUrls: string[],
-  preferredRpcUrl?: string
+  preferredRpcUrl?: string,
+  useBatchRpc = false
 ): Promise<ReadyCheckResult> {
+  if (useBatchRpc) {
+    const batchResult = await checkResolvableStatusBatch(watch, rpcUrls, preferredRpcUrl).catch(() => null);
+    if (batchResult) {
+      return batchResult;
+    }
+  }
+
   let checkedCallCount = 0;
   let lastRpcUrl = preferredRpcUrl;
   const errors: string[] = [];
@@ -429,6 +447,89 @@ async function checkResolvableStatus(
   }
 
   return { status: "pending", rpcUrl: lastRpcUrl, checkedCallCount };
+}
+
+async function checkResolvableStatusBatch(
+  watch: ResolvableWatchlistEntry,
+  rpcUrls: string[],
+  preferredRpcUrl?: string
+): Promise<ReadyCheckResult> {
+  const requests: JsonRpcBatchRequest[] = [];
+  let requestId = 1;
+  const conditionRequestId = watch.conditionId ? requestId++ : undefined;
+  if (watch.conditionId && conditionRequestId) {
+    requests.push({
+      jsonrpc: "2.0",
+      id: conditionRequestId,
+      method: "eth_call",
+      params: [
+        {
+          to: conditionalTokensAddress,
+          data: `${payoutDenominatorSelector}${stripHexPrefix(watch.conditionId)}`
+        },
+        "latest"
+      ]
+    });
+  }
+
+  const adapterRequestIds = polymarketUmaCtfAdapterAddresses.map((adapterAddress) => {
+    const id = requestId++;
+    requests.push({
+      jsonrpc: "2.0",
+      id,
+      method: "eth_call",
+      params: [
+        {
+          to: adapterAddress,
+          data: `${readySelector}${stripHexPrefix(watch.questionId)}`
+        },
+        "latest"
+      ]
+    });
+    return { adapterAddress, id };
+  });
+
+  const batch = await polygonRpcBatch(rpcUrls, requests, preferredRpcUrl);
+  let successfulCalls = 0;
+
+  if (conditionRequestId) {
+    const response = batch.result.get(conditionRequestId);
+    if (response?.result !== undefined && !response.error) {
+      successfulCalls += 1;
+      const denominator = parseAbiUint(response.result);
+      if (denominator > 0n) {
+        return {
+          status: "resolved",
+          rpcUrl: batch.rpcUrl,
+          checkedCallCount: requests.length,
+          payoutDenominator: denominator.toString()
+        };
+      }
+    }
+  }
+
+  for (const { adapterAddress, id } of adapterRequestIds) {
+    const response = batch.result.get(id);
+    if (response?.result === undefined || response.error) {
+      continue;
+    }
+
+    successfulCalls += 1;
+    if (parseAbiBool(response.result)) {
+      return {
+        status: "ready",
+        adapterAddress,
+        rpcUrl: batch.rpcUrl,
+        checkedCallCount: requests.length
+      };
+    }
+  }
+
+  if (successfulCalls === 0) {
+    throw new Error("Polygon RPC batch returned no successful resolvable checks");
+  }
+
+  return { status: "pending", rpcUrl: batch.rpcUrl, checkedCallCount: requests.length };
 }
 
 async function callPayoutDenominator(
@@ -723,6 +824,64 @@ async function polygonRpcOne<T>(rpcUrl: string, method: string, params: unknown[
   }
 
   return payload.result;
+}
+
+async function polygonRpcBatch(
+  rpcUrls: string[],
+  requests: JsonRpcBatchRequest[],
+  preferredRpcUrl?: string
+): Promise<PolygonRpcResult<Map<number, JsonRpcResponse<string>>>> {
+  const errors: string[] = [];
+  for (const rpcUrl of orderRpcUrls(rpcUrls, preferredRpcUrl)) {
+    try {
+      const result = await polygonRpcBatchOne(rpcUrl, requests);
+      return { result, rpcUrl };
+    } catch (error) {
+      errors.push(`${rpcUrl}: ${formatError(error)}`);
+    }
+  }
+
+  throw new Error(`Polygon RPC batch failed on all endpoints: ${errors.join("; ")}`);
+}
+
+async function polygonRpcBatchOne(
+  rpcUrl: string,
+  requests: JsonRpcBatchRequest[]
+): Promise<Map<number, JsonRpcResponse<string>>> {
+  const response = await fetch(rpcUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "user-agent": "PolymarketResolutionMonitorBot/0.1"
+    },
+    body: JSON.stringify(requests),
+    signal: AbortSignal.timeout(rpcTimeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as unknown;
+  if (!Array.isArray(payload)) {
+    throw new Error("returned a non-batch response");
+  }
+
+  const responses = new Map<number, JsonRpcResponse<string>>();
+  for (const item of payload) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const candidate = item as JsonRpcResponse<string>;
+    if (typeof candidate.id === "number") {
+      responses.set(candidate.id, candidate);
+    }
+  }
+  if (responses.size === 0) {
+    throw new Error("returned no batch results");
+  }
+
+  return responses;
 }
 
 function parseAbiBool(value: string): boolean {

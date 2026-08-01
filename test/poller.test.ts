@@ -645,6 +645,21 @@ describe("getEffectivePollIntervalMinutes", () => {
     );
   });
 
+  it("supports one-second turbo polling", () => {
+    const integration = {
+      ...snapshotIntegration,
+      settingsJson: JSON.stringify({
+        turboPolling: {
+          intervalSeconds: 1,
+          startedAt: "2026-05-12T15:55:00.000Z",
+          until: "2026-05-12T16:30:00.000Z"
+        }
+      })
+    };
+
+    expect(getEffectivePollIntervalMs(integration, new Date("2026-05-12T16:00:00.000Z"))).toBe(1_000);
+  });
+
   it("ignores expired turbo polling settings", () => {
     expect(
       getEffectivePollIntervalMinutes(

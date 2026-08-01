@@ -6,7 +6,7 @@ export type TurboPollingSettings = {
   startedAt?: string;
 };
 
-export const minTurboIntervalSeconds = 5;
+export const minTurboIntervalSeconds = 1;
 export const maxTurboIntervalSeconds = 3600;
 export const maxTurboDurationMinutes = 1440;
 

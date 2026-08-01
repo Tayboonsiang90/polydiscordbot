@@ -1834,7 +1834,7 @@ describe("adapter commands", () => {
       ...checkedIntegration,
       settingsJson: JSON.stringify({
         turboPolling: {
-          intervalSeconds: 5,
+          intervalSeconds: 1,
           startedAt: "2099-05-06T01:02:03.000Z",
           until: "2099-05-06T02:02:03.000Z"
         }
@@ -1845,7 +1845,7 @@ describe("adapter commands", () => {
     expect(embed.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "Turbo", value: "on" }),
-        expect.objectContaining({ name: "Turbo interval", value: "5 second(s)" }),
+        expect.objectContaining({ name: "Turbo interval", value: "1 second(s)" }),
         expect.objectContaining({ name: "Turbo ends", value: "06/05/2099, 10:02:03 SGT" })
       ])
     );
