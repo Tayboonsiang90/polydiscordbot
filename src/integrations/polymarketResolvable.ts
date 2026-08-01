@@ -74,7 +74,8 @@ export const polymarketResolvableAdapter: WebsiteAdapter = {
   commandName: "resolvable",
   displayName: "Polymarket Resolvable Watch",
   sourceUrl: adapterDocsUrl,
-  defaultChannelName: "resolvable",
+  defaultChannelName: "uma-resolvable",
+  legacyChannelNames: ["resolvable"],
   alertRoleName: "Resolvable Alerts",
   alertRoleEmoji: "\u2705",
   getPollIntervalMinutes(): number {

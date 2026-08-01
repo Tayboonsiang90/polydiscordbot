@@ -250,6 +250,8 @@ describe("adapter registry", () => {
     expect(getAdapterByCommandName("resolvable").updateResolvableWatchlist).toBeDefined();
     expect(getAdapterByCommandName("resolvable").fetchEventUpdates).toBeDefined();
     expect(getAdapterByCommandName("resolvable").getPollIntervalMinutes?.({ settingsJson: null } as never)).toBe(1);
+    expect(getAdapterByCommandName("resolvable").defaultChannelName).toBe("uma-resolvable");
+    expect(getAdapterByCommandName("resolvable").legacyChannelNames).toContain("resolvable");
     expect(getAdapterByCommandName("polymarketstatus").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("eia").getPollIntervalMinutes?.({} as never, new Date("2026-05-12T16:00:00.000Z"))).toBe(1);
     expect(getAdapterByCommandName("ethgasmonthly").getPollIntervalMinutes?.({} as never)).toBe(60);
