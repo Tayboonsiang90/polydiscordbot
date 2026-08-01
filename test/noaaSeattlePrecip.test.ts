@@ -89,7 +89,7 @@ describe("NOAA Seattle precipitation adapter", () => {
 
   it("polls every minute for KSEA hourly precipitation", () => {
     expect(noaaSeattlePrecipAdapter.getPollIntervalMinutes?.(noaaIntegration)).toBe(1);
-    expect(noaaSeattlePrecipAdapter.getPollIntervalReason?.(noaaIntegration)).toContain("zero-hour reports are ignored");
+    expect(noaaSeattlePrecipAdapter.getPollIntervalReason?.(noaaIntegration)).toContain("trace-only reports are ignored");
   });
 
   it("requests NOAA's Seattle City Area thread rather than the WFO Seattle station", () => {
@@ -117,7 +117,7 @@ describe("NOAA Seattle precipitation adapter", () => {
     expect(shouldAlertOnSeattlePrecipChange(previous, current)).toBe(false);
   });
 
-  it("still alerts for trace precipitation and total revisions", () => {
+  it("stores trace precipitation silently but still alerts for total revisions", () => {
     const previous = [
       "Total precipitation: 0.42 inches",
       "Latest reported day: 2026-07-29",
@@ -134,7 +134,7 @@ describe("NOAA Seattle precipitation adapter", () => {
       "Latest day value: 0.01 inches"
     ].join("\n");
 
-    expect(shouldAlertOnSeattlePrecipChange(previous, trace)).toBe(true);
+    expect(shouldAlertOnSeattlePrecipChange(previous, trace)).toBe(false);
     expect(shouldAlertOnSeattlePrecipChange(previous, revision)).toBe(true);
   });
 });

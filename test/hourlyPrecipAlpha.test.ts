@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   appendHourlyPrecipitationAlpha,
   extractEnvironmentAgencyHourlyPrecipitation,
-  hasNewOrRevisedHourlyPrecipitation
+  hasNewOrRevisedHourlyPrecipitation,
+  hasNewOrRevisedPositiveHourlyPrecipitation
 } from "../src/integrations/hourlyPrecipAlpha.js";
 
 const config = {
@@ -74,6 +75,21 @@ describe("shared hourly precipitation alpha", () => {
 
     expect(current).toContain("Positive hourly reports: 0");
     expect(hasNewOrRevisedHourlyPrecipitation(previous, current)).toBe(false);
+  });
+
+  it("can suppress trace-only hourly observations", () => {
+    const now = new Date("2026-08-01T10:05:00Z");
+    const previous = appendHourlyPrecipitationAlpha("Current total: 4.0 mm", [], config, null, now);
+    const current = appendHourlyPrecipitationAlpha(
+      "Current total: 4.0 mm",
+      [{ localDate: "2026-08-01", localTime: "11:00", precipitation: null }],
+      config,
+      previous,
+      now
+    );
+
+    expect(hasNewOrRevisedHourlyPrecipitation(previous, current)).toBe(true);
+    expect(hasNewOrRevisedPositiveHourlyPrecipitation(previous, current)).toBe(false);
   });
 
   it("can keep the first rolling snapshot in an hour to prevent repeated alerts", () => {

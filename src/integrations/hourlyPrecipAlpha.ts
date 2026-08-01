@@ -270,6 +270,16 @@ export function hasNewOrRevisedHourlyPrecipitation(previousValue: string | null,
   return [...current].some(([key, precipitation]) => previous.get(key) !== precipitation);
 }
 
+export function hasNewOrRevisedPositiveHourlyPrecipitation(previousValue: string | null, currentValue: string): boolean {
+  if (!previousValue) {
+    return false;
+  }
+
+  const previous = extractHourlyObservationKeys(previousValue);
+  const current = extractHourlyObservationKeys(currentValue);
+  return [...current].some(([key, precipitation]) => precipitation !== "T" && previous.get(key) !== precipitation);
+}
+
 export function extractOfficialPrecipitationSection(value: string): string {
   return value.split("\nHourly alpha station:", 1)[0]?.trim() ?? value.trim();
 }

@@ -4,7 +4,7 @@ import {
   appendHourlyPrecipitationAlpha,
   extractOfficialPrecipitationSection,
   fetchAviationWeatherHourlyPrecipitation,
-  hasNewOrRevisedHourlyPrecipitation
+  hasNewOrRevisedPositiveHourlyPrecipitation
 } from "./hourlyPrecipAlpha.js";
 import {
   buildNoaaMonthlyPrecipRequestBody,
@@ -63,7 +63,7 @@ export function shouldAlertOnSeattlePrecipChange(previousValue: string | null, c
     return false;
   }
 
-  if (hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)) {
+  if (hasNewOrRevisedPositiveHourlyPrecipitation(previousValue, currentValue)) {
     return true;
   }
 
@@ -73,10 +73,7 @@ export function shouldAlertOnSeattlePrecipChange(previousValue: string | null, c
     return true;
   }
 
-  return (
-    extractLine(previousOfficial, "Latest reported day") !== extractLine(currentOfficial, "Latest reported day") &&
-    extractLine(currentOfficial, "Latest day value") === "T inches"
-  );
+  return false;
 }
 
 function extractLine(value: string, label: string): string | null {
@@ -96,7 +93,7 @@ export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
   getPollIntervalMinutes: () => 1,
-  getPollIntervalReason: () => "1-minute KSEA hourly precipitation alpha watch; zero-hour reports are ignored",
+  getPollIntervalReason: () => "1-minute KSEA hourly precipitation alpha watch; zero and trace-only reports are ignored",
   shouldAlertOnChange: shouldAlertOnSeattlePrecipChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
