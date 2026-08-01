@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildNoaaSeattlePrecipRequestBody,
   extractNoaaSeattlePrecipitationValue,
   getNoaaSeattlePrecipSettings,
   isValidNoaaSeattlePeriod,
@@ -46,7 +47,7 @@ describe("NOAA Seattle precipitation adapter", () => {
     );
 
     expect(value).toContain("Metric: NOAA monthly precipitation");
-    expect(value).toContain("Location: Seattle Area");
+    expect(value).toContain("Location: Seattle City Area");
     expect(value).toContain("Period: 2026-05");
     expect(value).toContain("Reported days: 3/31");
     expect(value).toContain("Total precipitation: 1.23 inches");
@@ -88,5 +89,13 @@ describe("NOAA Seattle precipitation adapter", () => {
   it("polls every minute for KSEA hourly precipitation", () => {
     expect(noaaSeattlePrecipAdapter.getPollIntervalMinutes?.(noaaIntegration)).toBe(1);
     expect(noaaSeattlePrecipAdapter.getPollIntervalReason?.(noaaIntegration)).toContain("zero-hour reports are ignored");
+  });
+
+  it("requests NOAA's Seattle City Area thread rather than the WFO Seattle station", () => {
+    const request = JSON.parse(buildNoaaSeattlePrecipRequestBody({ year: 2026, month: 7 }).get("params") ?? "{}") as {
+      sid?: string;
+    };
+
+    expect(request.sid).toBe("SEAthr 9");
   });
 });

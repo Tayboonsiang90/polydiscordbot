@@ -17,7 +17,7 @@ import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } 
 
 const sourceUrl = "https://www.weather.gov/wrh/climate?wfo=sew";
 const apiUrl = "https://data.rcc-acis.org/StnData";
-const stationId = "SEWthr 9";
+const stationId = "SEAthr 9";
 const hourlyStationId = "KSEA";
 const pacificTimeZone = "America/Los_Angeles";
 const defaultYear = 2026;
@@ -51,7 +51,11 @@ export function getNoaaSeattlePrecipSettings(integration?: Integration): NoaaMon
 }
 
 export function extractNoaaSeattlePrecipitationValue(response: NoaaMonthlyPrecipResponse, settings: NoaaMonthlyPrecipSettings): string {
-  return extractNoaaMonthlyPrecipitationValue(response, settings, "Seattle Area");
+  return extractNoaaMonthlyPrecipitationValue(response, settings, "Seattle City Area");
+}
+
+export function buildNoaaSeattlePrecipRequestBody(settings: NoaaMonthlyPrecipSettings): URLSearchParams {
+  return buildNoaaMonthlyPrecipRequestBody(stationId, settings);
 }
 
 export function shouldAlertOnSeattlePrecipChange(previousValue: string | null, currentValue: string): boolean {
@@ -92,7 +96,7 @@ export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
           "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
           "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
         },
-        body: buildNoaaMonthlyPrecipRequestBody(stationId, settings)
+        body: buildNoaaSeattlePrecipRequestBody(settings)
       }),
       fetchAviationWeatherHourlyPrecipitation({ stationId: hourlyStationId, timeZone: pacificTimeZone, now: observedAt })
     ]);
@@ -114,7 +118,7 @@ export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
         decimals: 2,
         source: hourly.source,
         historyUrl: hourly.historyUrl,
-        sourceNote: "provisional hourly alpha for NOAA's Seattle City Area thread station; official monthly data resolves the market"
+        sourceNote: "provisional KSEA hourly alpha for NOAA's SEAthr Seattle City Area thread; official monthly SEAthr data resolves the market"
       },
       integration?.lastValue ?? null,
       observedAt
