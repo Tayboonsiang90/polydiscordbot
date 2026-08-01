@@ -1,6 +1,12 @@
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
 import {
+  appendHourlyPrecipitationAlpha,
+  extractOfficialPrecipitationSection,
+  fetchAviationWeatherHourlyPrecipitation,
+  hasNewOrRevisedHourlyPrecipitation
+} from "./hourlyPrecipAlpha.js";
+import {
   buildNoaaMonthlyPrecipRequestBody,
   extractNoaaMonthlyPrecipitationValue,
   isValidNoaaMonthlyPrecipPeriod,
@@ -12,6 +18,8 @@ import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } 
 const sourceUrl = "https://www.weather.gov/wrh/climate?wfo=sew";
 const apiUrl = "https://data.rcc-acis.org/StnData";
 const stationId = "SEWthr 9";
+const hourlyStationId = "KSEA";
+const pacificTimeZone = "America/Los_Angeles";
 const defaultYear = 2026;
 const defaultMonth = 5;
 const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
@@ -46,6 +54,16 @@ export function extractNoaaSeattlePrecipitationValue(response: NoaaMonthlyPrecip
   return extractNoaaMonthlyPrecipitationValue(response, settings, "Seattle Area");
 }
 
+export function shouldAlertOnSeattlePrecipChange(previousValue: string | null, currentValue: string): boolean {
+  if (!previousValue) {
+    return false;
+  }
+  return (
+    extractOfficialPrecipitationSection(previousValue) !== extractOfficialPrecipitationSection(currentValue) ||
+    hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)
+  );
+}
+
 export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
   id: "noaa-seattle-precip",
   commandName: "seattleprecip",
@@ -58,31 +76,54 @@ export const noaaSeattlePrecipAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\u2614",
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
+  getPollIntervalMinutes: () => 1,
+  getPollIntervalReason: () => "1-minute KSEA hourly precipitation alpha watch; zero-hour reports are ignored",
+  shouldAlertOnChange: shouldAlertOnSeattlePrecipChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getNoaaSeattlePrecipSettings(integration);
-    const response = await fetchWithTimeout(apiUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-      },
-      body: buildNoaaMonthlyPrecipRequestBody(stationId, settings)
-    });
+    const observedAt = new Date();
+    const [response, hourly] = await Promise.all([
+      fetchWithTimeout(apiUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+        },
+        body: buildNoaaMonthlyPrecipRequestBody(stationId, settings)
+      }),
+      fetchAviationWeatherHourlyPrecipitation({ stationId: hourlyStationId, timeZone: pacificTimeZone, now: observedAt })
+    ]);
 
     if (!response.ok) {
       throw new Error(`NOAA returned HTTP ${response.status}`);
     }
 
     const json = (await response.json()) as NoaaMonthlyPrecipResponse;
-    const value = extractNoaaSeattlePrecipitationValue(json, settings);
+    const officialValue = extractNoaaSeattlePrecipitationValue(json, settings);
+    const value = appendHourlyPrecipitationAlpha(
+      officialValue,
+      hourly.observations,
+      {
+        station: "Seattle-Tacoma International Airport (KSEA)",
+        timeZone: pacificTimeZone,
+        timeZoneLabel: "PT",
+        unit: "inches",
+        decimals: 2,
+        source: hourly.source,
+        historyUrl: hourly.historyUrl,
+        sourceNote: "provisional hourly alpha for NOAA's Seattle City Area thread station; official monthly data resolves the market"
+      },
+      integration?.lastValue ?? null,
+      observedAt
+    );
     return {
       value,
       rawValue: value,
       unit: "monthly precipitation",
-      observedAt: new Date()
+      observedAt
     };
   }
 };

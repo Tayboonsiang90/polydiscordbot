@@ -52,6 +52,13 @@ const precipitationAdapterIds = new Set([
   "noaa-san-francisco-rain",
   "noaa-seattle-precip"
 ]);
+const hourlyPrecipitationAdapterIds = new Set([
+  "hk-precip",
+  "kma-seoul-precip",
+  "met-office-london-precip",
+  "noaa-nyc-precip",
+  "noaa-seattle-precip"
+]);
 const spotifyTop50AdapterIds = new Set(["spotify-top-50-usa", "spotify-top-50-global"]);
 const pythPriceStrikeAdapterIds = new Set([
   "pyth-natural-gas-strikes",
@@ -1568,8 +1575,8 @@ function formatAlertQuickReadFields(
           integration.adapterId === "ornn-h200-index" ||
           integration.adapterId === "ornn-b200-index"
         ? formatOrnnGpuQuickRead(currentValue, previousValue)
-      : integration.adapterId === "noaa-nyc-precip"
-        ? formatNycPrecipitationQuickRead(currentValue, previousValue)
+      : hourlyPrecipitationAdapterIds.has(integration.adapterId)
+        ? formatHourlyPrecipitationQuickRead(currentValue, previousValue)
       : isPrecipitationAdapter(integration.adapterId)
         ? formatPrecipitationQuickRead(currentValue, previousValue)
       : integration.adapterId === "ufo-files"
@@ -1960,15 +1967,23 @@ function formatPrecipitationQuickRead(currentValue: string, previousValue: strin
   return formatGenericQuickRead(previousValue, currentValue);
 }
 
-function formatNycPrecipitationQuickRead(currentValue: string, previousValue: string | null): string {
+function formatHourlyPrecipitationQuickRead(currentValue: string, previousValue: string | null): string {
   const lines = [
-    ...formatPreferredQuickReadLine(currentValue, "Latest positive hour ET"),
+    ...formatPreferredQuickReadLine(currentValue, "Latest positive hour local"),
     ...formatPreferredQuickReadLine(currentValue, "Latest positive hour precipitation"),
     ...formatPreferredQuickReadLine(currentValue, "Hourly alpha total"),
     ...formatPreferredQuickReadLine(currentValue, "Positive hourly reports"),
+    ...formatPreferredQuickReadLine(currentValue, "Hourly alpha station"),
+    ...formatPreferredQuickReadLine(currentValue, "Current total"),
     ...formatPreferredQuickReadLine(currentValue, "Total precipitation"),
     ...formatPreferredQuickReadLine(currentValue, "Latest reported day"),
-    ...formatPreferredQuickReadLine(currentValue, "Latest day value")
+    ...formatPreferredQuickReadLine(currentValue, "Latest day value"),
+    ...formatPreferredQuickReadLine(currentValue, "Reported days"),
+    ...formatPreferredQuickReadLine(currentValue, "Data status"),
+    ...formatPreferredQuickReadLine(currentValue, "Official Daily Extract total"),
+    ...formatPreferredQuickReadLine(currentValue, "Official Met Office row"),
+    ...formatPreferredQuickReadLine(currentValue, "Alpha pending daily reports"),
+    ...formatPreferredQuickReadLine(currentValue, "Yesterday report rainfall")
   ];
 
   return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);

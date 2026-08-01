@@ -1,5 +1,11 @@
 import * as cheerio from "cheerio";
 import { fetchWithTimeout } from "../http.js";
+import {
+  appendHourlyPrecipitationAlpha,
+  extractEnvironmentAgencyHourlyPrecipitation,
+  hasNewOrRevisedHourlyPrecipitation,
+  type HourlyPrecipitationObservation
+} from "./hourlyPrecipAlpha.js";
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
@@ -7,6 +13,9 @@ const sourceUrl = "https://www.metoffice.gov.uk/pub/data/weather/uk/climate/stat
 const infoclimatStationPath = "london-heathrow-londres/valeurs/03772.html";
 const weatherComApiKey = "e1f10a1e78da46f5b10a1e78da96f525";
 const weatherComPwsStationId = "ILONDON513";
+const heathrowHourlyRainfallUrl =
+  "https://environment.data.gov.uk/flood-monitoring/id/stations/247540TP/readings?_sorted&_limit=1000";
+const heathrowHourlyPageUrl = "https://check-for-flooding.service.gov.uk/rainfall-station/247540TP";
 const defaultYear = 2026;
 const defaultMonth = 5;
 const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
@@ -53,6 +62,12 @@ type InfoclimatAlphaSnapshot = {
   totalText: string;
   updatedAt: string | null;
 };
+
+let londonAlphaCache: {
+  key: string;
+  expiresAt: number;
+  value: InfoclimatLondonMonthlyPrecipitation | null;
+} | null = null;
 
 export function getLondonPrecipSettings(integration?: Integration): LondonPrecipSettings {
   if (!integration?.settingsJson) {
@@ -218,10 +233,18 @@ export function extractHeathrowClimateRows(text: string): HeathrowClimateRow[] {
     });
 }
 
+export function extractHeathrowHourlyPrecipitation(
+  payload: unknown,
+  now: Date = new Date()
+): HourlyPrecipitationObservation[] {
+  return extractEnvironmentAgencyHourlyPrecipitation(payload, "Europe/London", now);
+}
+
 export function londonPrecipShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
   return (
     extractCurrentTotalLine(previousValue) !== extractCurrentTotalLine(currentValue) ||
-    extractAlphaCumulativeLine(previousValue) !== extractAlphaCumulativeLine(currentValue)
+    extractAlphaCumulativeLine(previousValue) !== extractAlphaCumulativeLine(currentValue) ||
+    hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)
   );
 }
 
@@ -236,19 +259,23 @@ export const londonPrecipAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\u2614",
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
+  getPollIntervalMinutes: () => 1,
+  getPollIntervalReason: () => "1-minute Heathrow Airport gauge hourly rainfall alpha watch; zero-hour reports are ignored",
   shouldAlertOnChange: londonPrecipShouldAlertOnChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getLondonPrecipSettings(integration);
-    const [response, alpha] = await Promise.all([
+    const observedAt = new Date();
+    const [response, alpha, hourly] = await Promise.all([
       fetchWithTimeout(sourceUrl, {
         headers: {
           "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
         }
       }),
-      fetchInfoclimatLondonPrecipitation(settings)
+      fetchCachedLondonPrecipitationAlpha(settings),
+      fetchHeathrowHourlyPrecipitation(observedAt)
     ]);
 
     if (!response.ok) {
@@ -256,12 +283,28 @@ export const londonPrecipAdapter: WebsiteAdapter = {
     }
 
     const official = extractLondonPrecipitationOfficialValue(await response.text(), settings);
-    const value = buildLondonPrecipitationAlphaValue(official, alpha, settings, integration?.lastValue ?? null);
+    const monthlyValue = buildLondonPrecipitationAlphaValue(official, alpha, settings, integration?.lastValue ?? null);
+    const value = appendHourlyPrecipitationAlpha(
+      monthlyValue,
+      hourly,
+      {
+        station: "Environment Agency Heathrow Airport gauge (247540TP)",
+        timeZone: "Europe/London",
+        timeZoneLabel: "UK time",
+        unit: "mm",
+        decimals: 1,
+        source: heathrowHourlyRainfallUrl,
+        historyUrl: heathrowHourlyPageUrl,
+        sourceNote: "provisional hourly alpha at Heathrow Airport; the Met Office Heathrow monthly row remains the resolution source"
+      },
+      integration?.lastValue ?? null,
+      observedAt
+    );
     return {
       value,
       rawValue: value,
       unit: "monthly precipitation",
-      observedAt: new Date()
+      observedAt
     };
   }
 };
@@ -272,6 +315,31 @@ export function isValidLondonPrecipPeriod(year: number, month: number): boolean 
 
 function buildInfoclimatLondonPrecipitationUrl(year: number): string {
   return `https://www.infoclimat.fr/climatologie/annee/${year}/${infoclimatStationPath}`;
+}
+
+async function fetchHeathrowHourlyPrecipitation(now: Date): Promise<HourlyPrecipitationObservation[]> {
+  const response = await fetchWithTimeout(heathrowHourlyRainfallUrl, {
+    headers: {
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Environment Agency Heathrow rainfall returned HTTP ${response.status}`);
+  }
+  return extractHeathrowHourlyPrecipitation(await response.json(), now);
+}
+
+async function fetchCachedLondonPrecipitationAlpha(
+  settings: LondonPrecipSettings
+): Promise<InfoclimatLondonMonthlyPrecipitation | null> {
+  const key = `${settings.year}-${padMonth(settings.month)}`;
+  if (londonAlphaCache?.key === key && londonAlphaCache.expiresAt > Date.now()) {
+    return londonAlphaCache.value;
+  }
+
+  const value = await fetchInfoclimatLondonPrecipitation(settings);
+  londonAlphaCache = { key, expiresAt: Date.now() + 30 * 60_000, value };
+  return value;
 }
 
 async function fetchInfoclimatLondonPrecipitation(

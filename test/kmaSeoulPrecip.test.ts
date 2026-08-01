@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   extractKmaAsosDailyPrecipitationRows,
+  extractKmaSeoulHourlyPrecipitation,
   extractKmaSeoulPrecipitationValue,
   getKmaSeoulPrecipSettings,
   isKmaSeoulMonthlyPrecipitationPending,
   isValidKmaPeriod,
+  kmaSeoulPrecipAdapter,
   summarizeKmaAsosDailyPrecipitationRows
 } from "../src/integrations/kmaSeoulPrecip.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -61,6 +63,7 @@ describe("KMA Seoul precipitation adapter", () => {
         data: [{ stnId: 108, stnNm: "\uC11C\uC6B8", tma: "2026-06" }]
       })
     ).toBe(true);
+    expect(isKmaSeoulMonthlyPrecipitationPending({ code: "00", data: [] })).toBe(true);
   });
 
   it("extracts KMA ASOS daily precipitation rows from the result page script", () => {
@@ -93,6 +96,26 @@ describe("KMA Seoul precipitation adapter", () => {
       latestDate: null,
       rowCount: 0
     });
+  });
+
+  it("keeps positive hourly rainfall from exact KMA Seoul station 108", () => {
+    expect(
+      extractKmaSeoulHourlyPrecipitation(
+        {
+          items: [
+            { awsStnId: 108, awsStnName: "서울", tm: "202608010800", awsPcpHr1: "2.4" },
+            { awsStnId: 108, awsStnName: "서울", tm: "202608010700", awsPcpHr1: "0" },
+            { awsStnId: 159, awsStnName: "부산", tm: "202608010800", awsPcpHr1: "9.9" }
+          ]
+        },
+        new Date("2026-08-01T00:05:00Z")
+      )
+    ).toEqual([{ localDate: "2026-08-01", localTime: "08:00", precipitation: 2.4 }]);
+  });
+
+  it("polls every minute for Seoul station 108 hourly rainfall", () => {
+    expect(kmaSeoulPrecipAdapter.getPollIntervalMinutes?.(kmaIntegration)).toBe(1);
+    expect(kmaSeoulPrecipAdapter.getPollIntervalReason?.(kmaIntegration)).toContain("zero-hour reports are ignored");
   });
 
   it("reads stored year and month settings", () => {

@@ -1,10 +1,19 @@
 ﻿import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import {
+  appendHourlyPrecipitationAlpha,
+  extractKmaSeoulHourlyPrecipitation as extractKmaHourlyPrecipitation,
+  extractOfficialPrecipitationSection,
+  hasNewOrRevisedHourlyPrecipitation,
+  type HourlyPrecipitationObservation
+} from "./hourlyPrecipAlpha.js";
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 
 const sourceUrl = "https://data.kma.go.kr/climate/RankState/selectRankStatisticsDivisionList.do";
 const ajaxUrl = "https://data.kma.go.kr/climate/RankState/selectRankStatisticsDivisionAjax.do";
 const dailyAsosUrl = "https://data.kma.go.kr/data/grnd/selectAsosRltmList.do?pgmNo=36";
+const hourlyAsosDataUrl = "https://www.weather.go.kr/w/observation/land/aws-obs-data.do";
+const hourlyAsosPageUrl = "https://www.weather.go.kr/w/obs-climate/land/aws-obs.do?stn=108";
 const defaultYear = 2026;
 const defaultMonth = 5;
 const kmaFetchTimeoutMs = 30_000;
@@ -98,7 +107,7 @@ export function isKmaSeoulMonthlyPrecipitationPending(response: KmaResponse): bo
   }
 
   const row = findKmaSeoulMonthlyRow(response);
-  return Boolean(row && !row.sumRn);
+  return !row?.sumRn;
 }
 
 export function extractKmaAsosDailyPrecipitationRows(html: string): KmaDailyPrecipitationRow[] {
@@ -145,6 +154,23 @@ export function summarizeKmaAsosDailyPrecipitationRows(rows: KmaDailyPrecipitati
   };
 }
 
+export function extractKmaSeoulHourlyPrecipitation(
+  payload: unknown,
+  now: Date = new Date()
+): HourlyPrecipitationObservation[] {
+  return extractKmaHourlyPrecipitation(payload, now);
+}
+
+export function shouldAlertOnKmaSeoulPrecipChange(previousValue: string | null, currentValue: string): boolean {
+  if (!previousValue) {
+    return false;
+  }
+  return (
+    extractOfficialPrecipitationSection(previousValue) !== extractOfficialPrecipitationSection(currentValue) ||
+    hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)
+  );
+}
+
 export const kmaSeoulPrecipAdapter: WebsiteAdapter = {
   id: "kma-seoul-precip",
   commandName: "koreaprecip",
@@ -157,44 +183,91 @@ export const kmaSeoulPrecipAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\u2614",
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
+  getPollIntervalMinutes: () => 1,
+  getPollIntervalReason: () => "1-minute KMA Seoul station 108 hourly rainfall watch; zero-hour reports are ignored",
+  shouldAlertOnChange: shouldAlertOnKmaSeoulPrecipChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getKmaSeoulPrecipSettings(integration);
-    const response = await fetchKma(ajaxUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-      },
-      body: buildKmaRequestBody(settings)
-    });
+    const observedAt = new Date();
+    const [response, hourly] = await Promise.all([
+      fetchKma(ajaxUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+        },
+        body: buildKmaRequestBody(settings)
+      }),
+      fetchKmaSeoulHourlyPrecipitation(observedAt)
+    ]);
 
     if (!response.ok) {
       throw new Error(`KMA returned HTTP ${response.status}`);
     }
 
     const json = (await response.json()) as KmaResponse;
-    const value = isKmaSeoulMonthlyPrecipitationPending(json)
+    const officialValue = isKmaSeoulMonthlyPrecipitationPending(json)
       ? await fetchKmaSeoulDailyPrecipitationValue(settings)
       : extractKmaSeoulPrecipitationValue(json, settings);
+    const value = appendHourlyPrecipitationAlpha(
+      officialValue,
+      hourly,
+      {
+        station: "KMA Seoul ASOS station 108",
+        timeZone: "Asia/Seoul",
+        timeZoneLabel: "KST",
+        unit: "mm",
+        decimals: 1,
+        source: hourlyAsosDataUrl,
+        historyUrl: hourlyAsosPageUrl,
+        sourceNote: "official KMA hourly observation at the same Seoul station used by the monthly precipitation series"
+      },
+      integration?.lastValue ?? null,
+      observedAt
+    );
     return {
       value,
       rawValue: value,
       unit: "monthly precipitation",
-      observedAt: new Date()
+      observedAt
     };
   }
 };
 
+async function fetchKmaSeoulHourlyPrecipitation(now: Date): Promise<HourlyPrecipitationObservation[]> {
+  const response = await fetchKma(
+    `${hourlyAsosDataUrl}?${new URLSearchParams({
+      db: "MINDB_60M",
+      tm: formatKmaHourlyQueryTime(now),
+      stnId: "108",
+      sidoCode: "asos",
+      sort: "",
+      config: ""
+    })}`,
+    {
+      headers: {
+        referer: hourlyAsosPageUrl,
+        "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+      }
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`KMA Seoul hourly data returned HTTP ${response.status}`);
+  }
+  return extractKmaSeoulHourlyPrecipitation(await response.json(), now);
+}
+
 async function fetchKmaSeoulDailyPrecipitationValue(settings: KmaSettings): Promise<string> {
   const summary = await fetchKmaSeoulDailyPrecipitationSummary(settings);
   const period = `${settings.year}-${padMonth(settings.month)}`;
+  const hasDailyRows = summary.rowCount > 0;
   return formatKmaSeoulPrecipitationValue({
     period,
-    currentTotal: `${summary.total.toFixed(1)} mm`,
-    dataStatus: "ASOS daily fallback",
+    currentTotal: hasDailyRows ? `${summary.total.toFixed(1)} mm` : "not published yet",
+    dataStatus: hasDailyRows ? "ASOS daily fallback" : "ASOS daily data not published yet",
     reportedDays: String(summary.rowCount),
     latestReportedDay: summary.latestDate ?? "none"
   });
@@ -356,6 +429,19 @@ function buildKmaDailyDateRange(settings: KmaSettings, now = new Date()): { star
 function getKstDate(date: Date): Date {
   const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
   return new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()));
+}
+
+function formatKmaHourlyQueryTime(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}.${values.month}.${values.day} ${values.hour}:00`;
 }
 
 function addUtcDays(date: Date, days: number): Date {

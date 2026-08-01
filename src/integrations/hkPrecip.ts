@@ -1,10 +1,17 @@
 ﻿import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 import { fetchWithTimeout } from "../http.js";
+import {
+  appendHourlyPrecipitationAlpha,
+  extractHkoHourlyPrecipitation,
+  hasNewOrRevisedHourlyPrecipitation,
+  type HourlyPrecipitationObservation
+} from "./hourlyPrecipAlpha.js";
 import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 
 const sourceUrl = "https://www.weather.gov.hk/en/cis/dailyExtract.htm";
 const dataBaseUrl = "https://www.weather.gov.hk/cis/dailyExtract";
 const alphaDailyReportUrl = "https://www.hko.gov.hk/textonly/v2/pastwx/ryestxt.htm";
+const hourlyRainfallUrl = "https://data.weather.gov.hk/weatherAPI/opendata/hourlyRainfall.php?lang=en";
 const defaultYear = 2026;
 const defaultMonth = 5;
 const hkoFetchTimeoutMs = 30_000;
@@ -137,11 +144,12 @@ export function buildHkPrecipitationAlphaValue(
   const alphaRainfall = alphaObservations.reduce((sum, observation) => sum + observation.rainfall, 0);
   const hasAlpha = official.total !== null && alphaObservations.length > 0;
   const alphaTotal = hasAlpha ? (official.total! + alphaRainfall).toFixed(1) : null;
+  const currentTotal = alphaTotal ? `${alphaTotal} mm` : official.total === null ? "not published yet" : `${official.totalText} mm`;
 
   return [
-    `Current total: ${alphaTotal ?? official.totalText} mm (${period})`,
-    `Data status: ${hasAlpha ? "alpha daily reports added" : "official daily extract"}`,
-    `Official Daily Extract total: ${official.totalText} mm`,
+    `Current total: ${currentTotal} (${period})`,
+    `Data status: ${hasAlpha ? "alpha daily reports added" : official.total === null ? "not published yet" : "official daily extract"}`,
+    `Official Daily Extract total: ${official.total === null ? "not published yet" : `${official.totalText} mm`}`,
     `Official latest day: ${official.latestDay ?? "unknown"}`,
     ...(hasAlpha ? [`Alpha pending daily reports: ${formatAlphaObservations(alphaObservations)}`] : []),
     `Yesterday report rainfall: ${yesterday ? `${yesterday.rainfallText} mm (${yesterday.yesterdayDate})` : "not available"}`,
@@ -150,7 +158,17 @@ export function buildHkPrecipitationAlphaValue(
 }
 
 export function hkPrecipShouldAlertOnChange(previousValue: string | null, currentValue: string): boolean {
-  return extractCurrentTotalLine(previousValue) !== extractCurrentTotalLine(currentValue);
+  return (
+    extractCurrentTotalLine(previousValue) !== extractCurrentTotalLine(currentValue) ||
+    hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)
+  );
+}
+
+export function extractHkoObservatoryHourlyPrecipitation(
+  payload: unknown,
+  now: Date = new Date()
+): HourlyPrecipitationObservation[] {
+  return extractHkoHourlyPrecipitation(payload, now);
 }
 
 export const hkPrecipAdapter: WebsiteAdapter = {
@@ -164,29 +182,55 @@ export const hkPrecipAdapter: WebsiteAdapter = {
   alertRoleEmoji: "\u2614",
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
+  getPollIntervalMinutes: () => 1,
+  getPollIntervalReason: () => "1-minute HKO Observatory past-hour rainfall watch; one positive alert per clock hour and zero reports are ignored",
   shouldAlertOnChange: hkPrecipShouldAlertOnChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
   },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getHkPrecipSettings(integration);
-    const [response, yesterdayReport] = await Promise.all([
+    const observedAt = new Date();
+    const [response, yesterdayReport, hourly] = await Promise.all([
       fetchHkoDailyExtractWithRetry(buildHkoDailyExtractUrl(settings)),
-      fetchHkoYesterdayRainfallWithRetry()
+      fetchHkoYesterdayRainfallWithRetry(),
+      fetchHkoHourlyRainfall(observedAt)
     ]);
 
-    if (!response.ok) {
+    if (!response.ok && response.status !== 404) {
       throw new Error(`HKO returned HTTP ${response.status}`);
     }
 
-    const json = (await response.json()) as HkoDailyExtractResponse;
-    const official = extractHkPrecipitationOfficialValue(json, settings);
-    const value = buildHkPrecipitationAlphaValue(official, yesterdayReport, settings, integration?.lastValue ?? null);
+    const official = response.ok
+      ? extractHkPrecipitationOfficialValue((await response.json()) as HkoDailyExtractResponse, settings)
+      : {
+          totalText: "not published yet",
+          total: null,
+          latestDay: null,
+          value: `not published yet (${settings.year}-${padMonth(settings.month)})`
+        };
+    const dailyValue = buildHkPrecipitationAlphaValue(official, yesterdayReport, settings, integration?.lastValue ?? null);
+    const value = appendHourlyPrecipitationAlpha(
+      dailyValue,
+      hourly,
+      {
+        station: "Hong Kong Observatory AWS (RF023)",
+        timeZone: "Asia/Hong_Kong",
+        timeZoneLabel: "HKT",
+        unit: "mm",
+        decimals: 1,
+        source: hourlyRainfallUrl,
+        preserveFirstValuePerHour: true,
+        sourceNote: "first positive past-hour snapshot per clock hour; provisional HKO AWS gauge differs from the official climatological gauge"
+      },
+      integration?.lastValue ?? null,
+      observedAt
+    );
     return {
       value,
       rawValue: value,
       unit: "monthly precipitation",
-      observedAt: new Date()
+      observedAt
     };
   }
 };
@@ -234,6 +278,18 @@ async function fetchHkoYesterdayRainfallWithRetry(): Promise<HkoYesterdayRainfal
   } catch {
     return null;
   }
+}
+
+async function fetchHkoHourlyRainfall(now: Date): Promise<HourlyPrecipitationObservation[]> {
+  const response = await fetchWithTimeout(hourlyRainfallUrl, {
+    headers: {
+      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`HKO hourly rainfall returned HTTP ${response.status}`);
+  }
+  return extractHkoObservatoryHourlyPrecipitation(await response.json(), now);
 }
 
 function delay(ms: number): Promise<void> {

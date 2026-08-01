@@ -19,13 +19,19 @@ export function extractNoaaMonthlyPrecipitationValue(
 
   const period = `${settings.year}-${padMonth(settings.month)}`;
   const rows = normalizeDailyRows(response.data ?? [], period);
-  if (rows.length === 0) {
-    throw new Error(`Could not find ${locationLabel} monthly precipitation in the NOAA response`);
-  }
-
   const reportedRows = rows.filter((row) => row.rawValue !== "M");
   if (reportedRows.length === 0) {
-    throw new Error(`Could not find ${locationLabel} monthly precipitation in the NOAA response`);
+    return [
+      "Metric: NOAA monthly precipitation",
+      `Location: ${locationLabel}`,
+      `Period: ${period}`,
+      "Status: not published yet",
+      `Reported days: 0/${lastDayOfMonth(settings)}`,
+      "Total precipitation: not published yet",
+      "Latest reported day: none",
+      "Latest day value: none",
+      "Daily values: none"
+    ].join("\n");
   }
 
   const total = reportedRows.reduce((sum, row) => sum + row.numericValue, 0);

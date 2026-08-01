@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildHkPrecipitationAlphaValue,
+  extractHkoObservatoryHourlyPrecipitation,
   extractHkoYesterdayRainfall,
   extractHkPrecipitationValue,
   extractHkPrecipitationOfficialValue,
   getHkPrecipSettings,
+  hkPrecipAdapter,
   hkPrecipShouldAlertOnChange,
   isValidHkPrecipPeriod
 } from "../src/integrations/hkPrecip.js";
@@ -186,6 +188,29 @@ describe("HKO Hong Kong precipitation adapter", () => {
     expect(hkPrecipShouldAlertOnChange("Current total: 214.0 mm (2026-05)", "Current total: 215.0 mm (2026-05)")).toBe(
       true
     );
+  });
+
+  it("groups positive RF023 past-hour snapshots into one clock-hour key", () => {
+    const payload = {
+      obsTime: "2026-08-01T08:00:00+08:00",
+      hourlyRainfall: [
+        { automaticWeatherStation: "Hong Kong Observatory", automaticWeatherStationID: "RF023", value: "8", unit: "mm" }
+      ]
+    };
+    expect(extractHkoObservatoryHourlyPrecipitation(payload, new Date("2026-08-01T00:05:00Z"))).toEqual([
+      { localDate: "2026-08-01", localTime: "08:00", precipitation: 8 }
+    ]);
+    expect(
+      extractHkoObservatoryHourlyPrecipitation(
+        { ...payload, obsTime: "2026-08-01T08:15:00+08:00" },
+        new Date("2026-08-01T00:16:00Z")
+      )
+    ).toEqual([{ localDate: "2026-08-01", localTime: "08:00", precipitation: 8 }]);
+  });
+
+  it("polls every minute for the exact-station hourly alpha", () => {
+    expect(hkPrecipAdapter.getPollIntervalMinutes?.(hkPrecipIntegration)).toBe(1);
+    expect(hkPrecipAdapter.getPollIntervalReason?.(hkPrecipIntegration)).toContain("zero reports are ignored");
   });
 
   it("reads stored year and month settings", () => {

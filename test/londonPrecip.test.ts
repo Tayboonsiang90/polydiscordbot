@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildLondonPrecipitationAlphaValue,
   extractHeathrowClimateRows,
+  extractHeathrowHourlyPrecipitation,
   extractInfoclimatLondonMonthlyPrecipitation,
   extractLondonPrecipitationOfficialValue,
   extractLondonPrecipitationValue,
   extractWeatherComPwsDailyPrecipitation,
   getLondonPrecipSettings,
   isValidLondonPrecipPeriod,
+  londonPrecipAdapter,
   londonPrecipShouldAlertOnChange
 } from "../src/integrations/londonPrecip.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -166,6 +168,27 @@ describe("Met Office London precipitation adapter", () => {
       )
     ).toBe(false);
     expect(londonPrecipShouldAlertOnChange("Current total: not published yet", "Current total: 42.6 mm")).toBe(true);
+  });
+
+  it("aggregates exact Heathrow Airport gauge quarter-hours", () => {
+    expect(
+      extractHeathrowHourlyPrecipitation(
+        {
+          items: [
+            { dateTime: "2026-08-01T09:15:00Z", value: 0.2 },
+            { dateTime: "2026-08-01T09:30:00Z", value: 0 },
+            { dateTime: "2026-08-01T09:45:00Z", value: 0.3 },
+            { dateTime: "2026-08-01T10:00:00Z", value: 0.1 }
+          ]
+        },
+        new Date("2026-08-01T10:05:00Z")
+      )
+    ).toEqual([{ localDate: "2026-08-01", localTime: "11:00", precipitation: 0.6 }]);
+  });
+
+  it("polls every minute while caching the slower monthly alpha", () => {
+    expect(londonPrecipAdapter.getPollIntervalMinutes?.(londonIntegration)).toBe(1);
+    expect(londonPrecipAdapter.getPollIntervalReason?.(londonIntegration)).toContain("zero-hour reports are ignored");
   });
 
   it("reads stored year and month settings", () => {

@@ -40,8 +40,9 @@ const noaaIntegration: Integration = {
 describe("NOAA NYC precipitation adapter", () => {
   const currentEtDay = new Date("2026-08-01T03:30:00.000Z");
   const firstRainObservation: NycHourlyPrecipObservation = {
-    observedAt: new Date("2026-07-31T22:51:00.000Z"),
-    precipitationInches: 0.03
+    localDate: "2026-07-31",
+    localTime: "18:51",
+    precipitation: 0.03
   };
 
   it("extracts monthly precipitation from NOAA daily rows", () => {
@@ -136,26 +137,25 @@ describe("NOAA NYC precipitation adapter", () => {
     const observations = extractNycHourlyPrecipObservationsFromHtml(html, currentEtDay);
 
     expect(observations).toHaveLength(2);
-    expect(observations[0]).toMatchObject({ precipitationInches: null });
-    expect(observations[1]).toMatchObject({ precipitationInches: 0.03 });
-    expect(observations[1]?.observedAt.toISOString()).toBe("2026-07-31T22:51:00.000Z");
+    expect(observations[0]).toEqual({ localDate: "2026-07-31", localTime: "16:51", precipitation: null });
+    expect(observations[1]).toEqual({ localDate: "2026-07-31", localTime: "18:51", precipitation: 0.03 });
   });
 
   it("adds readable hourly alpha totals and the latest positive hour", () => {
     const value = appendNycHourlyPrecipitationAlpha(
       "Total precipitation: 1.25 inches",
       [
-        { observedAt: new Date("2026-07-31T20:51:00.000Z"), precipitationInches: null },
+        { localDate: "2026-07-31", localTime: "16:51", precipitation: null },
         firstRainObservation
       ],
       "https://example.com/hourly",
       currentEtDay
     );
 
-    expect(value).toContain("Hourly alpha date ET: 2026-07-31");
+    expect(value).toContain("Hourly alpha date local: 2026-07-31 (ET)");
     expect(value).toContain("Hourly alpha total: 0.03 inches (plus 1 trace hour)");
     expect(value).toContain("Positive hourly reports: 2");
-    expect(value).toContain("Latest positive hour ET: Jul 31, 2026, 6:51 PM EDT");
+    expect(value).toContain("Latest positive hour local: 2026-07-31 18:51 ET");
     expect(value).toContain("Latest positive hour precipitation: 0.03 inches");
   });
 
@@ -168,8 +168,9 @@ describe("NOAA NYC precipitation adapter", () => {
       currentEtDay
     );
     const secondObservation = {
-      observedAt: new Date("2026-07-31T23:51:00.000Z"),
-      precipitationInches: 0.02
+      localDate: "2026-07-31",
+      localTime: "19:51",
+      precipitation: 0.02
     };
     const withNewHour = appendNycHourlyPrecipitationAlpha(
       officialValue,
@@ -179,7 +180,7 @@ describe("NOAA NYC precipitation adapter", () => {
     );
     const withRevision = appendNycHourlyPrecipitationAlpha(
       officialValue,
-      [{ ...firstRainObservation, precipitationInches: 0.04 }],
+      [{ ...firstRainObservation, precipitation: 0.04 }],
       "https://example.com/hourly",
       currentEtDay
     );

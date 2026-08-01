@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   extractNoaaSeattlePrecipitationValue,
   getNoaaSeattlePrecipSettings,
-  isValidNoaaSeattlePeriod
+  isValidNoaaSeattlePeriod,
+  noaaSeattlePrecipAdapter
 } from "../src/integrations/noaaSeattlePrecip.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -69,6 +70,12 @@ describe("NOAA Seattle precipitation adapter", () => {
     expect(value).toContain("Latest day value: T inches");
   });
 
+  it("keeps hourly polling usable before the first monthly row is published", () => {
+    const value = extractNoaaSeattlePrecipitationValue({ data: [] }, { year: 2026, month: 8 });
+    expect(value).toContain("Status: not published yet");
+    expect(value).toContain("Total precipitation: not published yet");
+  });
+
   it("reads stored year and month settings", () => {
     expect(getNoaaSeattlePrecipSettings(noaaIntegration)).toEqual({ year: 2026, month: 6 });
   });
@@ -76,5 +83,10 @@ describe("NOAA Seattle precipitation adapter", () => {
   it("validates supported periods", () => {
     expect(isValidNoaaSeattlePeriod(2026, 5)).toBe(true);
     expect(isValidNoaaSeattlePeriod(2026, 13)).toBe(false);
+  });
+
+  it("polls every minute for KSEA hourly precipitation", () => {
+    expect(noaaSeattlePrecipAdapter.getPollIntervalMinutes?.(noaaIntegration)).toBe(1);
+    expect(noaaSeattlePrecipAdapter.getPollIntervalReason?.(noaaIntegration)).toContain("zero-hour reports are ignored");
   });
 });
