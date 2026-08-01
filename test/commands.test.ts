@@ -736,7 +736,7 @@ describe("adapter commands", () => {
         "Monitoring high-water: $10,005.0M ($10.005B)",
         "Source time: Jul 31, 2026, 4:00:00 PM ET"
       ].join("\n"),
-      expected: ["**Market cap:** $10,005.0M", "**Strike hit:** $10B", "**Next open strike:** $12B"]
+      expected: ["**Market cap:** $9,900.0M", "→ **$10,005.0M", "**Strike hit:** $10B", "**Next open strike:** $12B"]
     },
     {
       adapterId: "spotify-top-artist-monthly",

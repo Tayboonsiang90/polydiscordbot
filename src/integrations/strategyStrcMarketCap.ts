@@ -48,7 +48,7 @@ export const strategyStrcMarketCapAdapter: WebsiteAdapter = {
   alertRoleName: "STRC Market Cap Alerts",
   alertRoleEmoji: "\uD83D\uDCC8",
   getPollIntervalMinutes: () => 0.25,
-  getPollIntervalReason: () => "Fixed 15-second official STRC market-cap strike watch; ordinary value changes do not alert",
+  getPollIntervalReason: () => "Fixed 15-second official STRC market-cap watch; alerts whenever the reported market cap changes",
   getErrorNoticeWindowMinutes: () => 30,
   shouldAlertOnChange: shouldAlertOnStrategyStrcMarketCapChange,
   async refreshSettings(integration: Integration): Promise<string> {
@@ -179,9 +179,10 @@ export function formatStrategyStrcMarketCapValue(
   ].join("\n");
 }
 
-export function shouldAlertOnStrategyStrcMarketCapChange(_previousValue: string | null, currentValue: string): boolean {
-  const newlyHit = extractLine(currentValue, "Newly hit strikes");
-  return Boolean(newlyHit && newlyHit !== "none");
+export function shouldAlertOnStrategyStrcMarketCapChange(previousValue: string | null, currentValue: string): boolean {
+  const previousMarketCap = parseStoredMarketCap(previousValue);
+  const currentMarketCap = parseStoredMarketCap(currentValue);
+  return previousMarketCap !== null && currentMarketCap !== null && previousMarketCap !== currentMarketCap;
 }
 
 async function fetchStrategyStrcStrikes(polymarketUrl: string): Promise<number[]> {
@@ -215,6 +216,12 @@ function parseStoredStrikes(previousValue: string | null, polymarketUrl: string)
     return [];
   }
   return parseStrikeList(extractLine(previousValue, "Tracked strikes"));
+}
+
+function parseStoredMarketCap(value: string | null): number | null {
+  const marketCap = extractLine(value, "Market cap");
+  const match = marketCap?.match(/^\$([\d,.]+)M\b/);
+  return match ? parseNumber(match[1]) : null;
 }
 
 function parseStrikeList(value: string | null): number[] {

@@ -44,7 +44,7 @@ describe("Strategy STRC market cap adapter", () => {
     ).toEqual([10_000, 12_000]);
   });
 
-  it("alerts once when a strike is reached and preserves the high-water", () => {
+  it("alerts whenever market cap changes and preserves the high-water", () => {
     const baseline = formatStrategyStrcMarketCapValue(
       {
         marketCapMillions: 9358,
@@ -88,7 +88,14 @@ describe("Strategy STRC market cap adapter", () => {
     expect(shouldAlertOnStrategyStrcMarketCapChange(baseline, crossing)).toBe(true);
     expect(pullback).toContain("Newly hit strikes: none");
     expect(pullback).toContain("Monitoring high-water: $10,005.0M ($10.005B)");
-    expect(shouldAlertOnStrategyStrcMarketCapChange(crossing, pullback)).toBe(false);
+    expect(shouldAlertOnStrategyStrcMarketCapChange(crossing, pullback)).toBe(true);
+    expect(
+      shouldAlertOnStrategyStrcMarketCapChange(
+        pullback,
+        pullback.replace(/^Source time: .+$/m, "Source time: Aug 01, 2026, 11:15:00 AM ET")
+      )
+    ).toBe(false);
+    expect(shouldAlertOnStrategyStrcMarketCapChange(null, baseline)).toBe(false);
   });
 
   it("defines standard monitor metadata", () => {

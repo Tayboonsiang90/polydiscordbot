@@ -1610,7 +1610,7 @@ function formatAlertQuickReadFields(
       : integration.adapterId === "pump-fun-buybacks"
         ? formatPumpFunBuybacksQuickRead(currentValue)
       : integration.adapterId === "strategy-strc-market-cap"
-        ? formatStrategyStrcMarketCapQuickRead(currentValue)
+        ? formatStrategyStrcMarketCapQuickRead(currentValue, previousValue)
       : integration.adapterId === "isw-ukraine-map"
         ? formatIswUkraineMapQuickRead(currentValue)
       : integration.adapterId === "free-app-store" || integration.adapterId === "paid-app-store"
@@ -1709,11 +1709,20 @@ function formatPumpFunBuybacksQuickRead(currentValue: string): string {
   return lines.join("\n");
 }
 
-function formatStrategyStrcMarketCapQuickRead(currentValue: string): string {
+function formatStrategyStrcMarketCapQuickRead(currentValue: string, previousValue: string | null): string {
+  const currentMarketCap = extractValueLine(currentValue, "Market cap");
+  const previousMarketCap = extractValueLine(previousValue ?? "", "Market cap");
   const newlyHit = extractValueLine(currentValue, "Newly hit strikes");
   const lines = [
-    ...formatPreferredQuickReadLine(currentValue, "Market cap"),
+    ...(currentMarketCap
+      ? [
+          `**Market cap:** ${previousMarketCap && previousMarketCap !== currentMarketCap
+            ? `${previousMarketCap} → **${currentMarketCap}**`
+            : currentMarketCap}`
+        ]
+      : []),
     ...(newlyHit && newlyHit !== "none" ? [`**Strike hit:** ${newlyHit}`] : []),
+    ...formatPreferredQuickReadLine(currentValue, "Daily change"),
     ...formatPreferredQuickReadLine(currentValue, "Next open strike"),
     ...formatPreferredQuickReadLine(currentValue, "Monitoring high-water"),
     ...formatPreferredQuickReadLine(currentValue, "Source time")
