@@ -1595,6 +1595,8 @@ function formatAlertQuickReadFields(
         ? formatMtWashingtonWindQuickRead(currentValue, previousValue)
       : integration.adapterId === "paris-heat-wave"
         ? formatParisHeatQuickRead(currentValue, previousValue)
+      : integration.adapterId === "jma-typhoon-dolphin"
+        ? formatJmaTyphoonDolphinQuickRead(currentValue, previousValue)
       : earthquakeCountAdapterIds.has(integration.adapterId)
         ? formatEarthquakeCountQuickRead(currentValue, previousValue)
       : earthquakeSevenAdapterIds.has(integration.adapterId)
@@ -2108,6 +2110,27 @@ function formatParisHeatQuickRead(currentValue: string, previousValue: string | 
     ...formatPreferredQuickReadLine(currentValue, "Longest qualifying streak"),
     ...formatPreferredQuickReadLine(currentValue, "Qualifying days"),
     ...formatPreferredQuickReadLine(currentValue, "Fetched through")
+  ];
+  return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
+}
+
+function formatJmaTyphoonDolphinQuickRead(currentValue: string, previousValue: string | null): string {
+  const currentCenter = extractValueLine(currentValue, "Current center");
+  const previousCenter = extractValueLine(previousValue ?? "", "Current center");
+  const lines = [
+    ...formatPreferredQuickReadLine(currentValue, "Outcome watch"),
+    ...(currentCenter
+      ? [
+          `**Current center:** ${previousCenter && previousCenter !== currentCenter
+            ? `${previousCenter} → **${currentCenter}**`
+            : currentCenter}`
+        ]
+      : []),
+    ...formatPreferredQuickReadLine(currentValue, "JMA location"),
+    ...formatPreferredQuickReadLine(currentValue, "Current class"),
+    ...formatPreferredQuickReadLine(currentValue, "Sustained winds"),
+    ...formatPreferredQuickReadLine(currentValue, "Movement"),
+    ...formatPreferredQuickReadLine(currentValue, "Advisory issued")
   ];
   return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);
 }

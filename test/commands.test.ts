@@ -678,6 +678,20 @@ describe("adapter commands", () => {
       expected: ["**Status:** qualifying days found", "**Longest qualifying streak:**", "**Fetched through:** 2026-07-30"]
     },
     {
+      adapterId: "jma-typhoon-dolphin",
+      previousValue: "Current center: 20.5°N, 158.0°E",
+      currentValue: [
+        "Outcome watch: MONITORING - latest JMA advisory has no automated Chinese-land location-label match",
+        "Current center: 21.1°N, 157.2°E",
+        "JMA location: Near Minamitorishima (南鳥島近海)",
+        "Current class: TY (Very strong / 非常に強い)",
+        "Sustained winds: 180 km/h / 100 kt",
+        "Movement: WNW / 西北西 at 20 km/h",
+        "Advisory issued: Jul 31, 2026, 11:45 PM ET"
+      ].join("\n"),
+      expected: ["**Outcome watch:** MONITORING", "20.5°N, 158.0°E → **21.1°N, 157.2°E**", "**Current class:** TY"]
+    },
+    {
       adapterId: "usgs-earthquakes",
       previousValue: "Total earthquakes: 10",
       currentValue: [

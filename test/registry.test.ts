@@ -135,6 +135,7 @@ const expectedCommandIds = [
   ["spotifyusa", "spotify-top-50-usa"],
   ["strategybtc", "strategy-bitcoin-purchases"],
   ["strcmarketcap", "strategy-strc-market-cap"],
+  ["typhoondolphin", "jma-typhoon-dolphin"],
   ["tesla", "tesla-deliveries"],
   ["wcticket", "ticketdata-world-cup-final"],
   ["trumpgetty", "trump-getty-photos"],

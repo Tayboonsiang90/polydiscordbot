@@ -48,6 +48,7 @@ import { hkPrecipAdapter } from "./hkPrecip.js";
 import { hendonMobMoneyListAdapter } from "./hendonMobMoneyList.js";
 import { iswUkraineMapAdapter } from "./iswUkraineMap.js";
 import { ismServicesPmiAdapter } from "./ismServicesPmi.js";
+import { jmaTyphoonDolphinAdapter } from "./jmaTyphoonDolphin.js";
 import { kaitoMindshareAdapter } from "./kaitoMindshare.js";
 import { kmaSeoulPrecipAdapter } from "./kmaSeoulPrecip.js";
 import { londonPrecipAdapter } from "./londonPrecip.js";
@@ -188,6 +189,7 @@ const adapterEntries: Array<readonly [string, WebsiteAdapter]> = [
   [hkPrecipAdapter.id, hkPrecipAdapter],
   [iswUkraineMapAdapter.id, iswUkraineMapAdapter],
   [ismServicesPmiAdapter.id, ismServicesPmiAdapter],
+  [jmaTyphoonDolphinAdapter.id, jmaTyphoonDolphinAdapter],
   [kaitoMindshareAdapter.id, kaitoMindshareAdapter],
   [kpopSongReleasesAdapter.id, kpopSongReleasesAdapter],
   [kmaSeoulPrecipAdapter.id, kmaSeoulPrecipAdapter],
