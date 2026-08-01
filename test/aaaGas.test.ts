@@ -107,6 +107,7 @@ describe("extractAaaRegularGasCurrentAvg", () => {
         formatAaaRegularGasValue("4.098")
       )
     ).toBe(false);
+    expect(aaaRegularGasAdapter.alertOnChangeDuringMarketRollover).toBe(true);
   });
 
   it("auto-discovers the active end-of-month gas market", async () => {

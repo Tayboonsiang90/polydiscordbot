@@ -65,6 +65,7 @@ export const aaaRegularGasAdapter: WebsiteAdapter = {
   defaultChannelName: "aaa-regular-gas",
   alertRoleName: "AAA Gas Alerts",
   alertRoleEmoji: "\u26fd",
+  alertOnChangeDuringMarketRollover: true,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshAaaGasPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
   },

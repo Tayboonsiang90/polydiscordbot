@@ -113,6 +113,21 @@ describe("market rollover", () => {
     ).toBe(false);
   });
 
+  it("allows source-continuous monitors to alert during market rollover", () => {
+    expect(
+      shouldRecordValueChange(
+        "Market price: $4.09 per gallon",
+        "Market price: $4.10 per gallon",
+        {
+          previousPolymarketUrl: "https://polymarket.com/event/will-gas-hit-by-end-of-july",
+          currentPolymarketUrl: "https://polymarket.com/event/will-gas-hit-by-end-of-august"
+        },
+        undefined,
+        true
+      )
+    ).toBe(true);
+  });
+
   it("reports a rollover when the active queued Polymarket URL changes", () => {
     const database = createTestDatabase();
     const previousUrl = "https://polymarket.com/event/how-many-ships-transit-the-strait-of-hormuz-week-of-june-8";

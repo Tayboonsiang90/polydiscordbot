@@ -340,6 +340,7 @@ export type WebsiteAdapter = {
   getErrorNoticeWindowMinutes?(integration: Integration): number;
   maxEventPostAgeMinutes?: number;
   recheckLatestEventPostUntilAlerted?: boolean;
+  alertOnChangeDuringMarketRollover?: boolean;
   shouldAlertOnChange?(previousValue: string | null, currentValue: string): boolean;
   upsertPolymarketMarket?(
     integration: Integration,

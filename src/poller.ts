@@ -130,9 +130,14 @@ export function shouldRecordValueChange(
   previousValue: string | null,
   currentValue: string,
   marketRollover: MarketRollover | null,
-  shouldAlertOnChange?: (previousValue: string | null, currentValue: string) => boolean
+  shouldAlertOnChange?: (previousValue: string | null, currentValue: string) => boolean,
+  alertOnChangeDuringMarketRollover = false
 ): boolean {
-  return !marketRollover && hasValueChanged(previousValue, currentValue) && (shouldAlertOnChange?.(previousValue, currentValue) ?? true);
+  return (
+    (!marketRollover || alertOnChangeDuringMarketRollover) &&
+    hasValueChanged(previousValue, currentValue) &&
+    (shouldAlertOnChange?.(previousValue, currentValue) ?? true)
+  );
 }
 
 export async function checkIntegration(database: BotDatabase, integration: Integration): Promise<CheckResult> {
@@ -154,7 +159,13 @@ export async function checkIntegration(database: BotDatabase, integration: Integ
   const detectedAt = new Date();
   const previousValue = integration.lastValue;
   const previousCheckedAt = integration.lastCheckedAt;
-  const changed = shouldRecordValueChange(previousValue, adapterValue.value, marketRollover, adapter.shouldAlertOnChange);
+  const changed = shouldRecordValueChange(
+    previousValue,
+    adapterValue.value,
+    marketRollover,
+    adapter.shouldAlertOnChange,
+    adapter.alertOnChangeDuringMarketRollover
+  );
   const updatedIntegration = database.recordCheck(integration.id, adapterValue.value, adapterValue.observedAt, changed);
   if (marketRollover) {
     database.recordUpdateLog({
