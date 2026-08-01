@@ -5,8 +5,10 @@ import {
   extractArenaAiLeaderboardRows,
   extractArenaAiTopModels,
   extractArenaAiTopModelsValue,
-  formatArenaAiLeaderboardValue
+  formatArenaAiLeaderboardValue,
+  seedArenaPolymarketMarkets
 } from "../src/integrations/arenaAiLeaderboard.js";
+import type { Integration } from "../src/integrations/types.js";
 
 describe("Arena AI leaderboard parsing", () => {
   const sampleHtml = `
@@ -149,6 +151,67 @@ describe("Arena AI leaderboard parsing", () => {
   it("seeds the current August Code Arena WebDev market first", () => {
     expect(arenaAiCodeWebdevAdapter.defaultPolymarketUrl).toBe(
       "https://polymarket.com/event/which-company-has-the-best-code-arena-webdev-ai-model-end-of-august-20260716213053775"
+    );
+  });
+
+  it("does not overwrite Gamma dates and oscillate between overlapping monthly markets", () => {
+    const augustUrl = "https://polymarket.com/event/which-company-has-the-best-text-to-image-ai-end-of-august-20260716212635678";
+    const septemberUrl = "https://polymarket.com/event/which-company-has-the-best-text-to-image-ai-end-of-september-20260717133742993";
+    const integration: Integration = {
+      id: 1,
+      guildId: "guild",
+      channelId: "channel",
+      adapterId: "arena-ai-text-to-image",
+      displayName: "Arena AI Text-to-Image",
+      sourceUrl: "https://arena.ai/leaderboard/text-to-image",
+      polymarketUrl: augustUrl,
+      alertRoleId: null,
+      roleMessageId: null,
+      roleChannelId: null,
+      roleEmoji: null,
+      settingsJson: JSON.stringify({
+        polymarketMarkets: [
+          {
+            url: augustUrl,
+            slug: "which-company-has-the-best-text-to-image-ai-end-of-august-20260716212635678",
+            startAt: "2026-07-17T02:58:03.006Z",
+            endAt: "2026-08-31T23:59:00.000Z",
+            addedAt: "2026-07-17T03:00:00.000Z"
+          },
+          {
+            url: septemberUrl,
+            slug: "which-company-has-the-best-text-to-image-ai-end-of-september-20260717133742993",
+            startAt: "2026-07-20T23:15:27.794Z",
+            endAt: "2026-09-30T23:59:00.000Z",
+            addedAt: "2026-07-20T23:16:00.000Z"
+          }
+        ]
+      }),
+      pollIntervalMinutes: 60,
+      status: "active",
+      lastValue: null,
+      lastCheckedAt: null,
+      lastChangedAt: null,
+      snapshotValue: null,
+      snapshotCheckedAt: null,
+      snapshotDate: null,
+      createdAt: "2026-07-17T03:00:00.000Z",
+      updatedAt: "2026-07-31T00:00:00.000Z"
+    };
+    const now = new Date("2026-08-01T01:18:00.000Z");
+
+    const first = seedArenaPolymarketMarkets(integration, [augustUrl], now);
+    const second = seedArenaPolymarketMarkets(
+      { ...integration, settingsJson: first.settingsJson, polymarketUrl: first.activeUrl },
+      [augustUrl],
+      new Date("2026-08-01T01:19:00.000Z")
+    );
+    const markets = JSON.parse(second.settingsJson ?? "{}").polymarketMarkets as Array<{ slug: string; startAt: string }>;
+
+    expect(first.activeUrl).toBe(augustUrl);
+    expect(second.activeUrl).toBe(augustUrl);
+    expect(markets.find((market) => market.slug.includes("end-of-august"))?.startAt).toBe(
+      "2026-07-17T02:58:03.006Z"
     );
   });
 });

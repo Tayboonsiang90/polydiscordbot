@@ -1,7 +1,9 @@
 import * as cheerio from "cheerio";
 import type { AnyNode } from "domhandler";
 import { fetchWithTimeout } from "../http.js";
+import { getPolymarketSlug } from "../marketEnd.js";
 import { resolveIntegrationPolymarketQueue, upsertPolymarketQueueUrl } from "../polymarketQueue.js";
+import { parseSettingsJson } from "../settingsJson.js";
 import {
   refreshGammaPolymarketQueue,
   upsertGammaPolymarketQueueUrl,
@@ -336,7 +338,7 @@ function createArenaAiLeaderboardAdapter(config: ArenaAiLeaderboardConfig): Webs
   };
 }
 
-function seedArenaPolymarketMarkets(
+export function seedArenaPolymarketMarkets(
   integration: Integration,
   urls: string[],
   now = new Date()
@@ -347,17 +349,43 @@ function seedArenaPolymarketMarkets(
     settingsJson: resolved.settingsJson,
     polymarketUrl: resolved.activeUrl ?? integration.polymarketUrl
   };
+  const existingSlugs = new Set(
+    getQueuedMarketSlugs(parseSettingsJson(resolved.settingsJson).polymarketMarkets)
+  );
 
   for (const url of urls) {
+    const slug = getPolymarketSlug(url);
+    if (slug && existingSlugs.has(slug)) {
+      continue;
+    }
+
     resolved = upsertPolymarketQueueUrl(workingIntegration, url, now);
     workingIntegration = {
       ...workingIntegration,
       settingsJson: resolved.settingsJson,
       polymarketUrl: resolved.activeUrl ?? workingIntegration.polymarketUrl
     };
+    if (slug) {
+      existingSlugs.add(slug);
+    }
   }
 
   return resolved;
+}
+
+function getQueuedMarketSlugs(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((market) => {
+    if (!market || typeof market !== "object") {
+      return [];
+    }
+
+    const slug = (market as { slug?: unknown }).slug;
+    return typeof slug === "string" && slug ? [slug] : [];
+  });
 }
 
 function parseArenaAiTableRow($: cheerio.CheerioAPI, row: AnyNode): ArenaAiRankedModel | null {
