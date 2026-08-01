@@ -62,10 +62,25 @@ export function shouldAlertOnSeattlePrecipChange(previousValue: string | null, c
   if (!previousValue) {
     return false;
   }
+
+  if (hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)) {
+    return true;
+  }
+
+  const previousOfficial = extractOfficialPrecipitationSection(previousValue);
+  const currentOfficial = extractOfficialPrecipitationSection(currentValue);
+  if (extractLine(previousOfficial, "Total precipitation") !== extractLine(currentOfficial, "Total precipitation")) {
+    return true;
+  }
+
   return (
-    extractOfficialPrecipitationSection(previousValue) !== extractOfficialPrecipitationSection(currentValue) ||
-    hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)
+    extractLine(previousOfficial, "Latest reported day") !== extractLine(currentOfficial, "Latest reported day") &&
+    extractLine(currentOfficial, "Latest day value") === "T inches"
   );
+}
+
+function extractLine(value: string, label: string): string | null {
+  return value.match(new RegExp(`^${label}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
 }
 
 export const noaaSeattlePrecipAdapter: WebsiteAdapter = {

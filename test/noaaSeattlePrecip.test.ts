@@ -4,7 +4,8 @@ import {
   extractNoaaSeattlePrecipitationValue,
   getNoaaSeattlePrecipSettings,
   isValidNoaaSeattlePeriod,
-  noaaSeattlePrecipAdapter
+  noaaSeattlePrecipAdapter,
+  shouldAlertOnSeattlePrecipChange
 } from "../src/integrations/noaaSeattlePrecip.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -97,5 +98,43 @@ describe("NOAA Seattle precipitation adapter", () => {
     };
 
     expect(request.sid).toBe("SEAthr 9");
+  });
+
+  it("stores a newly published zero day without sending an alert", () => {
+    const previous = [
+      "Reported days: 29/31",
+      "Total precipitation: 0.42 inches",
+      "Latest reported day: 2026-07-29",
+      "Latest day value: 0.00 inches"
+    ].join("\n");
+    const current = [
+      "Reported days: 30/31",
+      "Total precipitation: 0.42 inches",
+      "Latest reported day: 2026-07-30",
+      "Latest day value: 0.00 inches"
+    ].join("\n");
+
+    expect(shouldAlertOnSeattlePrecipChange(previous, current)).toBe(false);
+  });
+
+  it("still alerts for trace precipitation and total revisions", () => {
+    const previous = [
+      "Total precipitation: 0.42 inches",
+      "Latest reported day: 2026-07-29",
+      "Latest day value: 0.00 inches"
+    ].join("\n");
+    const trace = [
+      "Total precipitation: 0.42 inches",
+      "Latest reported day: 2026-07-30",
+      "Latest day value: T inches"
+    ].join("\n");
+    const revision = [
+      "Total precipitation: 0.43 inches",
+      "Latest reported day: 2026-07-30",
+      "Latest day value: 0.01 inches"
+    ].join("\n");
+
+    expect(shouldAlertOnSeattlePrecipChange(previous, trace)).toBe(true);
+    expect(shouldAlertOnSeattlePrecipChange(previous, revision)).toBe(true);
   });
 });
