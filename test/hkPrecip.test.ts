@@ -190,7 +190,7 @@ describe("HKO Hong Kong precipitation adapter", () => {
     );
   });
 
-  it("groups positive RF023 past-hour snapshots into one clock-hour key", () => {
+  it("keeps only non-overlapping top-of-hour RF023 snapshots", () => {
     const payload = {
       obsTime: "2026-08-01T08:00:00+08:00",
       hourlyRainfall: [
@@ -205,7 +205,7 @@ describe("HKO Hong Kong precipitation adapter", () => {
         { ...payload, obsTime: "2026-08-01T08:15:00+08:00" },
         new Date("2026-08-01T00:16:00Z")
       )
-    ).toEqual([{ localDate: "2026-08-01", localTime: "08:00", precipitation: 8 }]);
+    ).toEqual([]);
   });
 
   it("polls every minute for the exact-station hourly alpha", () => {

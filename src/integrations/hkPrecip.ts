@@ -183,7 +183,8 @@ export const hkPrecipAdapter: WebsiteAdapter = {
   defaultSettings: { year: defaultYear, month: defaultMonth },
   supportsPeriod: true,
   getPollIntervalMinutes: () => 1,
-  getPollIntervalReason: () => "1-minute HKO Observatory past-hour rainfall watch; one positive alert per clock hour and zero reports are ignored",
+  getPollIntervalReason: () =>
+    "1-minute HKO Observatory rainfall watch; only non-overlapping top-of-hour buckets are retained and zero reports are ignored",
   shouldAlertOnChange: hkPrecipShouldAlertOnChange,
   async refreshSettings(integration: Integration): Promise<string> {
     return (await refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig)).settingsJson ?? integration.settingsJson ?? "{}";
@@ -220,8 +221,7 @@ export const hkPrecipAdapter: WebsiteAdapter = {
         unit: "mm",
         decimals: 1,
         source: hourlyRainfallUrl,
-        preserveFirstValuePerHour: true,
-        sourceNote: "first positive past-hour snapshot per clock hour; provisional HKO AWS gauge differs from the official climatological gauge"
+        sourceNote: "top-of-hour one-hour bucket only; provisional RF023 AWS gauge differs from the official climatological gauge"
       },
       integration?.lastValue ?? null,
       observedAt

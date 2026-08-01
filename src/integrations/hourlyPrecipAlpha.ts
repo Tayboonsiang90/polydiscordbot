@@ -133,7 +133,7 @@ export function extractHkoHourlyPrecipitation(
   }
 
   const local = getLocalDateTime(observedAt, "Asia/Hong_Kong");
-  if (local.localDate !== getLocalDate(now, "Asia/Hong_Kong")) {
+  if (local.localDate !== getLocalDate(now, "Asia/Hong_Kong") || local.localTime.slice(3, 5) !== "00") {
     return [];
   }
 

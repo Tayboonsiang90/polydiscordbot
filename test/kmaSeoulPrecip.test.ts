@@ -113,6 +113,15 @@ describe("KMA Seoul precipitation adapter", () => {
     ).toEqual([{ localDate: "2026-08-01", localTime: "08:00", precipitation: 2.4 }]);
   });
 
+  it("recognizes the exact Seoul station name when the station id is absent", () => {
+    expect(
+      extractKmaSeoulHourlyPrecipitation(
+        { items: [{ awsStnName: "서울", tm: "202608010900", awsPcpHr1: "1.1" }] },
+        new Date("2026-08-01T00:05:00Z")
+      )
+    ).toEqual([{ localDate: "2026-08-01", localTime: "09:00", precipitation: 1.1 }]);
+  });
+
   it("polls every minute for Seoul station 108 hourly rainfall", () => {
     expect(kmaSeoulPrecipAdapter.getPollIntervalMinutes?.(kmaIntegration)).toBe(1);
     expect(kmaSeoulPrecipAdapter.getPollIntervalReason?.(kmaIntegration)).toContain("zero-hour reports are ignored");

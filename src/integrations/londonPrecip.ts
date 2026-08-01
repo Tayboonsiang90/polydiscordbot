@@ -11,8 +11,6 @@ import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://www.metoffice.gov.uk/pub/data/weather/uk/climate/stationdata/heathrowdata.txt";
 const infoclimatStationPath = "london-heathrow-londres/valeurs/03772.html";
-const weatherComApiKey = "e1f10a1e78da46f5b10a1e78da96f525";
-const weatherComPwsStationId = "ILONDON513";
 const heathrowHourlyRainfallUrl =
   "https://environment.data.gov.uk/flood-monitoring/id/stations/247540TP/readings?_sorted&_limit=1000";
 const heathrowHourlyPageUrl = "https://check-for-flooding.service.gov.uk/rainfall-station/247540TP";
@@ -183,25 +181,6 @@ export function extractInfoclimatLondonMonthlyPrecipitation(
   };
 }
 
-export function extractWeatherComPwsDailyPrecipitation(payload: unknown, date: string): { date: string; precipitation: number } | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const observations = Array.isArray((payload as { observations?: unknown }).observations)
-    ? ((payload as { observations: unknown[] }).observations)
-    : [];
-  const observation = observations.find((candidate) => candidate && typeof candidate === "object") as
-    | { metric?: { precipTotal?: unknown }; obsTimeLocal?: unknown }
-    | undefined;
-  const precipTotal = observation?.metric?.precipTotal;
-  if (typeof precipTotal !== "number" || !Number.isFinite(precipTotal) || precipTotal < 0) {
-    return null;
-  }
-
-  return { date, precipitation: precipTotal };
-}
-
 export function extractHeathrowClimateRows(text: string): HeathrowClimateRow[] {
   return text
     .split(/\r?\n/)
@@ -295,7 +274,7 @@ export const londonPrecipAdapter: WebsiteAdapter = {
         decimals: 1,
         source: heathrowHourlyRainfallUrl,
         historyUrl: heathrowHourlyPageUrl,
-        sourceNote: "provisional hourly alpha at Heathrow Airport; the Met Office Heathrow monthly row remains the resolution source"
+        sourceNote: "separate provisional Heathrow Airport gauge about 150 m from the Met Office station; official Met Office monthly row resolves"
       },
       integration?.lastValue ?? null,
       observedAt
@@ -353,56 +332,13 @@ async function fetchInfoclimatLondonPrecipitation(
       }
     });
     if (!response.ok) {
-      return fetchWeatherComLondonPrecipitationAlpha(settings);
+      return null;
     }
 
     return extractInfoclimatLondonMonthlyPrecipitation(await response.text(), settings, source);
   } catch {
-    return fetchWeatherComLondonPrecipitationAlpha(settings);
-  }
-}
-
-async function fetchWeatherComLondonPrecipitationAlpha(
-  settings: LondonPrecipSettings,
-  now = new Date()
-): Promise<InfoclimatLondonMonthlyPrecipitation | null> {
-  const dates = buildWeatherComAlphaDates(settings, now);
-  const dailyValues: Array<{ date: string; precipitation: number }> = [];
-  for (const date of dates) {
-    const value = await fetchWeatherComPwsDailyPrecipitation(date).catch(() => null);
-    if (value) {
-      dailyValues.push(value);
-    }
-  }
-
-  if (dailyValues.length === 0) {
     return null;
   }
-
-  const total = dailyValues.reduce((sum, value) => sum + value.precipitation, 0);
-  const latestDate = dailyValues.at(-1)?.date ?? null;
-  return {
-    total,
-    totalText: total.toFixed(1),
-    updatedAt: latestDate,
-    latestDate,
-    dailyValues,
-    sourceName: "Weather.com PWS near Heathrow",
-    sourceUrl: buildWeatherComPwsHistoryUrl(latestDate ?? dates.at(-1) ?? formatDate(settings.year, settings.month, 1))
-  };
-}
-
-async function fetchWeatherComPwsDailyPrecipitation(date: string): Promise<{ date: string; precipitation: number } | null> {
-  const response = await fetchWithTimeout(buildWeatherComPwsApiUrl(date), {
-    headers: {
-      "user-agent": "Mozilla/5.0 PolymarketResolutionMonitorBot/0.1"
-    }
-  });
-  if (!response.ok) {
-    return null;
-  }
-
-  return extractWeatherComPwsDailyPrecipitation(await response.json(), date);
 }
 
 function normalizeRainfallValue(value: string): string | null {
@@ -504,47 +440,4 @@ function normalizeAscii(value: string): string {
 
 function padMonth(month: number): string {
   return String(month).padStart(2, "0");
-}
-
-function buildWeatherComAlphaDates(settings: LondonPrecipSettings, now: Date): string[] {
-  const nowParts = getLondonDateParts(now);
-  const isCurrentMonth = settings.year === nowParts.year && settings.month === nowParts.month;
-  const lastDay = isCurrentMonth ? nowParts.day : daysInMonth(settings.year, settings.month);
-  const dates: string[] = [];
-  for (let day = 1; day <= lastDay; day += 1) {
-    dates.push(formatDate(settings.year, settings.month, day));
-  }
-
-  return dates;
-}
-
-function buildWeatherComPwsApiUrl(date: string): string {
-  return `https://api.weather.com/v2/pws/history/daily?stationId=${weatherComPwsStationId}&format=json&units=m&date=${date.replace(/-/g, "")}&apiKey=${weatherComApiKey}`;
-}
-
-function buildWeatherComPwsHistoryUrl(date: string): string {
-  const [year, month, day] = date.split("-").map(Number);
-  return `https://www.wunderground.com/history/daily/gb/hounslow/${weatherComPwsStationId}/date/${year}-${month}-${day}`;
-}
-
-function formatDate(year: number, month: number, day: number): string {
-  return `${year}-${padMonth(month)}-${String(day).padStart(2, "0")}`;
-}
-
-function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-function getLondonDateParts(date: Date): { year: number; month: number; day: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/London",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(date);
-  return {
-    year: Number(parts.find((part) => part.type === "year")?.value),
-    month: Number(parts.find((part) => part.type === "month")?.value),
-    day: Number(parts.find((part) => part.type === "day")?.value)
-  };
 }

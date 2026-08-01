@@ -6,7 +6,6 @@ import {
   extractInfoclimatLondonMonthlyPrecipitation,
   extractLondonPrecipitationOfficialValue,
   extractLondonPrecipitationValue,
-  extractWeatherComPwsDailyPrecipitation,
   getLondonPrecipSettings,
   isValidLondonPrecipPeriod,
   londonPrecipAdapter,
@@ -121,25 +120,6 @@ describe("Met Office London precipitation adapter", () => {
     expect(value).toContain("Alpha previous cumulative: 10.0 mm (updated 2026-05-28 10:00:00)");
   });
 
-  it("extracts Weather.com PWS daily precipitation fallback values", () => {
-    expect(
-      extractWeatherComPwsDailyPrecipitation(
-        {
-          observations: [
-            {
-              stationID: "ILONDON513",
-              obsTimeLocal: "2026-07-10 23:59:49",
-              metric: {
-                precipTotal: 2.4
-              }
-            }
-          ]
-        },
-        "2026-07-10"
-      )
-    ).toEqual({ date: "2026-07-10", precipitation: 2.4 });
-  });
-
   it("alerts when Infoclimat publishes a zero-rainfall daily update", () => {
     expect(
       londonPrecipShouldAlertOnChange(
@@ -153,7 +133,7 @@ describe("Met Office London precipitation adapter", () => {
           "Metric: Met Office Heathrow precipitation",
           "Period: 2026-05",
           "Current total: 12.4 mm",
-          "Alpha Weather.com PWS near Heathrow cumulative: 12.4 mm (updated 2026-05-29)",
+          "Alpha Infoclimat cumulative: 12.4 mm (updated 2026-05-29 10:00:00)",
           "Alpha daily estimate: 0.0 mm since previous alpha update"
         ].join("\n")
       )

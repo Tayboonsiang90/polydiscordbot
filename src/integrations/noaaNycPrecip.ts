@@ -58,7 +58,11 @@ export function getNoaaNycPrecipSettings(integration?: Integration): NoaaMonthly
 }
 
 export function extractNoaaNycPrecipitationValue(response: NoaaMonthlyPrecipResponse, settings: NoaaMonthlyPrecipSettings): string {
-  return extractNoaaMonthlyPrecipitationValue(response, settings, "NY-Central Park Area");
+  return extractNoaaMonthlyPrecipitationValue(response, settings, "Central Park NY");
+}
+
+export function buildNoaaNycPrecipRequestBody(settings: NoaaMonthlyPrecipSettings): URLSearchParams {
+  return buildNoaaMonthlyPrecipRequestBody(stationId, settings);
 }
 
 export function extractNycHourlyPrecipObservations(
@@ -138,7 +142,7 @@ export const noaaNycPrecipAdapter: WebsiteAdapter = {
           ...requestHeaders,
           "content-type": "application/x-www-form-urlencoded; charset=UTF-8"
         },
-        body: buildNoaaMonthlyPrecipRequestBody(stationId, settings)
+        body: buildNoaaNycPrecipRequestBody(settings)
       }),
       fetchAviationWeatherHourlyPrecipitation({ stationId: "KNYC", timeZone: easternTimeZone, now: observedAt })
     ]);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appendNycHourlyPrecipitationAlpha,
+  buildNoaaNycPrecipRequestBody,
   extractNycHourlyPrecipObservations,
   extractNycHourlyPrecipObservationsFromHtml,
   extractNoaaNycPrecipitationValue,
@@ -58,7 +59,7 @@ describe("NOAA NYC precipitation adapter", () => {
     );
 
     expect(value).toContain("Metric: NOAA monthly precipitation");
-    expect(value).toContain("Location: NY-Central Park Area");
+    expect(value).toContain("Location: Central Park NY");
     expect(value).toContain("Period: 2026-05");
     expect(value).toContain("Reported days: 3/31");
     expect(value).toContain("Total precipitation: 0.02 inches");
@@ -89,6 +90,14 @@ describe("NOAA NYC precipitation adapter", () => {
   it("validates supported periods", () => {
     expect(isValidNoaaPeriod(2026, 5)).toBe(true);
     expect(isValidNoaaPeriod(2026, 13)).toBe(false);
+  });
+
+  it("requests NOAA's Central Park NY thread", () => {
+    const request = JSON.parse(buildNoaaNycPrecipRequestBody({ year: 2026, month: 7 }).get("params") ?? "{}") as {
+      sid?: string;
+    };
+
+    expect(request.sid).toBe("NYCthr 9");
   });
 
   it("keeps only positive routine KNYC METAR precipitation from the current ET date", () => {
