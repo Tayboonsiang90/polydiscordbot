@@ -108,10 +108,20 @@ export function shouldAlertOnNycPrecipChange(previousValue: string | null, curre
   if (!previousValue) {
     return false;
   }
-  return (
-    extractOfficialPrecipitationSection(previousValue) !== extractOfficialPrecipitationSection(currentValue) ||
-    hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)
+
+  if (hasNewOrRevisedHourlyPrecipitation(previousValue, currentValue)) {
+    return true;
+  }
+
+  const previousOfficial = extractOfficialPrecipitationSection(previousValue);
+  const currentOfficial = extractOfficialPrecipitationSection(currentValue);
+  return ["Status", "Reported days", "Total precipitation", "Latest reported day", "Latest day value", "Daily values"].some(
+    (label) => extractOfficialLine(previousOfficial, label) !== extractOfficialLine(currentOfficial, label)
   );
+}
+
+function extractOfficialLine(value: string, label: string): string | null {
+  return value.match(new RegExp(`^${label}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
 }
 
 export const noaaNycPrecipAdapter: WebsiteAdapter = {

@@ -207,6 +207,23 @@ describe("NOAA NYC precipitation adapter", () => {
     expect(shouldAlertOnNycPrecipChange(previousValue, previousValue.replace("1.25", "1.30"))).toBe(true);
   });
 
+  it("does not alert when only hidden labels or formatting metadata change", () => {
+    const previous = [
+      "Metric: NOAA monthly precipitation",
+      "Location: NY-Central Park Area",
+      "Status: partial",
+      "Reported days: 30/31",
+      "Total precipitation: 4.86 inches",
+      "Latest reported day: 2026-07-30",
+      "Latest day value: 0.15 inches",
+      "Daily values: 2026-07-30: 0.15"
+    ].join("\n");
+    const current = previous.replace("Location: NY-Central Park Area", "Location: Central Park NY");
+
+    expect(shouldAlertOnNycPrecipChange(previous, current)).toBe(false);
+    expect(shouldAlertOnNycPrecipChange(previous, current.replace("2026-07-30: 0.15", "2026-07-30: 0.16"))).toBe(true);
+  });
+
   it("polls every minute for the hourly alpha source", () => {
     expect(noaaNycPrecipAdapter.getPollIntervalMinutes?.(noaaIntegration)).toBe(1);
     expect(noaaNycPrecipAdapter.getPollIntervalReason?.(noaaIntegration)).toContain("zero-hour reports are ignored");
