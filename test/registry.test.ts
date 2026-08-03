@@ -157,6 +157,7 @@ const expectedCommandIds = [
   ["whlive", "white-house-live"],
   ["whpool", "white-house-pool-updates"],
   ["whitehousetweets", "white-house-tweets"],
+  ["whvideos", "white-house-videos"],
   ["whstreams", "white-house-youtube-streams"],
   ["yotransfer", "yo-token-transferability"]
 ] as const;
