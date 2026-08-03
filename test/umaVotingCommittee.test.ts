@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  countUmaVotingRequestsFromCommit,
   extractUmaVotingAnswerChangesFromPatch,
+  extractUmaVotingRequestsFromCommit,
   formatUmaVotingAnswerChanges,
+  selectUmaVotingPullsToInspect,
   umaVotingCommitteeAdapter
 } from "../src/integrations/umaVotingCommittee.js";
 import type { Integration } from "../src/integrations/types.js";
@@ -64,21 +67,75 @@ describe("UMA voting committee adapter", () => {
     );
   });
 
-  it("fetches answer changes and contributor comments from the active GitHub PR", async () => {
+  it("keeps the current pull and every newer pull for catch-up checks", () => {
+    const pulls = [68, 67, 66].map((number) => ({
+      number,
+      title: `Answers for voting round ${10_265 + number}`,
+      html_url: `https://github.com/UMA-rocks/voting-committees/pull/${number}`
+    }));
+
+    expect(selectUmaVotingPullsToInspect(pulls, 66).map((pull) => pull.number)).toEqual([68, 67, 66]);
+    expect(selectUmaVotingPullsToInspect(pulls, 67).map((pull) => pull.number)).toEqual([68, 67]);
+    expect(selectUmaVotingPullsToInspect(pulls).map((pull) => pull.number)).toEqual([68]);
+  });
+
+  it("counts requests in a newly created voting answer file", () => {
+    const commit = {
+      sha: "initialsha",
+      files: [
+        {
+          filename: "answers/10333/1.json",
+          status: "added",
+          patch: [
+            "@@ -0,0 +1,8 @@",
+            "+[",
+            "+  {",
+            '+    "question": "First?",',
+            '+    "answer": "P0"',
+            "+  },",
+            "+  {",
+            '+    "question": "Second?",',
+            '+    "answer": "P0"',
+            "+  }",
+            "+]"
+          ].join("\n")
+        }
+      ]
+    };
+
+    expect(countUmaVotingRequestsFromCommit(commit)).toBe(2);
+    expect(extractUmaVotingRequestsFromCommit(commit)).toEqual(["First?", "Second?"]);
+  });
+
+  it("fetches answer changes, voting requests, and comments from the latest GitHub PR", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/pulls?")) {
+        expect(url).toContain("state=all");
         return jsonResponse([
           {
             number: 37,
             title: "Answers for voting round 10302",
             html_url: "https://github.com/UMA-rocks/voting-committees/pull/37",
+            state: "closed",
+            created_at: "2026-05-31T03:00:00Z",
+            merged_at: "2026-05-31T05:00:00Z",
             head: { sha: "newsha", ref: "voting-committee-1" }
           }
         ]);
       }
       if (url.endsWith("/pulls/37/commits?per_page=10")) {
         return jsonResponse([
+          {
+            sha: "initialsha",
+            html_url: "https://github.com/UMA-rocks/voting-committees/commit/initialsha",
+            author: { login: "UMA-bot" },
+            commit: {
+              message: "Answers for voting round 10302",
+              author: { name: "UMA-bot", date: "2026-05-31T03:00:00Z" },
+              committer: { name: "GitHub", date: "2026-05-31T03:00:00Z" }
+            }
+          },
           {
             sha: "newsha",
             html_url: "https://github.com/UMA-rocks/voting-committees/commit/newsha",
@@ -90,6 +147,37 @@ describe("UMA voting committee adapter", () => {
             }
           }
         ]);
+      }
+      if (url.endsWith("/commits/initialsha")) {
+        return jsonResponse({
+          sha: "initialsha",
+          html_url: "https://github.com/UMA-rocks/voting-committees/commit/initialsha",
+          author: { login: "UMA-bot" },
+          commit: {
+            message: "Answers for voting round 10302",
+            author: { name: "UMA-bot", date: "2026-05-31T03:00:00Z" },
+            committer: { name: "GitHub", date: "2026-05-31T03:00:00Z" }
+          },
+          files: [
+            {
+              filename: "answers/10302/1.json",
+              status: "added",
+              patch: [
+                "@@ -0,0 +1,8 @@",
+                "+[",
+                "+  {",
+                '+    "question": "First?",',
+                '+    "answer": "P0"',
+                "+  },",
+                "+  {",
+                '+    "question": "Second?",',
+                '+    "answer": "P0"',
+                "+  }",
+                "+]"
+              ].join("\n")
+            }
+          ]
+        });
       }
       if (url.endsWith("/commits/newsha")) {
         return jsonResponse({
@@ -150,6 +238,7 @@ describe("UMA voting committee adapter", () => {
 
     const result = await umaVotingCommitteeAdapter.fetchEventUpdates!(buildIntegration());
     const answerPost = result.posts.find((post) => post.id === "uma-vote-answer:newsha");
+    const requestPost = result.posts.find((post) => post.id === "uma-vote-request:37");
     const commitNotePost = result.posts.find((post) => post.id === "uma-vote-commit-note:newsha");
     const issueCommentPost = result.posts.find((post) => post.id === "uma-vote-issue-comment:11");
     const reviewPost = result.posts.find((post) => post.id === "uma-vote-review:22");
@@ -160,6 +249,16 @@ describe("UMA voting committee adapter", () => {
       hideDefaultEventFields: true,
       hideLinksField: true,
       text: expect.stringContaining("P4")
+    });
+    expect(requestPost).toMatchObject({
+      alertTitle: "New UMA voting request",
+      mentionAlertRole: true,
+      text: "Voting round 10302 opened with 2 request(s).",
+      fields: expect.arrayContaining([
+        expect.objectContaining({ name: "Requests", value: "2" }),
+        expect.objectContaining({ name: "Status", value: "Merged" }),
+        expect.objectContaining({ name: "Request preview", value: "1. First?\n2. Second?" })
+      ])
     });
     expect(answerPost?.text).toContain("Will the highest temperature in Moscow be 4\u00b0C or below on May 29?");
     expect(answerPost?.fields).toEqual(
@@ -177,7 +276,7 @@ describe("UMA voting committee adapter", () => {
     expect(issueCommentPost?.text).toBe("Line-level discussion belongs here.");
     expect(reviewPost?.text).toBe("Agree with this answer.");
     expect(JSON.parse(result.settingsJson ?? "{}")).toMatchObject({
-      umaVotingSeenCommitShas: ["newsha"],
+      umaVotingSeenCommitShas: ["initialsha", "newsha"],
       umaVotingLastPullNumber: 37,
       umaVotingLastRound: "10302"
     });

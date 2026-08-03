@@ -318,6 +318,8 @@ describe("adapter registry", () => {
       alertRoleGroupTitle: "UMA Alert Roles"
     });
     expect(getAdapterByCommandName("umarocks").getPollIntervalMinutes?.({} as never)).toBe(10);
+    expect(getAdapterByCommandName("umarocks").defaultChannelName).toBe("uma-rocks-votes");
+    expect(getAdapterByCommandName("umarocks").legacyChannelNames).toEqual(expect.arrayContaining(["umarocks", "uma-votes"]));
     expect(getAdapterByCommandName("bviv").getPollIntervalMinutes?.({} as never)).toBe(1);
     expect(getAdapterByCommandName("bviv").getErrorNoticeWindowMinutes?.({} as never)).toBe(30);
     expect(getAdapterByCommandName("eviv").getPollIntervalMinutes?.({} as never)).toBe(1);

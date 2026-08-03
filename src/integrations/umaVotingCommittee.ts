@@ -7,7 +7,8 @@ const repo = "voting-committees";
 const branch = "voting-committee-1";
 const apiBaseUrl = `https://api.github.com/repos/${owner}/${repo}`;
 const sourceUrl = `https://github.com/${owner}/${repo}/tree/${branch}`;
-const maxCommitsPerPoll = 10;
+const maxPullsPerPoll = 10;
+const maxCommitsPerPull = 10;
 const maxCommentsPerPoll = 100;
 const maxStoredSeenCommits = 80;
 const githubTimeoutMs = 15_000;
@@ -34,8 +35,10 @@ type GitHubPull = {
   number: number;
   title: string;
   html_url: string;
+  state?: string;
   created_at?: string;
   updated_at?: string;
+  merged_at?: string | null;
   head?: {
     sha?: string;
     ref?: string;
@@ -67,6 +70,12 @@ type GitHubCommitFile = {
   filename?: string;
   status?: string;
   patch?: string;
+};
+
+type GitHubPullActivity = {
+  pull: GitHubPull;
+  commits: GitHubCommitListItem[];
+  posts: EventMonitorPost[];
 };
 
 type GitHubIssueComment = {
@@ -102,7 +111,8 @@ export const umaVotingCommitteeAdapter: WebsiteAdapter = {
   commandName: "umarocks",
   displayName: "UMA.rocks",
   sourceUrl,
-  defaultChannelName: "umarocks",
+  defaultChannelName: "uma-rocks-votes",
+  legacyChannelNames: ["umarocks", "uma-votes"],
   alertRoleName: "UMA.rocks Alerts",
   alertRoleEmoji: "\uD83D\uDDF3\uFE0F",
   getPollIntervalMinutes: () => 10,
@@ -124,44 +134,36 @@ export const umaVotingCommitteeAdapter: WebsiteAdapter = {
   },
   async fetchEventUpdates(integration: Integration): Promise<EventMonitorResult> {
     const observedAt = new Date();
-    const pull = await fetchOpenVotingPull();
-    if (!pull) {
+    const pulls = await fetchRecentVotingPulls();
+    if (!pulls.length) {
       return {
         posts: [],
         strikeTerms: [],
         observedAt,
         checkTitle: "Voting committee check complete",
-        checkFields: [{ name: "Open PR", value: "No open voting committee PR found.", inline: false }]
+        checkFields: [{ name: "Recent PR", value: "No voting committee PR found.", inline: false }]
       };
     }
 
-    const [commits, issueComments, reviewComments, reviews] = await Promise.all([
-      fetchPullCommits(pull.number),
-      fetchIssueComments(pull.number),
-      fetchReviewComments(pull.number),
-      fetchReviews(pull.number)
-    ]);
     const settings = parseUmaVotingSettings(integration.settingsJson);
     const seenCommitShas = new Set(settings.umaVotingSeenCommitShas ?? []);
-    const latestCommitSha = commits.at(-1)?.sha;
-    const posts: EventMonitorPost[] = [];
-
-    for (const commit of commits.filter((candidate) => !seenCommitShas.has(candidate.sha) || candidate.sha === latestCommitSha)) {
-      posts.push(...normalizeUmaVotingCommit(await fetchCommitDetail(commit.sha), pull));
-    }
-
-    posts.push(...issueComments.map((comment) => normalizeUmaVotingIssueComment(comment, pull)).filter(isEventPost));
-    posts.push(...reviewComments.map((comment) => normalizeUmaVotingReviewComment(comment, pull)).filter(isEventPost));
-    posts.push(...reviews.map((review) => normalizeUmaVotingReview(review, pull)).filter(isEventPost));
-
-    const sortedPosts = posts.sort(comparePostsDescending);
+    const pullsToInspect = selectUmaVotingPullsToInspect(pulls, settings.umaVotingLastPullNumber);
+    const activities = await Promise.all(
+      pullsToInspect.map((pull) => fetchPullActivity(pull, seenCommitShas, settings.umaVotingLastPullNumber))
+    );
+    const sortedPosts = activities.flatMap((activity) => activity.posts).sort(comparePostsDescending);
+    const latestPull = pulls[0];
     return {
       posts: sortedPosts,
       strikeTerms: [],
       observedAt,
-      settingsJson: buildNextSettingsJson(integration.settingsJson, pull, commits),
+      settingsJson: buildNextSettingsJson(
+        integration.settingsJson,
+        latestPull,
+        activities.flatMap((activity) => activity.commits)
+      ),
       checkTitle: "Voting committee check complete",
-      checkFields: buildCheckFields(pull, commits, sortedPosts)
+      checkFields: buildCheckFields(latestPull, activities.flatMap((activity) => activity.commits), sortedPosts)
     };
   }
 };
@@ -223,6 +225,101 @@ export function formatUmaVotingAnswerChanges(changes: UmaVotingAnswerChange[], m
   }
 
   return lines.join("\n\n");
+}
+
+export function selectUmaVotingPullsToInspect(pulls: GitHubPull[], lastPullNumber?: number): GitHubPull[] {
+  const sorted = [...pulls].sort((left, right) => right.number - left.number);
+  if (lastPullNumber === undefined) {
+    return sorted.slice(0, 1);
+  }
+
+  const unseenOrCurrent = sorted.filter((pull) => pull.number >= lastPullNumber);
+  return unseenOrCurrent.length ? unseenOrCurrent : sorted.slice(0, 1);
+}
+
+export function countUmaVotingRequestsFromCommit(commit: GitHubCommitDetail | undefined): number | null {
+  const requests = extractUmaVotingRequestsFromCommit(commit);
+  return requests.length ? requests.length : null;
+}
+
+export function extractUmaVotingRequestsFromCommit(commit: GitHubCommitDetail | undefined): string[] {
+  if (!commit) {
+    return [];
+  }
+
+  return uniqueStrings(
+    (commit.files ?? [])
+      .filter((file) => file.status === "added" && /^answers\/\d+\/\d+\.json$/.test(file.filename ?? ""))
+      .flatMap((file) =>
+        file.patch
+          ?.split("\n")
+          .filter((line) => line.startsWith("+"))
+          .map((line) => parseJsonStringProperty(line.slice(1), "question"))
+          .filter(isNonEmptyString) ?? []
+      )
+  );
+}
+
+async function fetchPullActivity(
+  pull: GitHubPull,
+  seenCommitShas: Set<string>,
+  lastPullNumber?: number
+): Promise<GitHubPullActivity> {
+  const [commits, issueComments, reviewComments, reviews] = await Promise.all([
+    fetchPullCommits(pull.number),
+    fetchIssueComments(pull.number),
+    fetchReviewComments(pull.number),
+    fetchReviews(pull.number)
+  ]);
+  const unseenCommits = commits.filter((commit) => !seenCommitShas.has(commit.sha));
+  const commitDetails = await Promise.all(unseenCommits.map((commit) => fetchCommitDetail(commit.sha)));
+  const initialCommit = commitDetails.find((commit) => commit.sha === commits[0]?.sha);
+  const posts: EventMonitorPost[] = [];
+
+  if (lastPullNumber === undefined || pull.number > lastPullNumber) {
+    posts.push(normalizeUmaVotingRequest(pull, extractUmaVotingRequestsFromCommit(initialCommit)));
+  }
+  for (const commit of commitDetails) {
+    posts.push(...normalizeUmaVotingCommit(commit, pull));
+  }
+  posts.push(...issueComments.map((comment) => normalizeUmaVotingIssueComment(comment, pull)).filter(isEventPost));
+  posts.push(...reviewComments.map((comment) => normalizeUmaVotingReviewComment(comment, pull)).filter(isEventPost));
+  posts.push(...reviews.map((review) => normalizeUmaVotingReview(review, pull)).filter(isEventPost));
+
+  return { pull, commits, posts };
+}
+
+function normalizeUmaVotingRequest(pull: GitHubPull, requests: string[]): EventMonitorPost {
+  const round = extractVotingRound(pull.title);
+  const status = pull.merged_at ? "Merged" : pull.state === "closed" ? "Closed" : "Open";
+  const requestCount = requests.length || null;
+  const requestText = requestCount === null ? "an unparsed number of requests" : `${requestCount} request(s)`;
+  return {
+    id: `uma-vote-request:${pull.number}`,
+    type: "UMA voting request",
+    alertTitle: "New UMA voting request",
+    sourceLabel: "GitHub pull request",
+    buttonLabel: "Open request",
+    mentionAlertRole: true,
+    textFieldName: "Request",
+    text: `Voting round ${round ?? "unknown"} opened with ${requestText}.`,
+    qualifyingText: `${pull.title}\n${requestText}`,
+    postedAt: parseGitHubDate(pull.created_at),
+    url: pull.html_url,
+    hideDefaultEventFields: true,
+    hideLinksField: true,
+    fields: [
+      { name: "Round", value: round ?? "unknown", inline: true },
+      { name: "Requests", value: requestCount === null ? "not parsed" : String(requestCount), inline: true },
+      { name: "Status", value: status, inline: true },
+      ...(requests.length ? [{ name: "Request preview", value: formatUmaVotingRequestPreview(requests), inline: false }] : [])
+    ],
+    hiddenFields: buildPullHiddenFields(pull),
+    imageUrls: [],
+    imageText: "",
+    matchedTerms: [],
+    strikeTerms: []
+  };
 }
 
 export function normalizeUmaVotingCommit(commit: GitHubCommitDetail, pull: GitHubPull): EventMonitorPost[] {
@@ -438,8 +535,9 @@ function buildCheckFields(
   posts: EventMonitorPost[]
 ): Array<{ name: string; value: string; inline?: boolean }> {
   const latest = posts[0];
+  const status = pull.merged_at ? "merged" : pull.state ?? "unknown";
   return [
-    { name: "Open PR", value: `#${pull.number} ${pull.title}\n${pull.html_url}`, inline: false },
+    { name: "Latest PR", value: `#${pull.number} ${pull.title} (${status})\n${pull.html_url}`, inline: false },
     { name: "Commits checked", value: String(commits.length), inline: true },
     { name: "Events found", value: String(posts.length), inline: true },
     { name: "Latest event", value: latest ? `${latest.type}\n${latest.url}` : "none", inline: false }
@@ -474,15 +572,14 @@ function getSeenCommitShas(settings: Record<string, unknown>): string[] {
     : [];
 }
 
-async function fetchOpenVotingPull(): Promise<GitHubPull | null> {
-  const url = `${apiBaseUrl}/pulls?head=${encodeURIComponent(`${owner}:${branch}`)}&state=open&per_page=1`;
-  const pulls = await fetchGitHubJson<GitHubPull[]>(url, "open voting committee PR");
-  return pulls[0] ?? null;
+async function fetchRecentVotingPulls(): Promise<GitHubPull[]> {
+  const url = `${apiBaseUrl}/pulls?head=${encodeURIComponent(`${owner}:${branch}`)}&state=all&sort=created&direction=desc&per_page=${maxPullsPerPoll}`;
+  return fetchGitHubJson<GitHubPull[]>(url, "recent voting committee PRs");
 }
 
 async function fetchPullCommits(pullNumber: number): Promise<GitHubCommitListItem[]> {
   return fetchGitHubJson<GitHubCommitListItem[]>(
-    `${apiBaseUrl}/pulls/${pullNumber}/commits?per_page=${maxCommitsPerPoll}`,
+    `${apiBaseUrl}/pulls/${pullNumber}/commits?per_page=${maxCommitsPerPull}`,
     "pull request commits"
   );
 }
@@ -612,6 +709,15 @@ function formatPreviousAnswers(changes: UmaVotingAnswerChange[]): string {
     lines.push(`...and ${remaining} more changed answer(s).`);
   }
   return lines.join("\n");
+}
+
+function formatUmaVotingRequestPreview(requests: string[], maxShown = 5): string {
+  const shown = requests.slice(0, maxShown).map((question, index) => `${index + 1}. ${question}`);
+  const remaining = requests.length - shown.length;
+  if (remaining > 0) {
+    shown.push(`...and ${remaining} more request(s).`);
+  }
+  return shown.join("\n").slice(0, 1_024);
 }
 
 function dedupeAnswerChanges(changes: UmaVotingAnswerChange[]): UmaVotingAnswerChange[] {
