@@ -135,6 +135,7 @@ import { volmexEvivAdapter } from "./volmexEviv.js";
 import { whiteHouseAliensNycAdapter } from "./whiteHouseAliensNyc.js";
 import { whiteHouseBriefingsAdapter } from "./whiteHouseBriefings.js";
 import { whiteHouseFullLidAdapter } from "./whiteHouseFullLid.js";
+import { whiteHouseLiveAdapter } from "./whiteHouseLive.js";
 import { whiteHousePoolUpdatesAdapter } from "./whiteHousePoolUpdates.js";
 import { whiteHouseTweetsAdapter } from "./whiteHouseTweets.js";
 import { yoTokenTransferabilityAdapter } from "./yoTokenTransferability.js";
@@ -272,6 +273,7 @@ const adapterEntries: Array<readonly [string, WebsiteAdapter]> = [
   [whiteHouseAliensNycAdapter.id, whiteHouseAliensNycAdapter],
   [whiteHouseBriefingsAdapter.id, whiteHouseBriefingsAdapter],
   [whiteHouseFullLidAdapter.id, whiteHouseFullLidAdapter],
+  [whiteHouseLiveAdapter.id, whiteHouseLiveAdapter],
   [whiteHousePoolUpdatesAdapter.id, whiteHousePoolUpdatesAdapter],
   [whiteHouseTweetsAdapter.id, whiteHouseTweetsAdapter],
   [yoTokenTransferabilityAdapter.id, yoTokenTransferabilityAdapter]

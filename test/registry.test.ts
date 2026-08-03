@@ -154,6 +154,7 @@ const expectedCommandIds = [
   ["aliennyc", "white-house-aliens-nyc"],
   ["whbriefings", "white-house-briefings"],
   ["fulllid", "white-house-full-lid"],
+  ["whlive", "white-house-live"],
   ["whpool", "white-house-pool-updates"],
   ["whitehousetweets", "white-house-tweets"],
   ["yotransfer", "yo-token-transferability"]
