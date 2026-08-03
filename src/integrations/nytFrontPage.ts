@@ -794,10 +794,11 @@ async function fetchLatestIssueDate(): Promise<string> {
   return date;
 }
 
-async function findLatestAvailableIssueDateByImage(now = new Date()): Promise<string | null> {
+export async function findLatestAvailableIssueDateByImage(now = new Date()): Promise<string | null> {
   const start = getEasternDateParts(now);
   const cursor = new Date(Date.UTC(start.year, start.month - 1, start.day));
-  for (let offset = 0; offset < 14; offset += 1) {
+  cursor.setUTCDate(cursor.getUTCDate() + 1);
+  for (let offset = 0; offset < 15; offset += 1) {
     const issueDate = formatUtcDate(cursor);
     try {
       const response = await fetchWithTimeout(

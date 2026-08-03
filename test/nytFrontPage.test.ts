@@ -3,6 +3,7 @@ import {
   extractNytFrontPageGammaStrikeTerms,
   extractNytFrontPageIssue,
   extractNytStrikeTermsFromQuestion,
+  findLatestAvailableIssueDateByImage,
   findNytStrikeTermBoxes,
   formatNytHistoricalIssueRows,
   getNytFrontPageMarketIssueDates,
@@ -281,6 +282,23 @@ describe("NYT front page adapter", () => {
         "2026-07-27"
       )
     ).toBe(upcomingUrl);
+  });
+
+  it("finds a next-day PressReader edition released before midnight ET", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const target = String(input);
+        if (target.includes("date=20260727")) {
+          return new Response(null, { status: 200, headers: { "content-type": "image/jpeg" } });
+        }
+        return new Response(null, { status: 404 });
+      })
+    );
+
+    await expect(findLatestAvailableIssueDateByImage(new Date("2026-07-27T02:00:00.000Z"))).resolves.toBe(
+      "2026-07-27"
+    );
   });
 
   it("uses an upcoming market's strikes as soon as its dated edition is published", async () => {
