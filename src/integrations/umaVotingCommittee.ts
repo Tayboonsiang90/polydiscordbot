@@ -62,6 +62,10 @@ type GitHubCommitListItem = {
   };
 };
 
+type GitHubBranch = {
+  commit?: GitHubCommitListItem;
+};
+
 type GitHubCommitDetail = GitHubCommitListItem & {
   files?: GitHubCommitFile[];
 };
@@ -134,7 +138,7 @@ export const umaVotingCommitteeAdapter: WebsiteAdapter = {
   },
   async fetchEventUpdates(integration: Integration): Promise<EventMonitorResult> {
     const observedAt = new Date();
-    const pulls = await fetchRecentVotingPulls();
+    const [pulls, branchHeadCommit] = await Promise.all([fetchRecentVotingPulls(), fetchVotingBranchHeadCommit()]);
     if (!pulls.length) {
       return {
         posts: [],
@@ -148,8 +152,16 @@ export const umaVotingCommitteeAdapter: WebsiteAdapter = {
     const settings = parseUmaVotingSettings(integration.settingsJson);
     const seenCommitShas = new Set(settings.umaVotingSeenCommitShas ?? []);
     const pullsToInspect = selectUmaVotingPullsToInspect(pulls, settings.umaVotingLastPullNumber);
+    const latestPullNumber = pulls[0]?.number;
     const activities = await Promise.all(
-      pullsToInspect.map((pull) => fetchPullActivity(pull, seenCommitShas, settings.umaVotingLastPullNumber))
+      pullsToInspect.map((pull) =>
+        fetchPullActivity(
+          pull,
+          seenCommitShas,
+          settings.umaVotingLastPullNumber,
+          pull.number === latestPullNumber ? branchHeadCommit : null
+        )
+      )
     );
     const sortedPosts = activities.flatMap((activity) => activity.posts).sort(comparePostsDescending);
     const latestPull = pulls[0];
@@ -263,16 +275,26 @@ export function extractUmaVotingRequestsFromCommit(commit: GitHubCommitDetail | 
 async function fetchPullActivity(
   pull: GitHubPull,
   seenCommitShas: Set<string>,
-  lastPullNumber?: number
+  lastPullNumber?: number,
+  branchHeadCommit: GitHubCommitListItem | null = null
 ): Promise<GitHubPullActivity> {
-  const [commits, issueComments, reviewComments, reviews] = await Promise.all([
+  const [pullCommits, issueComments, reviewComments, reviews] = await Promise.all([
     fetchPullCommits(pull.number),
     fetchIssueComments(pull.number),
     fetchReviewComments(pull.number),
     fetchReviews(pull.number)
   ]);
+  let commits = mergeCommitLists(pullCommits, branchHeadCommit);
   const unseenCommits = commits.filter((commit) => !seenCommitShas.has(commit.sha));
-  const commitDetails = await Promise.all(unseenCommits.map((commit) => fetchCommitDetail(commit.sha)));
+  let commitDetails = await Promise.all(unseenCommits.map((commit) => fetchCommitDetail(commit.sha)));
+  if (
+    branchHeadCommit &&
+    !pullCommits.some((commit) => commit.sha === branchHeadCommit.sha) &&
+    !branchCommitMatchesPull(commitDetails.find((commit) => commit.sha === branchHeadCommit.sha), pull)
+  ) {
+    commits = pullCommits;
+    commitDetails = commitDetails.filter((commit) => commit.sha !== branchHeadCommit.sha);
+  }
   const initialCommit = commitDetails.find((commit) => commit.sha === commits[0]?.sha);
   const posts: EventMonitorPost[] = [];
 
@@ -577,6 +599,21 @@ async function fetchRecentVotingPulls(): Promise<GitHubPull[]> {
   return fetchGitHubJson<GitHubPull[]>(url, "recent voting committee PRs");
 }
 
+async function fetchVotingBranchHeadCommit(): Promise<GitHubCommitListItem | null> {
+  try {
+    const result = await fetchGitHubJson<GitHubBranch>(
+      `${apiBaseUrl}/branches/${encodeURIComponent(branch)}`,
+      "voting committee branch head"
+    );
+    return result.commit?.sha ? result.commit : null;
+  } catch (error) {
+    console.warn(
+      `UMA.rocks branch-head fast path unavailable; using PR commits only: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return null;
+  }
+}
+
 async function fetchPullCommits(pullNumber: number): Promise<GitHubCommitListItem[]> {
   return fetchGitHubJson<GitHubCommitListItem[]>(
     `${apiBaseUrl}/pulls/${pullNumber}/commits?per_page=${maxCommitsPerPull}`,
@@ -695,6 +732,26 @@ function extractVotingRoundFromCommit(commit: GitHubCommitDetail): string | unde
   }
 
   return undefined;
+}
+
+function branchCommitMatchesPull(commit: GitHubCommitDetail | undefined, pull: GitHubPull): boolean {
+  if (!commit) {
+    return false;
+  }
+
+  const commitRound = extractVotingRoundFromCommit(commit);
+  const pullRound = extractVotingRound(pull.title);
+  return !commitRound || !pullRound || commitRound === pullRound;
+}
+
+function mergeCommitLists(
+  pullCommits: GitHubCommitListItem[],
+  branchHeadCommit: GitHubCommitListItem | null
+): GitHubCommitListItem[] {
+  if (!branchHeadCommit || pullCommits.some((commit) => commit.sha === branchHeadCommit.sha)) {
+    return pullCommits;
+  }
+  return [...pullCommits, branchHeadCommit];
 }
 
 function parseGitHubDate(value: string | undefined): Date {

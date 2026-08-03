@@ -124,6 +124,20 @@ describe("UMA voting committee adapter", () => {
           }
         ]);
       }
+      if (url.endsWith("/branches/voting-committee-1")) {
+        return jsonResponse({
+          commit: {
+            sha: "newsha",
+            html_url: "https://github.com/UMA-rocks/voting-committees/commit/newsha",
+            author: { login: "jessioc" },
+            commit: {
+              message: "Update 1.json\n\nI think P4 is the right answer.",
+              author: { name: "jessioc", date: "2026-05-31T04:01:26Z" },
+              committer: { name: "GitHub", date: "2026-05-31T04:01:26Z" }
+            }
+          }
+        });
+      }
       if (url.endsWith("/pulls/37/commits?per_page=10")) {
         return jsonResponse([
           {
@@ -134,16 +148,6 @@ describe("UMA voting committee adapter", () => {
               message: "Answers for voting round 10302",
               author: { name: "UMA-bot", date: "2026-05-31T03:00:00Z" },
               committer: { name: "GitHub", date: "2026-05-31T03:00:00Z" }
-            }
-          },
-          {
-            sha: "newsha",
-            html_url: "https://github.com/UMA-rocks/voting-committees/commit/newsha",
-            author: { login: "jessioc" },
-            commit: {
-              message: "Update 1.json\n\nI think P4 is the right answer.",
-              author: { name: "jessioc", date: "2026-05-31T04:01:26Z" },
-              committer: { name: "GitHub", date: "2026-05-31T04:01:26Z" }
             }
           }
         ]);
