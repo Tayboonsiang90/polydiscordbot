@@ -1,6 +1,7 @@
 import { PDFParse } from "pdf-parse";
 import { fetchWithTimeout } from "../http.js";
 import { parseSettingsJson } from "../settingsJson.js";
+import { refreshMonthlyPolymarketQueue, type MonthlyPolymarketDiscoveryConfig } from "./monthlyPolymarketDiscovery.js";
 import type { AdapterValue, Integration, WebsiteAdapter } from "./types.js";
 
 const sourceUrl = "https://mountwashington.org/weather/mount-washington-weather-archives/monthly-f6/";
@@ -8,6 +9,13 @@ const defaultPolymarketUrl = "https://polymarket.com/event/highest-mtpt-washingt
 const defaultYear = 2026;
 const defaultMonth = 7;
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const monthlyDiscoveryConfig: MonthlyPolymarketDiscoveryConfig = {
+  searchQuery: "highest mt washington wind speed",
+  slugPrefix: "highest-mtpt-washington-wind-speed-in-",
+  titlePrefix: "Highest Mt. Washington wind speed in",
+  lastDiscoveryAtKey: "lastMtWashingtonWindDiscoveryAt",
+  fallbackToCurrentMonthWhenExpired: true
+};
 
 export type MtWashingtonWindSettings = {
   year: number;
@@ -48,6 +56,9 @@ export const mtWashingtonWindAdapter: WebsiteAdapter = {
   getPollIntervalMinutes: () => 5,
   getPollIntervalReason: () => "Fixed 5-minute check for Mt. Washington F6 PDF updates",
   shouldAlertOnChange: mtWashingtonWindShouldAlertOnChange,
+  async refreshSettings(integration: Integration): Promise<string> {
+    return (await refreshMtWashingtonWindPolymarketQueue(integration)).settingsJson ?? integration.settingsJson ?? "{}";
+  },
   async fetchCurrentValue(integration?: Integration): Promise<AdapterValue> {
     const settings = getMtWashingtonWindSettings(integration);
     const pdfUrl = buildMtWashingtonF6PdfUrl(settings);
@@ -79,6 +90,13 @@ export const mtWashingtonWindAdapter: WebsiteAdapter = {
     };
   }
 };
+
+export function refreshMtWashingtonWindPolymarketQueue(
+  integration: Integration,
+  now = new Date()
+): Promise<{ settingsJson: string | null; activeUrl: string | null }> {
+  return refreshMonthlyPolymarketQueue(integration, monthlyDiscoveryConfig, now);
+}
 
 export function getMtWashingtonWindSettings(integration?: Integration): MtWashingtonWindSettings {
   const settings = parseSettingsJson(integration?.settingsJson);

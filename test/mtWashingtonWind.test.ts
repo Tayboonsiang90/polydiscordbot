@@ -1,11 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildMtWashingtonF6PdfUrl,
   extractMtWashingtonWindDay,
   extractMtWashingtonWindReport,
   formatMtWashingtonWindValue,
   getMtWashingtonWindSettings,
-  mtWashingtonWindAdapter
+  mtWashingtonWindAdapter,
+  refreshMtWashingtonWindPolymarketQueue
 } from "../src/integrations/mtWashingtonWind.js";
 import type { Integration } from "../src/integrations/types.js";
 
@@ -25,6 +26,11 @@ MISC. -> 97 290 (W) 28530
 `;
 
 describe("Mt. Washington wind adapter", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("parses a daily F6 wind row from the fastest mile column", () => {
     expect(extractMtWashingtonWindDay("17 61 51 56 50 6 9 0 0.65 0.0 0 36.3 97 290 (W) 135 15 10 123")).toEqual({
       day: 17,
@@ -78,6 +84,46 @@ describe("Mt. Washington wind adapter", () => {
 
   it("supports period configuration and five-minute polling", () => {
     expect(mtWashingtonWindAdapter.supportsPeriod).toBe(true);
+    expect(mtWashingtonWindAdapter.refreshSettings).toBeDefined();
     expect(mtWashingtonWindAdapter.getPollIntervalMinutes?.({} as never)).toBe(5);
+  });
+
+  it("auto-discovers and activates the August wind-speed market", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          events: [
+            {
+              slug: "highest-mtpt-washington-wind-speed-in-august-20260727152349919",
+              title: "Highest Mt. Washington wind speed in August?",
+              active: true,
+              closed: false
+            }
+          ]
+        })
+      )
+    );
+
+    const result = await refreshMtWashingtonWindPolymarketQueue(
+      {
+        settingsJson: JSON.stringify({ year: 2026, month: 7 }),
+        polymarketUrl: "https://polymarket.com/event/highest-mtpt-washington-wind-speed-in-july-20260626193609212"
+      } as Integration,
+      new Date("2026-08-03T02:00:00.000Z")
+    );
+    const settings = JSON.parse(result.settingsJson ?? "{}") as {
+      year: number;
+      month: number;
+      polymarketMarkets: Array<{ slug: string }>;
+    };
+
+    expect(result.activeUrl).toBe(
+      "https://polymarket.com/event/highest-mtpt-washington-wind-speed-in-august-20260727152349919"
+    );
+    expect(settings).toMatchObject({ year: 2026, month: 8 });
+    expect(settings.polymarketMarkets).toEqual([
+      expect.objectContaining({ slug: "highest-mtpt-washington-wind-speed-in-august-20260727152349919" })
+    ]);
   });
 });
