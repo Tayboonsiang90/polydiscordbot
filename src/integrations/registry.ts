@@ -138,6 +138,7 @@ import { whiteHouseFullLidAdapter } from "./whiteHouseFullLid.js";
 import { whiteHouseLiveAdapter } from "./whiteHouseLive.js";
 import { whiteHousePoolUpdatesAdapter } from "./whiteHousePoolUpdates.js";
 import { whiteHouseTweetsAdapter } from "./whiteHouseTweets.js";
+import { whiteHouseYoutubeStreamsAdapter } from "./whiteHouseYoutubeStreams.js";
 import { yoTokenTransferabilityAdapter } from "./yoTokenTransferability.js";
 
 const adapterEntries: Array<readonly [string, WebsiteAdapter]> = [
@@ -276,6 +277,7 @@ const adapterEntries: Array<readonly [string, WebsiteAdapter]> = [
   [whiteHouseLiveAdapter.id, whiteHouseLiveAdapter],
   [whiteHousePoolUpdatesAdapter.id, whiteHousePoolUpdatesAdapter],
   [whiteHouseTweetsAdapter.id, whiteHouseTweetsAdapter],
+  [whiteHouseYoutubeStreamsAdapter.id, whiteHouseYoutubeStreamsAdapter],
   [yoTokenTransferabilityAdapter.id, yoTokenTransferabilityAdapter]
 ];
 
