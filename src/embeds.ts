@@ -539,8 +539,8 @@ export function buildClearErrorsEmbed(summary: ErrorCleanupSummary): EmbedBuilde
 export function buildAlertEmbed(result: CheckResult): EmbedBuilder {
   const quickReadFields = formatAlertQuickReadFields(result.integration, result.previousValue, result.currentValue);
   const changeSummaryFields = formatValueChangeSummaryFields(result.previousValue, result.currentValue);
-  return baseEmbed(result.integration, "Value changed")
-    .setColor(successColor)
+  return baseEmbed(result.integration, result.alertTitle ?? "Value changed")
+    .setColor(result.alertSeverity === "critical" ? errorColor : successColor)
     .addFields(
       ...quickReadFields,
       ...changeSummaryFields,
@@ -2127,9 +2127,11 @@ function formatJmaTyphoonDolphinQuickRead(currentValue: string, previousValue: s
         ]
       : []),
     ...formatPreferredQuickReadLine(currentValue, "JMA location"),
+    ...formatPreferredQuickReadLine(currentValue, "Coordinate territory"),
+    ...formatPreferredQuickReadLine(currentValue, "China rule satisfied now"),
+    ...formatPreferredQuickReadLine(currentValue, "Japan rule satisfied now"),
     ...formatPreferredQuickReadLine(currentValue, "Current class"),
-    ...formatPreferredQuickReadLine(currentValue, "Sustained winds"),
-    ...formatPreferredQuickReadLine(currentValue, "Movement"),
+    ...formatPreferredQuickReadLine(currentValue, "Crossing class used"),
     ...formatPreferredQuickReadLine(currentValue, "Advisory issued")
   ];
   return lines.length ? truncateEmbedValue(lines.join("\n"), 900) : formatGenericQuickRead(previousValue, currentValue);

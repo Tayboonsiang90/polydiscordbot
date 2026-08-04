@@ -42,6 +42,8 @@ export type AdapterValue = {
   value: string;
   rawValue: string;
   unit?: string;
+  alertTitle?: string;
+  alertSeverity?: "normal" | "critical";
   observedAt: Date;
 };
 
@@ -341,6 +343,7 @@ export type WebsiteAdapter = {
   maxEventPostAgeMinutes?: number;
   recheckLatestEventPostUntilAlerted?: boolean;
   alertOnChangeDuringMarketRollover?: boolean;
+  suppressMarketRolloverAlerts?: boolean;
   shouldAlertOnChange?(previousValue: string | null, currentValue: string): boolean;
   upsertPolymarketMarket?(
     integration: Integration,

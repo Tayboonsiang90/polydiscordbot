@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyDolphinCoordinate,
   formatJmaTyphoonDolphinValue,
-  isChineseLandLocation,
   jmaTyphoonDolphinAdapter,
   parseJmaTyphoonDolphinReport,
   shouldAlertOnJmaTyphoonDolphinChange
@@ -13,17 +13,17 @@ function advisory(overrides: { issue?: string; latitude?: number; longitude?: nu
       part: "title",
       issue: { UTC: overrides.issue ?? "2026-08-01T03:45:00Z" },
       typhoonNumber: "2613",
-      name: { jp: "ドルフィン", en: "Dolphin" },
-      category: { jp: "台風", en: "TY" }
+      name: { en: "Dolphin" },
+      category: { en: "TY" }
     },
     {
-      part: { jp: "実況", en: "Analysis" },
+      part: { en: "Analysis" },
       advancedHours: 0,
-      category: { jp: "台風", en: overrides.category ?? "TY" },
-      intensity: "非常に強い",
+      category: { en: overrides.category ?? "TY" },
+      intensity: "Very strong",
       position: { deg: [overrides.latitude ?? 20.5, overrides.longitude ?? 158] },
-      location: overrides.location ?? "南鳥島近海",
-      course: "西北西",
+      location: overrides.location ?? "Near Minamitorishima",
+      course: "WNW",
       speed: { "km/h": "20", kt: "10" },
       pressure: "925",
       maximumWind: {
@@ -33,9 +33,9 @@ function advisory(overrides: { issue?: string; latitude?: number; longitude?: nu
       validtime: { UTC: "2026-08-01T03:00:00Z" }
     },
     {
-      part: { jp: "予報　１２時間後", en: "Forecast for 12 hours ahead" },
+      part: { en: "Forecast for 12 hours ahead" },
       advancedHours: 12,
-      category: { jp: "台風", en: "TY" },
+      category: { en: "TY" },
       position: { deg: [21.8, 155.7] },
       validtime: { UTC: "2026-08-01T15:00:00Z" }
     }
@@ -54,12 +54,14 @@ describe("JMA Typhoon Dolphin adapter", () => {
       latitude: 20.5,
       longitude: 158,
       category: "TY",
-      location: "南鳥島近海",
       sustainedWindKmh: 180,
       sustainedWindKt: 100,
       gustKmh: 252,
       gustKt: 140,
-      pressureHpa: 925
+      pressureHpa: 925,
+      chinaCoordinateOnLand: false,
+      japanCoordinateOnLand: false,
+      qualifyingTropicalCyclone: true
     });
     expect(report.forecast).toEqual([
       {
@@ -76,57 +78,98 @@ describe("JMA Typhoon Dolphin adapter", () => {
     const value = formatJmaTyphoonDolphinValue(parseJmaTyphoonDolphinReport(advisory()), null);
 
     expect(value).toContain("Outcome watch: MONITORING");
-    expect(value).toContain("Current center: 20.5°N, 158.0°E");
-    expect(value).toContain("JMA location: Near Minamitorishima (南鳥島近海)");
-    expect(value).toContain("Current class: TY (Very strong / 非常に強い)");
+    expect(value).toContain("Current center: 20.5");
+    expect(value).toContain("JMA location: Near Minamitorishima");
+    expect(value).toContain("Current class: TY (Very strong)");
     expect(value).toContain("Sustained winds: 180 km/h / 100 kt");
-    expect(value).toContain("Movement: WNW / 西北西 at 20 km/h");
-    expect(value).toContain("Forecast track: +12h 21.8°N, 155.7°E TY");
+    expect(value).toContain("Movement: WNW at 20 km/h");
+    expect(value).toContain("Coordinate territory: none");
   });
 
-  it("alerts on every new or revised JMA advisory but not the baseline", () => {
+  it("suppresses ordinary advisory changes and alerts once when a rule territory is first satisfied", () => {
     const first = formatJmaTyphoonDolphinValue(parseJmaTyphoonDolphinReport(advisory()), null);
     const revised = formatJmaTyphoonDolphinValue(
       parseJmaTyphoonDolphinReport(advisory({ issue: "2026-08-01T06:45:00Z", latitude: 21.1, longitude: 157.2 })),
       first
     );
+    const japanHit = formatJmaTyphoonDolphinValue(
+      parseJmaTyphoonDolphinReport(advisory({ issue: "2026-08-01T07:45:00Z", latitude: 35.7, longitude: 139.7 })),
+      revised
+    );
+    const repeatedJapanHit = formatJmaTyphoonDolphinValue(
+      parseJmaTyphoonDolphinReport(advisory({ issue: "2026-08-01T08:45:00Z", latitude: 35.7, longitude: 139.7 })),
+      japanHit
+    );
 
     expect(shouldAlertOnJmaTyphoonDolphinChange(null, first)).toBe(false);
-    expect(shouldAlertOnJmaTyphoonDolphinChange(first, first)).toBe(false);
-    expect(shouldAlertOnJmaTyphoonDolphinChange(first, revised)).toBe(true);
+    expect(shouldAlertOnJmaTyphoonDolphinChange(first, revised)).toBe(false);
+    expect(shouldAlertOnJmaTyphoonDolphinChange(revised, japanHit)).toBe(true);
+    expect(shouldAlertOnJmaTyphoonDolphinChange(japanHit, repeatedJapanHit)).toBe(false);
   });
 
-  it("flags explicit Chinese land labels without treating nearby seas as land", () => {
-    expect(isChineseLandLocation("広東省")).toBe(true);
-    expect(isChineseLandLocation("Hong Kong")).toBe(true);
-    expect(isChineseLandLocation("South China Sea")).toBe(false);
-    expect(isChineseLandLocation("東シナ海")).toBe(false);
+  it("classifies China, Hong Kong, Macau, Japan, and Taiwan according to the market boundaries", () => {
+    expect(classifyDolphinCoordinate(31.2, 121.5)).toEqual({ china: true, japan: false });
+    expect(classifyDolphinCoordinate(22.4, 114.1)).toEqual({ china: true, japan: false });
+    expect(classifyDolphinCoordinate(22.2, 113.5)).toEqual({ china: true, japan: false });
+    expect(classifyDolphinCoordinate(35.7, 139.7)).toEqual({ china: false, japan: true });
+    expect(classifyDolphinCoordinate(26.2, 127.7)).toEqual({ china: false, japan: true });
+    expect(classifyDolphinCoordinate(25.0, 121.5)).toEqual({ china: false, japan: false });
+    expect(classifyDolphinCoordinate(25.0, 130.0)).toEqual({ china: false, japan: false });
+  });
 
-    const value = formatJmaTyphoonDolphinValue(
-      parseJmaTyphoonDolphinReport(advisory({ location: "広東省", latitude: 22.3, longitude: 114.1 })),
+  it("marks a qualifying China coordinate and rejects terminal classifications", () => {
+    const chinaValue = formatJmaTyphoonDolphinValue(
+      parseJmaTyphoonDolphinReport(advisory({ location: "Shanghai", latitude: 31.2, longitude: 121.5 })),
       null
     );
-    expect(value).toContain("Outcome watch: URGENT REVIEW");
-    expect(value).toContain("China-land review ever triggered: yes");
-  });
-
-  it("identifies an extratropical terminal classification", () => {
-    const value = formatJmaTyphoonDolphinValue(
-      parseJmaTyphoonDolphinReport(advisory({ category: "EX", location: "東シナ海" })),
+    const terminalValue = formatJmaTyphoonDolphinValue(
+      parseJmaTyphoonDolphinReport(advisory({ category: "EX", location: "East China Sea" })),
       null
     );
 
-    expect(value).toContain("Outcome watch: POSSIBLE NO");
-    expect(value).toContain("Terminal classification: yes");
+    expect(chinaValue).toContain("Outcome watch: \uD83D\uDEA8 RULE SATISFIED");
+    expect(chinaValue).toContain("Coordinate territory: China");
+    expect(chinaValue).toContain("China rule satisfied now: yes");
+    expect(terminalValue).toContain("Outcome watch: NO QUALIFYING CROSSING NOW");
+    expect(terminalValue).toContain("Qualifying tropical cyclone class: no");
   });
 
-  it("defines standard Discord monitor metadata", () => {
+  it("uses the immediately prior advisory classification for a coastline crossing", () => {
+    const tropicalSea = formatJmaTyphoonDolphinValue(parseJmaTyphoonDolphinReport(advisory()), null);
+    const extratropicalJapanCrossing = formatJmaTyphoonDolphinValue(
+      parseJmaTyphoonDolphinReport(advisory({ category: "EX", latitude: 35.7, longitude: 139.7 })),
+      tropicalSea
+    );
+    const extratropicalSea = formatJmaTyphoonDolphinValue(
+      parseJmaTyphoonDolphinReport(advisory({ category: "EX", latitude: 25.0, longitude: 130.0 })),
+      null
+    );
+    const tropicalJapanCrossing = formatJmaTyphoonDolphinValue(
+      parseJmaTyphoonDolphinReport(advisory({ category: "TY", latitude: 35.7, longitude: 139.7 })),
+      extratropicalSea
+    );
+
+    expect(extratropicalJapanCrossing).toContain("Crossing class used: TY (qualifying)");
+    expect(extratropicalJapanCrossing).toContain("Japan rule ever satisfied: yes");
+    expect(shouldAlertOnJmaTyphoonDolphinChange(tropicalSea, extratropicalJapanCrossing)).toBe(true);
+    expect(tropicalJapanCrossing).toContain("Crossing class used: EX (not qualifying)");
+    expect(tropicalJapanCrossing).toContain("Japan rule ever satisfied: no");
+    expect(shouldAlertOnJmaTyphoonDolphinChange(extratropicalSea, tropicalJapanCrossing)).toBe(false);
+  });
+
+  it("defines both active markets and standard Discord monitor metadata", () => {
     expect(jmaTyphoonDolphinAdapter).toMatchObject({
       id: "jma-typhoon-dolphin",
       commandName: "typhoondolphin",
       defaultChannelName: "typhoon-dolphin",
       alertRoleName: "Typhoon Dolphin Alerts",
-      alertRoleEmoji: "\uD83C\uDF00"
+      alertRoleEmoji: "\uD83C\uDF00",
+      suppressMarketRolloverAlerts: true
     });
+    const markets = jmaTyphoonDolphinAdapter.defaultSettings?.polymarketMarkets as Array<{ slug: string }>;
+    expect(markets.map((market) => market.slug)).toEqual([
+      "will-super-typhoon-dolphin-hit-japan-20260730150614391",
+      "will-super-typhoon-dolphin-hit-china-20260730202351925"
+    ]);
   });
 });

@@ -51,6 +51,8 @@ export type CheckResult = {
   previousCheckedAt: string | null;
   currentValue: string;
   changed: boolean;
+  alertTitle?: string;
+  alertSeverity?: "normal" | "critical";
   marketRollover: MarketRollover | null;
 };
 
@@ -197,6 +199,8 @@ export async function checkIntegration(database: BotDatabase, integration: Integ
     previousCheckedAt,
     currentValue: adapterValue.value,
     changed,
+    alertTitle: adapterValue.alertTitle,
+    alertSeverity: adapterValue.alertSeverity,
     marketRollover
   };
 }
@@ -504,7 +508,7 @@ export class PollScheduler {
         if (adapter.fetchEventUpdates) {
           await this.sendDueEventAlerts(latest.id);
           const result = await checkEventIntegration(this.database, latest, { queueAlerts: true });
-          if (result.marketRollover) {
+          if (result.marketRollover && !adapter.suppressMarketRolloverAlerts) {
             await this.sendMarketRollover(latest.channelId, result.integration, result.marketRollover);
           }
           for (const post of result.newPosts) {
@@ -512,7 +516,7 @@ export class PollScheduler {
           }
         } else {
           const result = await checkIntegration(this.database, latest);
-          if (result.marketRollover) {
+          if (result.marketRollover && !adapter.suppressMarketRolloverAlerts) {
             await this.sendMarketRollover(latest.channelId, result.integration, result.marketRollover);
           }
           if (result.changed) {

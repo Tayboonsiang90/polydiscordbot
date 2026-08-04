@@ -340,6 +340,21 @@ describe("adapter commands", () => {
     );
   });
 
+  it("uses adapter-provided titles for critical value alerts", () => {
+    const embed = buildAlertEmbed({
+      integration: { ...checkedIntegration, adapterId: "jma-typhoon-dolphin", displayName: "JMA Typhoon Dolphin" },
+      previousValue: "Japan rule ever satisfied: no",
+      previousCheckedAt: "2026-08-03T00:00:00.000Z",
+      currentValue: "Outcome watch: rule satisfied\nJapan rule ever satisfied: yes",
+      changed: true,
+      alertTitle: "\uD83D\uDEA8 DOLPHIN RULE SATISFIED: JAPAN",
+      alertSeverity: "critical",
+      marketRollover: null
+    }).toJSON();
+
+    expect(embed.title).toBe("JMA Typhoon Dolphin - \uD83D\uDEA8 DOLPHIN RULE SATISFIED: JAPAN");
+  });
+
   it("summarizes source-level inventory changes in alert embeds", () => {
     const embed = buildAlertEmbed({
       integration: { ...checkedIntegration, adapterId: "ufo-files", displayName: "UFO Files" },
